@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { Category } from "@prisma/client";
+import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
@@ -13,10 +15,20 @@ export class CategoryService {
     });
   }
 
-  async findAll() {
-    return this.prisma.category.findMany({
-      orderBy: { name: "asc" },
-    });
+  async findAll(
+    page: number = PAGINATION.defaultPage,
+    limit: number = PAGINATION.defaultLimit,
+  ): Promise<PaginatedResponse<Category>> {
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      this.prisma.category.findMany({
+        orderBy: { name: "asc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.category.count(),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: string) {
@@ -39,8 +51,6 @@ export class CategoryService {
 
   async remove(id: string) {
     await this.findOne(id);
-    return this.prisma.category.delete({
-      where: { id },
-    });
+    return this.prisma.category.delete({ where: { id } });
   }
 }

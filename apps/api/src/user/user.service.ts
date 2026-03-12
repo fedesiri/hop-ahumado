@@ -1,4 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { User } from "@prisma/client";
+import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -15,10 +17,20 @@ export class UserService {
     });
   }
 
-  async findAll() {
-    return this.prisma.user.findMany({
-      orderBy: { name: "asc" },
-    });
+  async findAll(
+    page: number = PAGINATION.defaultPage,
+    limit: number = PAGINATION.defaultLimit,
+  ): Promise<PaginatedResponse<User>> {
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      this.prisma.user.findMany({
+        orderBy: { name: "asc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.user.count(),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: string) {

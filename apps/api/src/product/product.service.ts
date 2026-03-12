@@ -1,7 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { Product } from "@prisma/client";
+import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
+
+type ProductWithCategory = Product & { category: { id: string; name: string } | null };
 
 @Injectable()
 export class ProductService {
@@ -15,12 +19,24 @@ export class ProductService {
     return this.prisma.product.create({ data });
   }
 
-  async findAll(includeDeactivated = false) {
-    return this.prisma.product.findMany({
-      where: includeDeactivated ? undefined : { deactivationDate: null },
-      orderBy: { name: "asc" },
-      include: { category: true },
-    });
+  async findAll(
+    includeDeactivated = false,
+    page: number = PAGINATION.defaultPage,
+    limit: number = PAGINATION.defaultLimit,
+  ): Promise<PaginatedResponse<ProductWithCategory>> {
+    const where = includeDeactivated ? undefined : { deactivationDate: null };
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        orderBy: { name: "asc" },
+        include: { category: true },
+        skip,
+        take: limit,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: string) {
