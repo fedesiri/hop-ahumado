@@ -159,10 +159,11 @@
   }
 }
 
-/* Mobile: modales centrados y que no se salgan de la pantalla */
+/* Mobile: modales centrados y que no se salgan de la pantalla.
+   No usar !important en display para no pisar el display:none que Ant Design pone al cerrar. */
 @media (max-width: 768px) {
   .ant-modal-wrap {
-    display: flex !important;
+    display: flex;
     align-items: center !important;
     justify-content: center !important;
     padding: 16px !important;
@@ -213,9 +214,10 @@
   }
 }
 
-/* Asegurar que el modal wrap esté siempre centrado (también desktop) */
+/* Centrado del modal. Sin !important en display para que al cerrar el modal
+   el display:none inline de Ant Design no sea pisado y el overlay no quede bloqueando. */
 .ant-modal-wrap {
-  display: flex !important;
+  display: flex;
   align-items: center !important;
   justify-content: center !important;
 }
