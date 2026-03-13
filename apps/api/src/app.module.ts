@@ -9,6 +9,7 @@ import { OrderModule } from "./order/order.module";
 import { PriceModule } from "./price/price.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductModule } from "./product/product.module";
+import { RecipeItemModule } from "./recipe-item/recipe-item.module";
 import { StockMovementModule } from "./stock-movement/stock-movement.module";
 import { UserModule } from "./user/user.module";
 
@@ -24,6 +25,7 @@ import { UserModule } from "./user/user.module";
     PriceModule,
     CostModule,
     StockMovementModule,
+    RecipeItemModule,
   ],
   controllers: [AppController],
   providers: [AppService],
