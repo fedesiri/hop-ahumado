@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { PaginationQueryDto, toLimit, toPage } from "../common/pagination";
+import { toLimit, toPage } from "../common/pagination";
 import { CreateProductDto } from "./dto/create-product.dto";
+import { GetProductsQueryDto } from "./dto/get-products-query.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { ProductService } from "./product.service";
 
@@ -14,8 +15,8 @@ export class ProductController {
   }
 
   @Get()
-  findAll(@Query() query: PaginationQueryDto, @Query("includeDeactivated") includeDeactivated?: string) {
-    const include = includeDeactivated === "true";
+  findAll(@Query() query: GetProductsQueryDto) {
+    const include = query.includeDeactivated === "true";
     return this.productService.findAll(include, toPage(query), toLimit(query));
   }
 
