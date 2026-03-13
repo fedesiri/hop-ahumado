@@ -129,7 +129,7 @@ export function AppSidebar({
         placement="left"
         onClose={() => onCollapsedChange?.(true)}
         open={!collapsed}
-        bodyStyle={{ padding: 0 }}
+        styles={{ body: { padding: 0 } }}
       >
         {menuContent}
       </Drawer>

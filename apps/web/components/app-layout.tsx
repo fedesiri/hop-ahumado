@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Layout, Tabs, Button, Space, Drawer } from 'antd'
-import { MenuFoldOutlined } from '@ant-design/icons'
+import { Layout, Tabs, Drawer } from 'antd'
+import { Flower2 } from 'lucide-react'
 import { AppSidebar, ToggleSidebarButton } from './app-sidebar'
 import { BusinessLine } from '@/lib/types'
 import { useLineContext } from '@/lib/line-context'
@@ -30,25 +30,19 @@ export function AppLayout({ children, showLineTabs = true }: AppLayoutProps) {
   }
 
   const lineTabItems = [
-    {
-      key: BusinessLine.MEAT,
-      label: '🥩 Carnes Ahumadas',
-    },
-    {
-      key: BusinessLine.BEER,
-      label: '🍺 Cerveza Artesanal',
-    },
+    { key: BusinessLine.MEAT, label: '🥩 Carnes' },
+    { key: BusinessLine.BEER, label: '🍺 Cerveza' },
   ]
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ minHeight: '100vh', width: '100%', maxWidth: '100vw', overflow: 'hidden' }}>
       {isMobile ? (
         <Drawer
           title="Navegación"
           placement="left"
           onClose={() => setDrawerOpen(false)}
           open={drawerOpen}
-          bodyStyle={{ padding: 0 }}
+          styles={{ body: { padding: 0 } }}
           width={250}
         >
           <AppSidebar collapsed={false} onCollapsedChange={() => {}} isMobile={true} />
@@ -65,45 +59,67 @@ export function AppLayout({ children, showLineTabs = true }: AppLayoutProps) {
         style={{
           marginLeft: isMobile ? 0 : collapsed ? 80 : 250,
           transition: 'margin-left 0.2s',
+          width: isMobile ? '100%' : undefined,
+          maxWidth: isMobile ? '100vw' : undefined,
+          minWidth: isMobile ? 0 : undefined,
         }}
       >
         <Header
           style={{
-            padding: '0 24px',
+            padding: isMobile ? '0 12px' : '0 24px',
             background: '#1f2937',
+            borderBottom: '1px solid #2d3748',
+            height: isMobile ? 52 : 64,
             display: 'flex',
+            flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            borderBottom: '1px solid #2d3748',
-            height: 64,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16 }}>
             <ToggleSidebarButton
               collapsed={isMobile ? drawerOpen : collapsed}
               onClick={toggleCollapsed}
             />
-            <h1 style={{ margin: 0, color: '#ffffff', fontSize: '18px' }}>
-              Hop Ahumado
-            </h1>
+            {isMobile ? (
+              <span style={{ display: 'flex', alignItems: 'center', color: '#22c55e' }}>
+                <Flower2 size={24} strokeWidth={1.8} />
+              </span>
+            ) : (
+              <h1
+                style={{
+                  margin: 0,
+                  color: '#ffffff',
+                  fontSize: 18,
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                Hop Ahumado
+              </h1>
+            )}
           </div>
 
           {showLineTabs && selectedLine && (
-            <Tabs
-              activeKey={selectedLine}
-              onChange={(key) => setSelectedLine(key as BusinessLine)}
-              items={lineTabItems}
-              style={{ marginBottom: 0 }}
-              size="small"
-            />
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Tabs
+                activeKey={selectedLine}
+                onChange={(key) => setSelectedLine(key as BusinessLine)}
+                items={lineTabItems}
+                style={{ marginBottom: 0 }}
+                size="small"
+              />
+            </div>
           )}
         </Header>
 
         <Content
           style={{
-            padding: '24px',
+            padding: isMobile ? 12 : 24,
             background: '#0a0a0a',
-            minHeight: 'calc(100vh - 64px)',
+            minHeight: isMobile ? 'calc(100vh - 52px)' : 'calc(100vh - 64px)',
           }}
         >
           {children}
