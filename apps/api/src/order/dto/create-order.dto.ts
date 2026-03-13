@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import {
+  ArrayMinSize,
   IsArray,
   IsDateString,
   IsNumber,
@@ -7,7 +8,6 @@ import {
   IsUUID,
   Min,
   ValidateNested,
-  ArrayMinSize,
 } from "class-validator";
 import { CreateOrderItemDto } from "./create-order-item.dto";
 import { CreatePaymentDto } from "./create-payment.dto";
