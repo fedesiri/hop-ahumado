@@ -1,7 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { PaginationQueryDto, toLimit, toPage } from "../common/pagination";
+import { toLimit, toPage } from "../common/pagination";
 import { CostService } from "./cost.service";
 import { CreateCostDto } from "./dto/create-cost.dto";
+import { GetCostsQueryDto } from "./dto/get-costs-query.dto";
 import { UpdateCostDto } from "./dto/update-cost.dto";
 
 @Controller("costs")
@@ -14,13 +15,9 @@ export class CostController {
   }
 
   @Get()
-  findAll(
-    @Query() query: PaginationQueryDto,
-    @Query("productId") productId?: string,
-    @Query("activeOnly") activeOnly?: string,
-  ) {
-    const active = activeOnly === "true";
-    return this.costService.findAll(toPage(query), toLimit(query), productId, active);
+  findAll(@Query() query: GetCostsQueryDto) {
+    const active = query.activeOnly === "true";
+    return this.costService.findAll(toPage(query), toLimit(query), query.productId, active);
   }
 
   @Get(":id")

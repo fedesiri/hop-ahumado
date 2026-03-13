@@ -96,12 +96,6 @@ function CategoriesContent() {
       key: 'name',
     },
     {
-      title: 'Fecha de Creación',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      render: (date: string) => new Date(date).toLocaleDateString('es-AR'),
-    },
-    {
       title: 'Acciones',
       key: 'actions',
       width: 120,
