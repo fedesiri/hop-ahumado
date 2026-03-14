@@ -5,8 +5,9 @@ import { OrderCalculator } from "@/components/order-calculator/order-calculator"
 import { apiClient } from "@/lib/api-client";
 import { LineProvider } from "@/lib/line-context";
 import type { CreateOrderRequest, Customer, Price, Product } from "@/lib/types";
-import { App, Button, Modal, Select, Spin } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { PaymentMethod } from "@/lib/types";
+import { Alert, App, Button, Modal, Select, Spin } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function OrderCalculatorPage() {
   return (
@@ -28,8 +29,9 @@ function OrderCalculatorPageContent() {
   const [pendingOrder, setPendingOrder] = useState<{
     items: { productId: string; quantity: number; price: number }[];
     total: number;
+    customerId: string | null;
   } | null>(null);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [submitting, setSubmitting] = useState(false);
 
   const pricesByProductId = useMemo(() => {
@@ -41,25 +43,51 @@ function OrderCalculatorPageContent() {
     return map;
   }, [prices]);
 
-  useEffect(() => {
-    const limit = 100; // máximo que permite la API
+  /** Productos que quedarían con stock negativo (según stock actual en DB; se refresca al abrir el modal) */
+  const productsGoingNegative = useMemo(() => {
+    if (!pendingOrder) return [];
+    const productById = Object.fromEntries(products.map((p) => [p.id, p]));
+    const result: { name: string; current: number; requested: number; after: number }[] = [];
+    for (const item of pendingOrder.items) {
+      const product = productById[item.productId];
+      if (!product) continue;
+      const after = product.stock - item.quantity;
+      if (after < 0) {
+        result.push({
+          name: product.name,
+          current: product.stock,
+          requested: item.quantity,
+          after,
+        });
+      }
+    }
+    return result;
+  }, [pendingOrder, products]);
 
+  const limit = 100; // máximo que permite la API
+
+  const fetchProducts = useCallback(async () => {
+    const allProducts: Product[] = [];
+    let page = 1;
+    let res = await apiClient.getProducts(page, limit);
+    allProducts.push(...res.data);
+    while (res.meta.totalPages > page) {
+      page += 1;
+      res = await apiClient.getProducts(page, limit);
+      allProducts.push(...res.data);
+    }
+    setProducts(allProducts);
+    return allProducts;
+  }, []);
+
+  useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-
-        const allProducts: Product[] = [];
-        let page = 1;
-        let res = await apiClient.getProducts(page, limit);
-        allProducts.push(...res.data);
-        while (res.meta.totalPages > page) {
-          page += 1;
-          res = await apiClient.getProducts(page, limit);
-          allProducts.push(...res.data);
-        }
+        await fetchProducts();
 
         const allPrices: Price[] = [];
-        page = 1;
+        let page = 1;
         let pricesRes = await apiClient.getPrices(page, limit, undefined, true);
         allPrices.push(...pricesRes.data);
         while (pricesRes.meta.totalPages > page) {
@@ -78,7 +106,6 @@ function OrderCalculatorPageContent() {
           allCustomers.push(...customersRes.data);
         }
 
-        setProducts(allProducts);
         setPrices(allPrices);
         setCustomers(allCustomers);
       } catch (e) {
@@ -89,24 +116,38 @@ function OrderCalculatorPageContent() {
       }
     };
     load();
-  }, [message]);
+  }, [message, fetchProducts]);
 
-  const handleConfirmOrder = (items: { productId: string; quantity: number; price: number }[], total: number) => {
-    setPendingOrder({ items, total });
-    setSelectedCustomerId(null);
+  // Al abrir el modal de confirmar pedido, refrescar productos desde la DB para que el aviso de stock negativo use datos actuales
+  useEffect(() => {
+    if (confirmModalOpen && pendingOrder) {
+      fetchProducts();
+    }
+  }, [confirmModalOpen, pendingOrder, fetchProducts]);
+
+  const handleConfirmOrder = (
+    items: { productId: string; quantity: number; price: number }[],
+    total: number,
+    customerId?: string | null,
+  ) => {
+    setPendingOrder({ items, total, customerId: customerId ?? null });
     setConfirmModalOpen(true);
   };
 
   const handleCreateOrder = async () => {
     if (!pendingOrder) return;
-    const { items, total } = pendingOrder;
+    const { items, total, customerId } = pendingOrder;
     setSubmitting(true);
     try {
       const data: CreateOrderRequest = {
-        customerId: selectedCustomerId ?? undefined,
+        customerId: customerId ?? undefined,
         total,
-        items,
-        payments: [{ amount: total, method: "CASH" }],
+        items: items.map((item) => ({
+          productId: item.productId,
+          quantity: Number(item.quantity),
+          price: Number(item.price),
+        })),
+        payments: [{ amount: Number(total), method: paymentMethod }],
       };
       await apiClient.createOrder(data);
       message.success("Orden creada. El stock se descontó correctamente.");
@@ -133,7 +174,12 @@ function OrderCalculatorPageContent() {
 
   return (
     <>
-      <OrderCalculator products={products} pricesByProductId={pricesByProductId} onConfirmOrder={handleConfirmOrder} />
+      <OrderCalculator
+        products={products}
+        pricesByProductId={pricesByProductId}
+        customers={customers}
+        onConfirmOrder={handleConfirmOrder}
+      />
 
       <Modal
         title="Confirmar pedido"
@@ -161,14 +207,44 @@ function OrderCalculatorPageContent() {
           <div style={{ marginBottom: 16 }}>
             <p style={{ marginBottom: 8, color: "#9ca3af" }}>Total: $ {pendingOrder.total.toLocaleString("es-AR")}</p>
             <p style={{ marginBottom: 8, color: "#9ca3af" }}>Ítems: {pendingOrder.items.length}</p>
-            <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Cliente (opcional)</label>
+            {pendingOrder.customerId && (
+              <p style={{ marginBottom: 8, color: "#9ca3af" }}>
+                Cliente: {customers.find((c) => c.id === pendingOrder.customerId)?.name ?? pendingOrder.customerId}
+              </p>
+            )}
+            {productsGoingNegative.length > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message="Stock insuficiente"
+                description={
+                  <>
+                    <p style={{ marginBottom: 8 }}>
+                      Los siguientes productos no tienen stock suficiente. Se descontará igual y quedarán en número
+                      negativo. Cuando cargues nuevo stock (entrada), ese número negativo se descontará de lo que
+                      ingreses.
+                    </p>
+                    <ul style={{ margin: 0, paddingLeft: 20 }}>
+                      {productsGoingNegative.map((p) => (
+                        <li key={p.name}>
+                          <strong>{p.name}</strong>: stock actual {p.current}, pedido {p.requested} → quedará {p.after}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                }
+              />
+            )}
+            <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Método de pago</label>
             <Select
-              placeholder="Seleccionar cliente"
-              allowClear
+              value={paymentMethod}
+              onChange={(v) => setPaymentMethod(v)}
               style={{ width: "100%" }}
-              value={selectedCustomerId}
-              onChange={setSelectedCustomerId}
-              options={customers.map((c) => ({ label: c.name, value: c.id }))}
+              options={[
+                { label: "Efectivo", value: PaymentMethod.CASH },
+                { label: "Tarjeta/Transferencia", value: PaymentMethod.CARD },
+              ]}
             />
           </div>
         )}

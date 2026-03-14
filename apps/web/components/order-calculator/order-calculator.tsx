@@ -3,7 +3,7 @@
 import { PRICE_TYPE_LABELS, getPriceForType, type PriceType } from "@/lib/order-calculator/price-types";
 import type { Price, Product } from "@/lib/types";
 import { SearchOutlined } from "@ant-design/icons";
-import { Col, Empty, Input, Row, Spin } from "antd";
+import { Col, Empty, Input, Row, Select, Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PriceSelector } from "./price-selector";
@@ -12,7 +12,7 @@ import { StickyFooter } from "./sticky-footer";
 
 const STORAGE_KEYS = {
   priceType: "order-calc-price-type",
-  customerName: "order-calc-customer-name",
+  customerId: "order-calc-customer-id",
   quantities: "order-calc-quantities",
 };
 
@@ -35,8 +35,14 @@ export interface OrderCalculatorProps {
   products: Product[];
   /** Precios por productId (agrupados desde la API) */
   pricesByProductId: Record<string, Price[]>;
-  /** Si se pasa, se muestra el botón "Confirmar pedido" y se llama con ítems (productId, quantity, price) y total */
-  onConfirmOrder?: (items: { productId: string; quantity: number; price: number }[], total: number) => void;
+  /** Clientes de la DB para elegir en la calculadora */
+  customers: { id: string; name: string }[];
+  /** Si se pasa, se muestra el botón "Confirmar pedido"; se llama con ítems, total y customerId (opcional) */
+  onConfirmOrder?: (
+    items: { productId: string; quantity: number; price: number }[],
+    total: number,
+    customerId?: string | null,
+  ) => void;
 }
 
 function getInitialQuantities(productIds: string[]): Record<string, number> {
@@ -57,6 +63,7 @@ function getInitialQuantities(productIds: string[]): Record<string, number> {
     (acc, id) => {
       acc[id] = 0;
       return acc;
+      s;
     },
     {} as Record<string, number>,
   );
@@ -74,18 +81,19 @@ function getInitialPriceType(): PriceType {
   return "mayorista";
 }
 
-function getInitialCustomerName(): string {
+function getInitialCustomerId(customers: { id: string }[]): string | null {
   if (typeof window !== "undefined") {
     try {
-      return localStorage.getItem(STORAGE_KEYS.customerName) ?? "";
+      const stored = localStorage.getItem(STORAGE_KEYS.customerId);
+      if (stored && customers.some((c) => c.id === stored)) return stored;
     } catch {}
   }
-  return "";
+  return null;
 }
 
-export function OrderCalculator({ products, pricesByProductId, onConfirmOrder }: OrderCalculatorProps) {
+export function OrderCalculator({ products, pricesByProductId, customers, onConfirmOrder }: OrderCalculatorProps) {
   const [priceType, setPriceType] = useState<PriceType>(getInitialPriceType);
-  const [customerName, setCustomerName] = useState(getInitialCustomerName);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(() => getInitialCustomerId(customers));
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
     getInitialQuantities(products.map((p) => p.id)),
   );
@@ -123,8 +131,9 @@ export function OrderCalculator({ products, pricesByProductId, onConfirmOrder }:
   }, [priceType, mounted]);
 
   useEffect(() => {
-    if (mounted) localStorage.setItem(STORAGE_KEYS.customerName, customerName);
-  }, [customerName, mounted]);
+    if (mounted && selectedCustomerId) localStorage.setItem(STORAGE_KEYS.customerId, selectedCustomerId);
+    if (mounted && !selectedCustomerId) localStorage.removeItem(STORAGE_KEYS.customerId);
+  }, [selectedCustomerId, mounted]);
 
   useEffect(() => {
     if (mounted) localStorage.setItem(STORAGE_KEYS.quantities, JSON.stringify(quantities));
@@ -146,8 +155,12 @@ export function OrderCalculator({ products, pricesByProductId, onConfirmOrder }:
     setQuantities((prev) => ({ ...prev, [productId]: qty }));
   }, []);
 
+  const customerNameForCopy = selectedCustomerId
+    ? (customers.find((c) => c.id === selectedCustomerId)?.name ?? "")
+    : "";
+
   const handleCopy = useCallback(() => {
-    const nameLine = customerName.trim() ? `Pedido para: ${customerName.trim()}` : "Pedido";
+    const nameLine = customerNameForCopy.trim() ? `Pedido para: ${customerNameForCopy.trim()}` : "Pedido";
     const parts: string[] = [nameLine, "", `Precio: ${PRICE_TYPE_LABELS[priceType].toUpperCase()}`, ""];
     const lines: { name: string; qty: number; subtotal: number }[] = [];
     products.forEach((p) => {
@@ -178,11 +191,11 @@ export function OrderCalculator({ products, pricesByProductId, onConfirmOrder }:
         toast.success("Pedido copiado");
       })
       .catch(() => toast.error("No se pudo copiar"));
-  }, [products, quantities, pricesByProductId, priceType, total, customerName]);
+  }, [products, quantities, pricesByProductId, priceType, total, customerNameForCopy]);
 
   const handleClear = useCallback(() => {
     if (navigator.vibrate) navigator.vibrate(30);
-    setCustomerName("");
+    setSelectedCustomerId(null);
     setQuantities(
       productIds.reduce(
         (acc, id) => {
@@ -196,7 +209,7 @@ export function OrderCalculator({ products, pricesByProductId, onConfirmOrder }:
 
   const handleNewOrder = useCallback(() => {
     if (navigator.vibrate) navigator.vibrate(30);
-    setCustomerName("");
+    setSelectedCustomerId(null);
     setQuantities(
       productIds.reduce(
         (acc, id) => {
@@ -220,8 +233,8 @@ export function OrderCalculator({ products, pricesByProductId, onConfirmOrder }:
       const unitPrice = getPriceForType(prices, priceType);
       items.push({ productId: p.id, quantity: qty, price: unitPrice });
     });
-    onConfirmOrder(items, total);
-  }, [onConfirmOrder, hasItems, products, quantities, pricesByProductId, priceType, total]);
+    onConfirmOrder(items, total, selectedCustomerId);
+  }, [onConfirmOrder, hasItems, products, quantities, pricesByProductId, priceType, total, selectedCustomerId]);
 
   if (!mounted) {
     return (
@@ -239,11 +252,18 @@ export function OrderCalculator({ products, pricesByProductId, onConfirmOrder }:
           <h1 style={{ margin: "0 0 12px 0", color: "#ffffff", fontSize: 18 }}>Calculadora de Pedidos</h1>
           <Row gutter={[12, 12]}>
             <Col xs={24} md={12} lg={6}>
-              <Input
-                placeholder="Nombre del cliente (opcional)"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
+              <Select
+                placeholder="Cliente (opcional)"
+                value={selectedCustomerId || undefined}
+                onChange={(v) => setSelectedCustomerId(v ?? null)}
                 allowClear
+                style={{ width: "100%" }}
+                options={customers.map((c) => ({ label: c.name, value: c.id }))}
+                showSearch
+                optionFilterProp="label"
+                filterOption={(input, option) =>
+                  (option?.label ?? "").toString().toLowerCase().includes(input.toLowerCase())
+                }
               />
             </Col>
             <Col xs={24} md={12} lg={10}>
