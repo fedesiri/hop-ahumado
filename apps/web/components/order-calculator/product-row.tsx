@@ -1,38 +1,32 @@
-'use client'
+"use client";
 
-import { Card } from 'antd'
-import { getPriceForType, type PriceType } from '@/lib/order-calculator/price-types'
-import type { Price } from '@/lib/types'
-import { QuantityControl } from './quantity-control'
+import { getPriceForType, type PriceType } from "@/lib/order-calculator/price-types";
+import type { Price } from "@/lib/types";
+import { Card } from "antd";
+import { QuantityControl } from "./quantity-control";
 
 interface ProductRowProps {
-  productId: string
-  productName: string
-  prices: Price[]
-  priceType: PriceType
-  quantity: number
-  onQuantityChange: (qty: number) => void
+  productId: string;
+  productName: string;
+  prices: Price[];
+  priceType: PriceType;
+  quantity: number;
+  onQuantityChange: (qty: number) => void;
 }
 
-export function ProductRow({
-  productName,
-  prices,
-  priceType,
-  quantity,
-  onQuantityChange,
-}: ProductRowProps) {
-  const unitPrice = getPriceForType(prices, priceType)
-  const hasItems = quantity > 0
+export function ProductRow({ productName, prices, priceType, quantity, onQuantityChange }: ProductRowProps) {
+  const unitPrice = getPriceForType(prices, priceType);
+  const hasItems = quantity > 0;
 
   return (
     <Card
       size="small"
-      title={<span style={{ color: '#ffffff' }}>{productName}</span>}
+      title={<span style={{ color: "#ffffff" }}>{productName}</span>}
       style={{
-        backgroundColor: '#1f2937',
-        borderColor: hasItems ? 'rgba(34, 197, 94, 0.4)' : '#2d3748',
+        backgroundColor: "#1f2937",
+        borderColor: hasItems ? "rgba(34, 197, 94, 0.4)" : "#2d3748",
       }}
-      styles={{ header: { borderColor: '#2d3748' } }}
+      styles={{ header: { borderColor: "#2d3748" } }}
     >
       <QuantityControl
         label="Unidad"
@@ -44,5 +38,5 @@ export function ProductRow({
         onBulkDecrement={() => onQuantityChange(Math.max(0, quantity - 12))}
       />
     </Card>
-  )
+  );
 }

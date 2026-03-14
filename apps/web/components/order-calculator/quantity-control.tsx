@@ -1,21 +1,21 @@
-'use client'
+"use client";
 
-import { Button } from 'antd'
-import { MinusOutlined, PlusOutlined } from '@ant-design/icons'
+import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
+import { Button } from "antd";
 
 interface QuantityControlProps {
-  label: string
-  price: number
-  quantity: number
-  onIncrement: () => void
-  onDecrement: () => void
-  onBulkIncrement: () => void
-  onBulkDecrement: () => void
+  label: string;
+  price: number;
+  quantity: number;
+  onIncrement: () => void;
+  onDecrement: () => void;
+  onBulkIncrement: () => void;
+  onBulkDecrement: () => void;
 }
 
 function vibrate() {
-  if (typeof navigator !== 'undefined' && navigator.vibrate) {
-    navigator.vibrate(15)
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
+    navigator.vibrate(15);
   }
 }
 
@@ -31,25 +31,23 @@ export function QuantityControl({
   return (
     <div
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
         gap: 12,
-        flexWrap: 'wrap',
+        flexWrap: "wrap",
       }}
     >
       <div>
-        <div style={{ fontWeight: 600, color: '#ffffff' }}>{label}</div>
-        <div style={{ fontSize: 12, color: '#9ca3af' }}>
-          $ {price.toLocaleString('es-AR')}
-        </div>
+        <div style={{ fontWeight: 600, color: "#ffffff" }}>{label}</div>
+        <div style={{ fontSize: 12, color: "#9ca3af" }}>$ {price.toLocaleString("es-AR")}</div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <Button
           size="small"
           onClick={() => {
-            vibrate()
-            onBulkDecrement()
+            vibrate();
+            onBulkDecrement();
           }}
           disabled={quantity < 12}
           style={{ minWidth: 40 }}
@@ -60,18 +58,18 @@ export function QuantityControl({
           size="small"
           icon={<MinusOutlined />}
           onClick={() => {
-            vibrate()
-            onDecrement()
+            vibrate();
+            onDecrement();
           }}
           disabled={quantity === 0}
         />
         <span
           style={{
             minWidth: 44,
-            textAlign: 'center',
+            textAlign: "center",
             fontSize: 18,
             fontWeight: 700,
-            color: quantity > 0 ? '#22c55e' : '#9ca3af',
+            color: quantity > 0 ? "#22c55e" : "#9ca3af",
           }}
         >
           {quantity}
@@ -81,16 +79,16 @@ export function QuantityControl({
           size="small"
           icon={<PlusOutlined />}
           onClick={() => {
-            vibrate()
-            onIncrement()
+            vibrate();
+            onIncrement();
           }}
         />
         <Button
           type="primary"
           size="small"
           onClick={() => {
-            vibrate()
-            onBulkIncrement()
+            vibrate();
+            onBulkIncrement();
           }}
           style={{ minWidth: 40 }}
         >
@@ -98,5 +96,5 @@ export function QuantityControl({
         </Button>
       </div>
     </div>
-  )
+  );
 }
