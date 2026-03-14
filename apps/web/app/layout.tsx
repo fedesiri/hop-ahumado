@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AntdProvider } from '@/components/antd-provider'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -44,6 +45,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`} style={{ backgroundColor: '#0a0a0a' }}>
         <AntdProvider>
           {children}
+          <Toaster richColors position="top-center" />
           <Analytics />
         </AntdProvider>
       </body>

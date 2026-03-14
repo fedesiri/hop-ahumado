@@ -70,7 +70,14 @@ const menuItems: MenuProps['items'] = [
   {
     key: 'orders',
     icon: <ShoppingCartOutlined />,
-    label: <Link href="/orders">Órdenes</Link>,
+    label: 'Órdenes',
+    children: [
+      { key: '/orders', label: <Link href="/orders">Listado</Link> },
+      {
+        key: '/orders/calculator',
+        label: <Link href="/orders/calculator">Calculadora de pedidos</Link>,
+      },
+    ],
   },
   {
     key: 'prices',
@@ -110,8 +117,8 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname()
 
-  // Extract the first part of the path for menu key
-  const selectedKey = pathname === '/' ? '/' : `/${pathname.split('/')[1]}`
+  // Use full path so submenu items (e.g. /orders/calculator) are highlighted
+  const selectedKey = pathname || '/'
 
   const menuContent = (
     <Menu

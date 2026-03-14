@@ -221,3 +221,20 @@
   align-items: center !important;
   justify-content: center !important;
 }
+
+/* Calculadora: opción seleccionada (Mayorista/Minorista/Fábrica) con fondo verde */
+.order-calc-price-segmented .ant-segmented-thumb {
+  background-color: #22c55e !important;
+  transition: none !important; /* Sin deslizamiento al cambiar de opción */
+}
+.order-calc-price-segmented .ant-segmented-item-selected {
+  background-color: transparent !important;
+  color: #fff !important;
+}
+.order-calc-price-segmented .ant-segmented-item-selected .ant-segmented-item-label {
+  color: #fff !important;
+}
+/* Por si el thumb no existe o el ítem pinta su propio fondo */
+.order-calc-price-segmented .ant-segmented-item.ant-segmented-item-selected {
+  background-color: #22c55e !important;
+}

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Order } from "@prisma/client";
+import { StockMovementType } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
@@ -69,12 +70,36 @@ export class OrderService {
           },
         },
         include: {
-          orderItems: { include: { product: { select: { id: true, name: true } } } },
+          orderItems: { include: { product: { select: { id: true, name: true, stock: true } } } },
           payments: true,
           customer: { select: { id: true, name: true } },
           user: { select: { id: true, name: true, email: true } },
         },
       });
+
+      // Descontar stock por cada ítem de la orden
+      for (const item of order.orderItems) {
+        const product = item.product as { id: string; name: string; stock: number };
+        const newStock = product.stock - item.quantity;
+        if (newStock < 0) {
+          throw new BadRequestException(
+            `Stock insuficiente para "${product.name}". Actual: ${product.stock}, pedido: ${item.quantity}`,
+          );
+        }
+        await tx.stockMovement.create({
+          data: {
+            productId: product.id,
+            quantity: item.quantity,
+            type: StockMovementType.OUT,
+            reason: `Orden ${order.id.slice(0, 8)}`,
+          },
+        });
+        await tx.product.update({
+          where: { id: product.id },
+          data: { stock: newStock },
+        });
+      }
+
       return order;
     });
   }
