@@ -2,6 +2,7 @@
 
 import { apiClient } from "@/lib/api-client";
 import type { CrmDashboardResponse } from "@/lib/types";
+import { formatStatusLabel } from "@/lib/utils";
 import { MessageOutlined, RiseOutlined, UserOutlined } from "@ant-design/icons";
 import { Card, Col, Row, Spin, Statistic, Table } from "antd";
 import { useEffect, useState } from "react";
@@ -29,7 +30,7 @@ export default function CrmDashboardPage() {
   if (!data) return null;
 
   const statusColumns = [
-    { title: "Estado", dataIndex: "status", key: "status", render: (v: string | null) => v || "—" },
+    { title: "Estado", dataIndex: "status", key: "status", render: (v: string | null) => formatStatusLabel(v) || "—" },
     { title: "Cantidad", dataIndex: "count", key: "count" },
   ];
 

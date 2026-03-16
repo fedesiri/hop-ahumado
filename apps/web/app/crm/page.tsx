@@ -2,6 +2,7 @@
 
 import { apiClient } from "@/lib/api-client";
 import type { CreateCrmCustomerRequest, CrmCustomerListItem, PaginationMeta, User } from "@/lib/types";
+import { formatStatusLabel } from "@/lib/utils";
 import { EditOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table } from "antd";
 import dayjs from "dayjs";
@@ -177,7 +178,12 @@ function CrmContent() {
         </Button>
       ),
     },
-    { title: "Estado del contacto", dataIndex: "status", key: "status" },
+    {
+      title: "Estado del contacto",
+      dataIndex: "status",
+      key: "status",
+      render: (v: string | null) => formatStatusLabel(v) || "—",
+    },
     { title: "Origen (cómo nos conoció)", dataIndex: "source", key: "source" },
     { title: "Socio responsable", dataIndex: "responsibleName", key: "responsibleName" },
     {

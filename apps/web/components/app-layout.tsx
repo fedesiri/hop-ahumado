@@ -1,41 +1,41 @@
-'use client'
+"use client";
 
-import React, { useState } from 'react'
-import { Layout, Tabs, Drawer } from 'antd'
-import { Flower2 } from 'lucide-react'
-import { AppSidebar, ToggleSidebarButton } from './app-sidebar'
-import { BusinessLine } from '@/lib/types'
-import { useLineContext } from '@/lib/line-context'
-import { useMediaQuery } from '@/lib/use-media-query'
+import { useLineContext } from "@/lib/line-context";
+import { BusinessLine } from "@/lib/types";
+import { useMediaQuery } from "@/lib/use-media-query";
+import { Drawer, Layout, Tabs } from "antd";
+import { Flower2 } from "lucide-react";
+import React, { useState } from "react";
+import { AppSidebar, ToggleSidebarButton } from "./app-sidebar";
 
-const { Header, Content } = Layout
+const { Header, Content } = Layout;
 
 interface AppLayoutProps {
-  children: React.ReactNode
-  showLineTabs?: boolean
+  children: React.ReactNode;
+  showLineTabs?: boolean;
 }
 
 export function AppLayout({ children, showLineTabs = true }: AppLayoutProps) {
-  const [collapsed, setCollapsed] = useState(false)
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const { selectedLine, setSelectedLine } = useLineContext()
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const [collapsed, setCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { selectedLine, setSelectedLine } = useLineContext();
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   const toggleCollapsed = () => {
     if (isMobile) {
-      setDrawerOpen(!drawerOpen)
+      setDrawerOpen(!drawerOpen);
     } else {
-      setCollapsed(!collapsed)
+      setCollapsed(!collapsed);
     }
-  }
+  };
 
   const lineTabItems = [
-    { key: BusinessLine.MEAT, label: '🥩 Carnes' },
-    { key: BusinessLine.BEER, label: '🍺 Cerveza' },
-  ]
+    { key: BusinessLine.MEAT, label: "🥩 Carnes" },
+    { key: BusinessLine.BEER, label: "🍺 Cerveza" },
+  ];
 
   return (
-    <Layout style={{ minHeight: '100vh', width: '100%', maxWidth: '100vw', overflow: 'hidden' }}>
+    <Layout style={{ minHeight: "100vh", width: "100%", maxWidth: "100vw", overflow: "hidden" }}>
       {isMobile ? (
         <Drawer
           title="Navegación"
@@ -45,56 +45,49 @@ export function AppLayout({ children, showLineTabs = true }: AppLayoutProps) {
           styles={{ body: { padding: 0 } }}
           width={250}
         >
-          <AppSidebar collapsed={false} onCollapsedChange={() => {}} isMobile={true} />
+          <AppSidebar collapsed={false} onCollapsedChange={() => setDrawerOpen(false)} isMobile={true} />
         </Drawer>
       ) : (
-        <AppSidebar
-          collapsed={collapsed}
-          onCollapsedChange={setCollapsed}
-          isMobile={false}
-        />
+        <AppSidebar collapsed={collapsed} onCollapsedChange={setCollapsed} isMobile={false} />
       )}
 
       <Layout
         style={{
           marginLeft: isMobile ? 0 : collapsed ? 80 : 250,
-          transition: 'margin-left 0.2s',
-          width: isMobile ? '100%' : undefined,
-          maxWidth: isMobile ? '100vw' : undefined,
+          transition: "margin-left 0.2s",
+          width: isMobile ? "100%" : undefined,
+          maxWidth: isMobile ? "100vw" : undefined,
           minWidth: isMobile ? 0 : undefined,
         }}
       >
         <Header
           style={{
-            padding: isMobile ? '0 12px' : '0 24px',
-            background: '#1f2937',
-            borderBottom: '1px solid #2d3748',
+            padding: isMobile ? "0 12px" : "0 24px",
+            background: "#1f2937",
+            borderBottom: "1px solid #2d3748",
             height: isMobile ? 52 : 64,
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16 }}>
-            <ToggleSidebarButton
-              collapsed={isMobile ? drawerOpen : collapsed}
-              onClick={toggleCollapsed}
-            />
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 16 }}>
+            <ToggleSidebarButton collapsed={isMobile ? drawerOpen : collapsed} onClick={toggleCollapsed} />
             {isMobile ? (
-              <span style={{ display: 'flex', alignItems: 'center', color: '#22c55e' }}>
+              <span style={{ display: "flex", alignItems: "center", color: "#22c55e" }}>
                 <Flower2 size={24} strokeWidth={1.8} />
               </span>
             ) : (
               <h1
                 style={{
                   margin: 0,
-                  color: '#ffffff',
+                  color: "#ffffff",
                   fontSize: 18,
                   fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                 }}
               >
                 Hop Ahumado
@@ -103,7 +96,7 @@ export function AppLayout({ children, showLineTabs = true }: AppLayoutProps) {
           </div>
 
           {showLineTabs && selectedLine && (
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: "flex", alignItems: "center" }}>
               <Tabs
                 activeKey={selectedLine}
                 onChange={(key) => setSelectedLine(key as BusinessLine)}
@@ -118,13 +111,13 @@ export function AppLayout({ children, showLineTabs = true }: AppLayoutProps) {
         <Content
           style={{
             padding: isMobile ? 12 : 24,
-            background: '#0a0a0a',
-            minHeight: isMobile ? 'calc(100vh - 52px)' : 'calc(100vh - 64px)',
+            background: "#0a0a0a",
+            minHeight: isMobile ? "calc(100vh - 52px)" : "calc(100vh - 64px)",
           }}
         >
           {children}
         </Content>
       </Layout>
     </Layout>
-  )
+  );
 }

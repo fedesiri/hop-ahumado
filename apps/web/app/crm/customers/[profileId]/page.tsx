@@ -12,6 +12,7 @@ import type {
   User,
 } from "@/lib/types";
 import { InteractionChannel as ChannelEnum } from "@/lib/types";
+import { formatStatusLabel } from "@/lib/utils";
 import { ArrowLeftOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, Card, DatePicker, Descriptions, Form, Input, Modal, Select, Space, Spin, Tabs } from "antd";
 import dayjs from "dayjs";
@@ -129,15 +130,11 @@ export default function CrmCustomerDetailPage() {
     try {
       const raw = values.estimatedValue;
       const estimatedValue =
-        raw !== undefined && raw !== null && raw !== ""
-          ? (typeof raw === "number" ? raw : Number(raw))
-          : undefined;
+        raw !== undefined && raw !== null && raw !== "" ? (typeof raw === "number" ? raw : Number(raw)) : undefined;
       const payload: UpdateCustomerOpportunityRequest = {
         stage: values.stage,
         notes: values.notes,
-        expectedClosingDate: values.expectedClosingDate
-          ? values.expectedClosingDate.toISOString()
-          : undefined,
+        expectedClosingDate: values.expectedClosingDate ? values.expectedClosingDate.toISOString() : undefined,
       };
       if (estimatedValue !== undefined && !Number.isNaN(estimatedValue)) {
         payload.estimatedValue = estimatedValue;
@@ -215,7 +212,7 @@ export default function CrmCustomerDetailPage() {
           <Descriptions.Item label="Persona de contacto">{detail.contactName ?? "—"}</Descriptions.Item>
           <Descriptions.Item label="Teléfono">{detail.phone ?? "—"}</Descriptions.Item>
           <Descriptions.Item label="Email">{detail.email ?? "—"}</Descriptions.Item>
-          <Descriptions.Item label="Estado del contacto">{detail.status ?? "—"}</Descriptions.Item>
+          <Descriptions.Item label="Estado del contacto">{formatStatusLabel(detail.status) || "—"}</Descriptions.Item>
           <Descriptions.Item label="¿De dónde nos conoció?">{detail.source ?? "—"}</Descriptions.Item>
           <Descriptions.Item label="Socio responsable del seguimiento">
             {detail.responsible?.name ?? "—"}
@@ -332,6 +329,7 @@ export default function CrmCustomerDetailPage() {
         onOk={() => profileForm.submit()}
         okText="Guardar"
         width={500}
+        forceRender
       >
         <Form form={profileForm} layout="vertical" onFinish={handleUpdateProfile}>
           <Form.Item name="contactName" label="Persona de contacto (opcional)">
@@ -381,6 +379,7 @@ export default function CrmCustomerDetailPage() {
         onOk={() => opportunityForm.submit()}
         okText="Guardar"
         width={500}
+        forceRender
       >
         <Form form={opportunityForm} layout="vertical" onFinish={handleUpsertOpportunity}>
           <Form.Item name="stage" label="Etapa">
@@ -405,6 +404,7 @@ export default function CrmCustomerDetailPage() {
         onOk={() => interactionForm.submit()}
         okText="Agregar"
         width={500}
+        forceRender
       >
         <Form
           form={interactionForm}

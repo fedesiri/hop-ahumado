@@ -14,9 +14,9 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
-import { Button, Drawer, Layout, Menu } from "antd";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Button, Layout, Menu } from "antd";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 interface AppSidebarProps {
   collapsed?: boolean;
@@ -27,103 +27,75 @@ interface AppSidebarProps {
 const { Sider } = Layout;
 
 const menuItems: MenuProps["items"] = [
-  {
-    key: "/",
-    icon: <DashboardOutlined />,
-    label: <Link href="/">Inicio</Link>,
-  },
-  {
-    key: "divider-1",
-    type: "divider",
-  },
-  {
-    key: "categories",
-    icon: <AppstoreOutlined />,
-    label: <Link href="/categories">Categorías</Link>,
-  },
-  {
-    key: "products",
-    icon: <ShoppingOutlined />,
-    label: <Link href="/products">Productos</Link>,
-  },
+  { key: "/", icon: <DashboardOutlined />, label: "Inicio" },
+  { key: "divider-1", type: "divider" },
+  { key: "/categories", icon: <AppstoreOutlined />, label: "Categorías" },
+  { key: "/products", icon: <ShoppingOutlined />, label: "Productos" },
   {
     key: "crm",
     icon: <TeamOutlined />,
     label: "CRM",
     children: [
-      { key: "/crm", label: <Link href="/crm">Clientes</Link> },
-      { key: "/crm/dashboard", label: <Link href="/crm/dashboard">Dashboard</Link> },
+      { key: "/crm", label: "Clientes" },
+      { key: "/crm/dashboard", label: "Dashboard" },
     ],
   },
-  {
-    key: "divider-2",
-    type: "divider",
-  },
+  { key: "divider-2", type: "divider" },
   {
     key: "orders",
     icon: <ShoppingCartOutlined />,
     label: "Órdenes",
     children: [
-      { key: "/orders", label: <Link href="/orders">Listado</Link> },
-      {
-        key: "/orders/calculator",
-        label: <Link href="/orders/calculator">Calculadora de pedidos</Link>,
-      },
+      { key: "/orders", label: "Listado" },
+      { key: "/orders/calculator", label: "Calculadora de pedidos" },
     ],
   },
-  {
-    key: "prices",
-    icon: <DollarOutlined />,
-    label: <Link href="/prices">Precios</Link>,
-  },
-  {
-    key: "costs",
-    icon: <DollarOutlined />,
-    label: <Link href="/costs">Costos</Link>,
-  },
-  {
-    key: "divider-3",
-    type: "divider",
-  },
-  {
-    key: "stock",
-    icon: <DatabaseOutlined />,
-    label: <Link href="/stock">Stock</Link>,
-  },
-  {
-    key: "recipes",
-    icon: <BgColorsOutlined />,
-    label: <Link href="/recipes">Recetas</Link>,
-  },
-  {
-    key: "users",
-    icon: <UserOutlined />,
-    label: <Link href="/users">Usuarios</Link>,
-  },
+  { key: "/prices", icon: <DollarOutlined />, label: "Precios" },
+  { key: "/costs", icon: <DollarOutlined />, label: "Costos" },
+  { key: "divider-3", type: "divider" },
+  { key: "/stock", icon: <DatabaseOutlined />, label: "Stock" },
+  { key: "/recipes", icon: <BgColorsOutlined />, label: "Recetas" },
+  { key: "/users", icon: <UserOutlined />, label: "Usuarios" },
 ];
 
 export function AppSidebar({ collapsed = false, onCollapsedChange, isMobile = false }: AppSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
 
-  // Use full path so submenu items (e.g. /orders/calculator) are highlighted
   const selectedKey = pathname || "/";
 
+  const pathBasedOpenKeys = useMemo(
+    () =>
+      [pathname?.startsWith("/crm") && "crm", pathname?.startsWith("/orders") && "orders"].filter(Boolean) as string[],
+    [pathname],
+  );
+
+  const [openKeys, setOpenKeys] = useState<string[]>(pathBasedOpenKeys);
+  useEffect(() => {
+    setOpenKeys(pathBasedOpenKeys);
+  }, [pathBasedOpenKeys]);
+
+  const handleMenuClick: MenuProps["onClick"] = (e) => {
+    if (e.key.startsWith("/")) {
+      router.push(e.key);
+      if (isMobile) onCollapsedChange?.(true);
+    }
+  };
+
   const menuContent = (
-    <Menu mode="inline" selectedKeys={[selectedKey]} items={menuItems} style={{ borderRight: "none" }} />
+    <Menu
+      mode="inline"
+      selectedKeys={[selectedKey]}
+      openKeys={openKeys}
+      onOpenChange={setOpenKeys}
+      items={menuItems}
+      onClick={handleMenuClick}
+      style={{ borderRight: "none" }}
+    />
   );
 
   if (isMobile) {
-    return (
-      <Drawer
-        title="Navegación"
-        placement="left"
-        onClose={() => onCollapsedChange?.(true)}
-        open={!collapsed}
-        styles={{ body: { padding: 0 } }}
-      >
-        {menuContent}
-      </Drawer>
-    );
+    return menuContent;
   }
 
   return (
@@ -156,7 +128,7 @@ export function AppSidebar({ collapsed = false, onCollapsedChange, isMobile = fa
       >
         {collapsed ? "HA" : "Hop Ahumado"}
       </div>
-      <Menu mode="inline" selectedKeys={[selectedKey]} items={menuItems} style={{ borderRight: "none" }} />
+      {menuContent}
     </Sider>
   );
 }
