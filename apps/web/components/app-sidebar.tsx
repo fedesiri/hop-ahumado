@@ -1,133 +1,116 @@
-'use client'
+"use client";
 
-import React from 'react'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Layout, Menu, Button, Drawer } from 'antd'
 import {
-  DashboardOutlined,
   AppstoreOutlined,
-  ShoppingOutlined,
-  UserOutlined,
-  ReconciliationOutlined,
-  DollarOutlined,
-  ShoppingCartOutlined,
+  BgColorsOutlined,
+  DashboardOutlined,
   DatabaseOutlined,
-  FileTextOutlined,
+  DollarOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  BgColorsOutlined,
-} from '@ant-design/icons'
-import type { MenuProps } from 'antd'
+  ShoppingCartOutlined,
+  ShoppingOutlined,
+  TeamOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
+import type { MenuProps } from "antd";
+import { Button, Drawer, Layout, Menu } from "antd";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 interface AppSidebarProps {
-  collapsed?: boolean
-  onCollapsedChange?: (collapsed: boolean) => void
-  isMobile?: boolean
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
+  isMobile?: boolean;
 }
 
-const { Sider } = Layout
+const { Sider } = Layout;
 
-const menuItems: MenuProps['items'] = [
+const menuItems: MenuProps["items"] = [
   {
-    key: '/',
+    key: "/",
     icon: <DashboardOutlined />,
     label: <Link href="/">Inicio</Link>,
   },
   {
-    key: 'divider-1',
-    type: 'divider',
+    key: "divider-1",
+    type: "divider",
   },
   {
-    key: 'categories',
+    key: "categories",
     icon: <AppstoreOutlined />,
     label: <Link href="/categories">Categorías</Link>,
   },
   {
-    key: 'products',
+    key: "products",
     icon: <ShoppingOutlined />,
     label: <Link href="/products">Productos</Link>,
   },
   {
-    key: 'customers',
-    icon: <UserOutlined />,
-    label: <Link href="/customers">Clientes</Link>,
-  },
-  {
-    key: 'customer-profiles',
-    icon: <FileTextOutlined />,
-    label: <Link href="/customer-profiles">Perfiles de Clientes</Link>,
-  },
-  {
-    key: 'customer-interactions',
-    icon: <ReconciliationOutlined />,
-    label: <Link href="/customer-interactions">Interacciones</Link>,
-  },
-  {
-    key: 'divider-2',
-    type: 'divider',
-  },
-  {
-    key: 'orders',
-    icon: <ShoppingCartOutlined />,
-    label: 'Órdenes',
+    key: "crm",
+    icon: <TeamOutlined />,
+    label: "CRM",
     children: [
-      { key: '/orders', label: <Link href="/orders">Listado</Link> },
+      { key: "/crm", label: <Link href="/crm">Clientes</Link> },
+      { key: "/crm/dashboard", label: <Link href="/crm/dashboard">Dashboard</Link> },
+    ],
+  },
+  {
+    key: "divider-2",
+    type: "divider",
+  },
+  {
+    key: "orders",
+    icon: <ShoppingCartOutlined />,
+    label: "Órdenes",
+    children: [
+      { key: "/orders", label: <Link href="/orders">Listado</Link> },
       {
-        key: '/orders/calculator',
+        key: "/orders/calculator",
         label: <Link href="/orders/calculator">Calculadora de pedidos</Link>,
       },
     ],
   },
   {
-    key: 'prices',
+    key: "prices",
     icon: <DollarOutlined />,
     label: <Link href="/prices">Precios</Link>,
   },
   {
-    key: 'costs',
+    key: "costs",
     icon: <DollarOutlined />,
     label: <Link href="/costs">Costos</Link>,
   },
   {
-    key: 'divider-3',
-    type: 'divider',
+    key: "divider-3",
+    type: "divider",
   },
   {
-    key: 'stock',
+    key: "stock",
     icon: <DatabaseOutlined />,
     label: <Link href="/stock">Stock</Link>,
   },
   {
-    key: 'recipes',
+    key: "recipes",
     icon: <BgColorsOutlined />,
     label: <Link href="/recipes">Recetas</Link>,
   },
   {
-    key: 'users',
+    key: "users",
     icon: <UserOutlined />,
     label: <Link href="/users">Usuarios</Link>,
   },
-]
+];
 
-export function AppSidebar({
-  collapsed = false,
-  onCollapsedChange,
-  isMobile = false,
-}: AppSidebarProps) {
-  const pathname = usePathname()
+export function AppSidebar({ collapsed = false, onCollapsedChange, isMobile = false }: AppSidebarProps) {
+  const pathname = usePathname();
 
   // Use full path so submenu items (e.g. /orders/calculator) are highlighted
-  const selectedKey = pathname || '/'
+  const selectedKey = pathname || "/";
 
   const menuContent = (
-    <Menu
-      mode="inline"
-      selectedKeys={[selectedKey]}
-      items={menuItems}
-      style={{ borderRight: 'none' }}
-    />
-  )
+    <Menu mode="inline" selectedKeys={[selectedKey]} items={menuItems} style={{ borderRight: "none" }} />
+  );
 
   if (isMobile) {
     return (
@@ -140,7 +123,7 @@ export function AppSidebar({
       >
         {menuContent}
       </Drawer>
-    )
+    );
   }
 
   return (
@@ -151,36 +134,31 @@ export function AppSidebar({
       width={250}
       collapsedWidth={80}
       style={{
-        height: '100vh',
-        position: 'fixed',
+        height: "100vh",
+        position: "fixed",
         left: 0,
         top: 0,
         bottom: 0,
-        backgroundColor: '#111111',
+        backgroundColor: "#111111",
       }}
     >
       <div
         style={{
-          padding: '24px 0',
-          textAlign: 'center',
-          color: '#22c55e',
-          fontSize: collapsed ? '14px' : '20px',
-          fontWeight: 'bold',
-          marginBottom: '16px',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
+          padding: "24px 0",
+          textAlign: "center",
+          color: "#22c55e",
+          fontSize: collapsed ? "14px" : "20px",
+          fontWeight: "bold",
+          marginBottom: "16px",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
         }}
       >
-        {collapsed ? 'HA' : 'Hop Ahumado'}
+        {collapsed ? "HA" : "Hop Ahumado"}
       </div>
-      <Menu
-        mode="inline"
-        selectedKeys={[selectedKey]}
-        items={menuItems}
-        style={{ borderRight: 'none' }}
-      />
+      <Menu mode="inline" selectedKeys={[selectedKey]} items={menuItems} style={{ borderRight: "none" }} />
     </Sider>
-  )
+  );
 }
 
 export function ToggleSidebarButton({ collapsed, onClick }: { collapsed: boolean; onClick: () => void }) {
@@ -189,7 +167,7 @@ export function ToggleSidebarButton({ collapsed, onClick }: { collapsed: boolean
       type="text"
       icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
       onClick={onClick}
-      style={{ fontSize: '16px' }}
+      style={{ fontSize: "16px" }}
     />
-  )
+  );
 }

@@ -6,7 +6,7 @@ import { CreateCustomerProfileDto } from "./dto/create-customer-profile.dto";
 import { UpdateCustomerProfileDto } from "./dto/update-customer-profile.dto";
 
 type CustomerProfileWithRelations = CustomerProfile & {
-  customer: { id: string; name: string; phone: string | null; email: string | null };
+  customer: { id: string; name: string };
   responsible: { id: string; name: string; email: string } | null;
 };
 
@@ -36,7 +36,7 @@ export class CustomerProfileService {
       this.prisma.customerProfile.findMany({
         orderBy: { createdAt: "desc" },
         include: {
-          customer: { select: { id: true, name: true, phone: true, email: true } },
+          customer: { select: { id: true, name: true } },
           responsible: { select: { id: true, name: true, email: true } },
         },
         skip,
@@ -116,25 +116,31 @@ export class CustomerProfileService {
   private mapCreateDtoToPrisma(dto: CreateCustomerProfileDto) {
     return {
       customerId: dto.customerId,
-      company: dto.company ?? undefined,
+      contactName: dto.contactName ?? undefined,
+      phone: dto.phone ?? undefined,
+      email: dto.email ?? undefined,
       customerType: dto.customerType ?? undefined,
       status: dto.status ?? undefined,
       source: dto.source ?? undefined,
       responsibleId: dto.responsibleId ?? undefined,
-      lastContactAt: dto.lastContactAt ? new Date(dto.lastContactAt) : undefined,
+      generalNotes: dto.generalNotes ?? undefined,
+      nextFollowUpAt: dto.nextFollowUpAt ? new Date(dto.nextFollowUpAt) : undefined,
     };
   }
 
   private mapUpdateDtoToPrisma(dto: UpdateCustomerProfileDto) {
     return {
       ...(dto.customerId !== undefined && { customerId: dto.customerId }),
-      ...(dto.company !== undefined && { company: dto.company }),
+      ...(dto.contactName !== undefined && { contactName: dto.contactName }),
+      ...(dto.phone !== undefined && { phone: dto.phone }),
+      ...(dto.email !== undefined && { email: dto.email }),
       ...(dto.customerType !== undefined && { customerType: dto.customerType }),
       ...(dto.status !== undefined && { status: dto.status }),
       ...(dto.source !== undefined && { source: dto.source }),
       ...(dto.responsibleId !== undefined && { responsibleId: dto.responsibleId }),
-      ...(dto.lastContactAt !== undefined && {
-        lastContactAt: dto.lastContactAt ? new Date(dto.lastContactAt) : null,
+      ...(dto.generalNotes !== undefined && { generalNotes: dto.generalNotes }),
+      ...(dto.nextFollowUpAt !== undefined && {
+        nextFollowUpAt: dto.nextFollowUpAt ? new Date(dto.nextFollowUpAt) : null,
       }),
     };
   }

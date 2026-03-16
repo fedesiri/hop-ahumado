@@ -11,11 +11,7 @@ export class CustomerService {
 
   async create(dto: CreateCustomerDto) {
     return this.prisma.customer.create({
-      data: {
-        name: dto.name,
-        phone: dto.phone ?? undefined,
-        email: dto.email ?? undefined,
-      },
+      data: { name: dto.name },
     });
   }
 
@@ -49,11 +45,7 @@ export class CustomerService {
     await this.findOne(id);
     return this.prisma.customer.update({
       where: { id },
-      data: {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.phone !== undefined && { phone: dto.phone }),
-        ...(dto.email !== undefined && { email: dto.email }),
-      },
+      data: { ...(dto.name !== undefined && { name: dto.name }) },
     });
   }
 

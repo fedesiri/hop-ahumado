@@ -1,8 +1,9 @@
 import { IsDateString, IsEmail, IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
 
-export class CreateCustomerProfileDto {
-  @IsUUID("4", { message: "customerId debe ser un UUID válido" })
-  customerId: string;
+export class CreateCrmCustomerDto {
+  @IsString()
+  @MaxLength(255)
+  name: string;
 
   @IsOptional()
   @IsString()
@@ -35,7 +36,7 @@ export class CreateCustomerProfileDto {
   source?: string;
 
   @IsOptional()
-  @IsUUID("4", { message: "responsibleId debe ser un UUID válido" })
+  @IsUUID("4")
   responsibleId?: string;
 
   @IsOptional()

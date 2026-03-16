@@ -18,8 +18,10 @@ export class CustomerInteractionService {
     return this.prisma.customerInteraction.create({
       data: {
         profileId: dto.profileId,
-        type: dto.type ?? undefined,
-        note: dto.note ?? undefined,
+        channel: dto.channel ?? undefined,
+        date: dto.date ? new Date(dto.date) : undefined,
+        notes: dto.notes ?? undefined,
+        nextStep: dto.nextStep ?? undefined,
       },
       include: {
         profile: {
@@ -79,8 +81,10 @@ export class CustomerInteractionService {
     return this.prisma.customerInteraction.update({
       where: { id },
       data: {
-        ...(dto.type !== undefined && { type: dto.type }),
-        ...(dto.note !== undefined && { note: dto.note }),
+        ...(dto.channel !== undefined && { channel: dto.channel }),
+        ...(dto.date !== undefined && { date: new Date(dto.date) }),
+        ...(dto.notes !== undefined && { notes: dto.notes }),
+        ...(dto.nextStep !== undefined && { nextStep: dto.nextStep }),
       },
       include: {
         profile: {

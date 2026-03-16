@@ -1,16 +1,25 @@
-import { IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
+import { InteractionChannel } from "@prisma/client";
+import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
 
 export class CreateCustomerInteractionDto {
   @IsUUID("4", { message: "profileId debe ser un UUID válido" })
   profileId: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  type?: string;
+  @IsEnum(InteractionChannel)
+  channel?: InteractionChannel;
+
+  @IsOptional()
+  @IsDateString()
+  date?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  note?: string;
+  notes?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  nextStep?: string;
 }

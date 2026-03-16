@@ -1,13 +1,22 @@
-import { IsOptional, IsString, MaxLength } from "class-validator";
+import { InteractionChannel } from "@prisma/client";
+import { IsDateString, IsEnum, IsOptional, IsString, MaxLength } from "class-validator";
 
 export class UpdateCustomerInteractionDto {
   @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  type?: string;
+  @IsEnum(InteractionChannel)
+  channel?: InteractionChannel;
+
+  @IsOptional()
+  @IsDateString()
+  date?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  note?: string;
+  notes?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  nextStep?: string;
 }

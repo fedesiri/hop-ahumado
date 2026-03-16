@@ -18,19 +18,19 @@ export interface HealthResponse {
 
 // Enums
 export enum BusinessLine {
-  MEAT = 'MEAT',
-  BEER = 'BEER',
+  MEAT = "MEAT",
+  BEER = "BEER",
 }
 
 export enum PaymentMethod {
-  CASH = 'CASH',
-  CARD = 'CARD',
+  CASH = "CASH",
+  CARD = "CARD",
 }
 
 export enum StockMovementType {
-  IN = 'IN',
-  OUT = 'OUT',
-  ADJUSTMENT = 'ADJUSTMENT',
+  IN = "IN",
+  OUT = "OUT",
+  ADJUSTMENT = "ADJUSTMENT",
 }
 
 // Entities
@@ -64,21 +64,30 @@ export interface User {
 export interface Customer {
   id: string;
   name: string;
-  phone?: string | null;
-  email?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export enum InteractionChannel {
+  CALL = "CALL",
+  EMAIL = "EMAIL",
+  WHATSAPP = "WHATSAPP",
+  MEETING = "MEETING",
+  OTHER = "OTHER",
 }
 
 export interface CustomerProfile {
   id: string;
   customerId: string;
-  company?: string | null;
+  contactName?: string | null;
+  phone?: string | null;
+  email?: string | null;
   customerType?: string | null;
   status?: string | null;
   source?: string | null;
   responsibleId?: string | null;
-  lastContactAt?: string | null;
+  generalNotes?: string | null;
+  nextFollowUpAt?: string | null;
   createdAt: string;
   updatedAt: string;
   customer?: Customer;
@@ -88,12 +97,42 @@ export interface CustomerProfile {
 export interface CustomerInteraction {
   id: string;
   profileId: string;
-  type?: string | null;
-  note?: string | null;
+  channel?: InteractionChannel | null;
+  date: string;
+  notes?: string | null;
+  nextStep?: string | null;
+  createdAt: string;
+  profile?: CustomerProfile & { customer?: Customer };
+}
+
+export interface CustomerOpportunity {
+  id: string;
+  customerProfileId: string;
+  stage?: string | null;
+  estimatedValue?: number | null;
+  expectedClosingDate?: string | null;
+  notes?: string | null;
   createdAt: string;
   updatedAt: string;
-  profile?: CustomerProfile;
-  customer?: Customer;
+  customerProfile?: CustomerProfile & { customer?: Customer };
+}
+
+export interface CrmCustomerListItem {
+  /** ID del perfil CRM (null si el cliente aún no tiene perfil) */
+  profileId: string | null;
+  customerId: string;
+  customerName: string;
+  contactName: string | null;
+  phone: string | null;
+  email: string | null;
+  customerType: string | null;
+  status: string | null;
+  source: string | null;
+  responsibleId: string | null;
+  responsibleName: string | null;
+  nextFollowUpAt: string | null;
+  lastContactAt: string | null;
+  daysSinceLastContact: number | null;
 }
 
 export interface Price {
@@ -212,45 +251,78 @@ export interface UpdateUserRequest {
 
 export interface CreateCustomerRequest {
   name: string;
-  phone?: string;
-  email?: string;
 }
 
 export interface UpdateCustomerRequest {
   name?: string;
-  phone?: string;
-  email?: string;
 }
 
 export interface CreateCustomerProfileRequest {
   customerId: string;
-  company?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
   customerType?: string;
   status?: string;
   source?: string;
   responsibleId?: string;
-  lastContactAt?: string;
+  generalNotes?: string;
+  nextFollowUpAt?: string;
 }
 
 export interface UpdateCustomerProfileRequest {
   customerId?: string;
-  company?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
   customerType?: string;
   status?: string;
   source?: string;
   responsibleId?: string;
-  lastContactAt?: string;
+  generalNotes?: string;
+  nextFollowUpAt?: string;
 }
 
 export interface CreateCustomerInteractionRequest {
   profileId: string;
-  type?: string;
-  note?: string;
+  channel?: InteractionChannel;
+  date?: string;
+  notes?: string;
+  nextStep?: string;
 }
 
 export interface UpdateCustomerInteractionRequest {
-  type?: string;
-  note?: string;
+  channel?: InteractionChannel;
+  date?: string;
+  notes?: string;
+  nextStep?: string;
+}
+
+export interface CreateCrmCustomerRequest {
+  name: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  customerType?: string;
+  status?: string;
+  source?: string;
+  responsibleId?: string;
+  generalNotes?: string;
+  nextFollowUpAt?: string;
+}
+
+export interface UpdateCustomerOpportunityRequest {
+  stage?: string;
+  estimatedValue?: number;
+  expectedClosingDate?: string;
+  notes?: string;
+}
+
+export interface CrmDashboardResponse {
+  profileCount: number;
+  interactionCount: number;
+  opportunityCount: number;
+  byStatus: { status: string | null; count: number }[];
 }
 
 export interface CreatePriceRequest {

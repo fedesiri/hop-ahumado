@@ -3,7 +3,9 @@ import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { CategoryModule } from "./category/category.module";
 import { CostModule } from "./cost/cost.module";
+import { CrmModule } from "./crm/crm.module";
 import { CustomerInteractionModule } from "./customer-interaction/customer-interaction.module";
+import { CustomerOpportunityModule } from "./customer-opportunity/customer-opportunity.module";
 import { CustomerProfileModule } from "./customer-profile/customer-profile.module";
 import { CustomerModule } from "./customer/customer.module";
 import { OrderModule } from "./order/order.module";
@@ -23,6 +25,8 @@ import { UserModule } from "./user/user.module";
     CustomerModule,
     CustomerProfileModule,
     CustomerInteractionModule,
+    CustomerOpportunityModule,
+    CrmModule,
     OrderModule,
     PriceModule,
     CostModule,

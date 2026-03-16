@@ -18,6 +18,14 @@ enum StockMovementType {
   ADJUSTMENT
 }
 
+enum InteractionChannel {
+  CALL
+  EMAIL
+  WHATSAPP
+  MEETING
+  OTHER
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -31,40 +39,59 @@ model User {
 model Customer {
   id        String   @id @default(uuid())
   name      String
-  phone     String?
-  email     String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   profile CustomerProfile?
   orders  Order[]
 }
 
 model CustomerProfile {
-  id            String    @id @default(uuid())
-  customerId    String
-  company       String?
-  customerType  String?
-  status        String?
-  source        String?
-  responsibleId String?
-  createdAt     DateTime  @default(now())
-  lastContactAt DateTime?
+  id             String    @id @default(uuid())
+  customerId     String
+  contactName    String?
+  phone          String?
+  email          String?
+  customerType   String?
+  status         String?
+  source         String?
+  responsibleId  String?
+  generalNotes   String?
+  nextFollowUpAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   customer     Customer              @relation(fields: [customerId], references: [id])
   interactions CustomerInteraction[]
   responsible  User?                 @relation(fields: [responsibleId], references: [id])
+  opportunity  CustomerOpportunity?
 
   @@unique([customerId])
 }
 
 model CustomerInteraction {
-  id        String   @id @default(uuid())
+  id        String              @id @default(uuid())
   profileId String
-  type      String?
-  note      String?
-  createdAt DateTime @default(now())
+  channel   InteractionChannel?
+  date      DateTime            @default(now())
+  notes     String?
+  nextStep  String?
+  createdAt DateTime            @default(now())
 
   profile CustomerProfile @relation(fields: [profileId], references: [id])
+}
+
+model CustomerOpportunity {
+  id                  String    @id @default(uuid())
+  customerProfileId   String    @unique
+  stage               String?
+  estimatedValue      Decimal?
+  expectedClosingDate DateTime?
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  customerProfile CustomerProfile @relation(fields: [customerProfileId], references: [id])
 }
 
 model Category {
