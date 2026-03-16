@@ -2,6 +2,7 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type {
   CreateOrderRequest,
@@ -211,7 +212,7 @@ function OrdersContent() {
       title: "Total",
       dataIndex: "total",
       key: "total",
-      render: (amount: number | string) => `$${Number(amount ?? 0).toFixed(2)}`,
+      render: (amount: number | string) => formatCurrency(amount),
     },
     {
       title: "Ítems",
@@ -415,8 +416,10 @@ function OrdersContent() {
                       }}
                     >
                       <div style={{ color: "#9ca3af" }}>
-                        <div>Total Ítems: ${calculateTotal().toFixed(2)}</div>
-                        <div>Total Pagos: ${orderPayments.reduce((sum, p) => sum + (p.amount || 0), 0).toFixed(2)}</div>
+                        <div>Total Ítems: {formatCurrency(calculateTotal())}</div>
+                        <div>
+                          Total Pagos: {formatCurrency(orderPayments.reduce((sum, p) => sum + (p.amount || 0), 0))}
+                        </div>
                       </div>
                     </Card>
                   </div>
@@ -446,7 +449,7 @@ function OrdersContent() {
                   <strong>Usuario:</strong> {selectedOrder.user?.name || "-"}
                 </Col>
                 <Col span={12}>
-                  <strong>Total:</strong> ${Number(selectedOrder.total ?? 0).toFixed(2)}
+                  <strong>Total:</strong> {formatCurrency(selectedOrder.total)}
                 </Col>
                 <Col span={12}>
                   <strong>Fecha:</strong> {new Date(selectedOrder.createdAt).toLocaleDateString("es-AR")}
@@ -463,12 +466,12 @@ function OrdersContent() {
                   title: "Precio",
                   dataIndex: "price",
                   key: "price",
-                  render: (v) => `$${Number(v ?? 0).toFixed(2)}`,
+                  render: (v) => formatCurrency(v),
                 },
                 {
                   title: "Subtotal",
                   key: "subtotal",
-                  render: (_, record: OrderItem) => `$${(Number(record.price) * Number(record.quantity)).toFixed(2)}`,
+                  render: (_, record: OrderItem) => formatCurrency(Number(record.price) * Number(record.quantity)),
                 },
               ]}
               dataSource={selectedOrder.orderItems || []}
@@ -489,7 +492,7 @@ function OrdersContent() {
                   title: "Monto",
                   dataIndex: "amount",
                   key: "amount",
-                  render: (v) => `$${Number(v ?? 0).toFixed(2)}`,
+                  render: (v) => formatCurrency(v),
                 },
               ]}
               dataSource={selectedOrder.payments || []}

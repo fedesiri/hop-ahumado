@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/lib/format-currency";
 import { PRICE_TYPE_LABELS, getPriceForType, type PriceType } from "@/lib/order-calculator/price-types";
 import type { Price, Product } from "@/lib/types";
 import { SearchOutlined } from "@ant-design/icons";
@@ -63,7 +64,6 @@ function getInitialQuantities(productIds: string[]): Record<string, number> {
     (acc, id) => {
       acc[id] = 0;
       return acc;
-      s;
     },
     {} as Record<string, number>,
   );
@@ -172,12 +172,12 @@ export function OrderCalculator({ products, pricesByProductId, customers, onConf
     });
     lines.sort((a, b) => b.qty - a.qty);
     lines.forEach(({ name, qty, subtotal }) => {
-      parts.push(`- ${qty} ${name} --> ${subtotal.toLocaleString("es-AR")}`);
+      parts.push(`- ${qty} ${name} --> ${formatCurrency(subtotal)}`);
     });
     if (lines.length > 0) {
       parts.push("");
       parts.push("-------------------");
-      parts.push(`Total $${total.toLocaleString("es-AR")}`);
+      parts.push(`Total ${formatCurrency(total)}`);
     }
     const text = parts.join("\n");
     if (text === nameLine + "\n\n" + `Precio: ${PRICE_TYPE_LABELS[priceType].toUpperCase()}\n\n`) {
@@ -225,6 +225,10 @@ export function OrderCalculator({ products, pricesByProductId, customers, onConf
 
   const handleConfirmOrder = useCallback(() => {
     if (!onConfirmOrder || !hasItems) return;
+    if (!selectedCustomerId) {
+      toast.error("Seleccioná un cliente antes de confirmar el pedido");
+      return;
+    }
     const items: { productId: string; quantity: number; price: number }[] = [];
     products.forEach((p) => {
       const qty = quantities[p.id] ?? 0;
@@ -253,7 +257,7 @@ export function OrderCalculator({ products, pricesByProductId, customers, onConf
           <Row gutter={[12, 12]}>
             <Col xs={24} md={12} lg={6}>
               <Select
-                placeholder="Cliente (opcional)"
+                placeholder="Cliente"
                 value={selectedCustomerId || undefined}
                 onChange={(v) => setSelectedCustomerId(v ?? null)}
                 allowClear

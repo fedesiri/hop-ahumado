@@ -3,6 +3,7 @@
 import { AppLayout } from "@/components/app-layout";
 import { OrderCalculator } from "@/components/order-calculator/order-calculator";
 import { apiClient } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { CreateOrderRequest, Customer, Price, Product } from "@/lib/types";
 import { PaymentMethod } from "@/lib/types";
@@ -24,6 +25,7 @@ function OrderCalculatorPageContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [calculatorKey, setCalculatorKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [pendingOrder, setPendingOrder] = useState<{
@@ -151,6 +153,14 @@ function OrderCalculatorPageContent() {
       };
       await apiClient.createOrder(data);
       message.success("Orden creada. El stock se descontó correctamente.");
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("order-calc-quantities");
+          localStorage.removeItem("order-calc-customer-id");
+          localStorage.removeItem("order-calc-price-type");
+        } catch {}
+      }
+      setCalculatorKey((prev) => prev + 1);
       setConfirmModalOpen(false);
       setPendingOrder(null);
     } catch (err: unknown) {
@@ -175,6 +185,7 @@ function OrderCalculatorPageContent() {
   return (
     <>
       <OrderCalculator
+        key={calculatorKey}
         products={products}
         pricesByProductId={pricesByProductId}
         customers={customers}
@@ -205,7 +216,7 @@ function OrderCalculatorPageContent() {
       >
         {pendingOrder && (
           <div style={{ marginBottom: 16 }}>
-            <p style={{ marginBottom: 8, color: "#9ca3af" }}>Total: $ {pendingOrder.total.toLocaleString("es-AR")}</p>
+            <p style={{ marginBottom: 8, color: "#9ca3af" }}>Total: {formatCurrency(pendingOrder.total)}</p>
             <p style={{ marginBottom: 8, color: "#9ca3af" }}>Ítems: {pendingOrder.items.length}</p>
             {pendingOrder.customerId && (
               <p style={{ marginBottom: 8, color: "#9ca3af" }}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/lib/format-currency";
 import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 
@@ -40,7 +41,7 @@ export function QuantityControl({
     >
       <div>
         <div style={{ fontWeight: 600, color: "#ffffff" }}>{label}</div>
-        <div style={{ fontSize: 12, color: "#9ca3af" }}>$ {price.toLocaleString("es-AR")}</div>
+        <div style={{ fontSize: 12, color: "#9ca3af" }}>{formatCurrency(price)}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <Button

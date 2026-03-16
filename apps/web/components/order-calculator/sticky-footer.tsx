@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/lib/format-currency";
 import { CheckCircleOutlined, CopyOutlined, DeleteOutlined, RollbackOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 
@@ -54,7 +55,7 @@ export function StickyFooter({ total, hasItems, onCopy, onClear, onNewOrder, onC
               color: total > 0 ? "#22c55e" : "#9ca3af",
             }}
           >
-            $ {total.toLocaleString("es-AR")}
+            {formatCurrency(total)}
           </span>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import type { Order, Product } from "@/lib/types";
 import {
@@ -35,7 +36,7 @@ export function Dashboard() {
       setApiConnected(true);
       const lowStock = productsRes.data.filter((p) => p.stock < 10);
       const recentOrders = ordersRes.data.slice(0, 5);
-      const totalRevenue = ordersRes.data.reduce((sum, order) => sum + order.total, 0);
+      const totalRevenue = ordersRes.data.reduce((sum, order) => sum + Number(order.total ?? 0), 0);
 
       setStats({
         totalOrders: ordersRes.meta.total,
@@ -64,15 +65,15 @@ export function Dashboard() {
     },
     {
       title: "Cliente",
-      dataIndex: ["customer", "name"],
+      dataIndex: "customer",
       key: "customer",
-      render: (text: string) => text || "N/A",
+      render: (_: unknown, record: Order) => record.customer?.name ?? (record.customerId ? "—" : "Sin asignar"),
     },
     {
       title: "Total",
       dataIndex: "total",
       key: "total",
-      render: (amount: number | string) => `$${Number(amount ?? 0).toFixed(2)}`,
+      render: (amount: number | string) => formatCurrency(amount),
     },
     {
       title: "Fecha",
@@ -164,9 +165,8 @@ export function Dashboard() {
               <Card style={{ background: "#1f2937", borderColor: "#2d3748" }} variant="outlined">
                 <Statistic
                   title="Ingresos Totales"
-                  value={stats.totalRevenue}
-                  prefix="$"
-                  precision={2}
+                  value={Number(stats.totalRevenue)}
+                  formatter={(value) => formatCurrency(value)}
                   valueStyle={{ color: "#22c55e" }}
                 />
               </Card>
