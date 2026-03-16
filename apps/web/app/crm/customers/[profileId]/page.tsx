@@ -121,13 +121,28 @@ export default function CrmCustomerDetailPage() {
   };
 
   const handleUpsertOpportunity = async (
-    values: UpdateCustomerOpportunityRequest & { expectedClosingDate?: dayjs.Dayjs | null },
+    values: UpdateCustomerOpportunityRequest & {
+      expectedClosingDate?: dayjs.Dayjs | null;
+      estimatedValue?: number | string;
+    },
   ) => {
     try {
-      await apiClient.upsertCrmCustomerOpportunity(profileId, {
-        ...values,
-        expectedClosingDate: values.expectedClosingDate ? values.expectedClosingDate.toISOString() : undefined,
-      });
+      const raw = values.estimatedValue;
+      const estimatedValue =
+        raw !== undefined && raw !== null && raw !== ""
+          ? (typeof raw === "number" ? raw : Number(raw))
+          : undefined;
+      const payload: UpdateCustomerOpportunityRequest = {
+        stage: values.stage,
+        notes: values.notes,
+        expectedClosingDate: values.expectedClosingDate
+          ? values.expectedClosingDate.toISOString()
+          : undefined,
+      };
+      if (estimatedValue !== undefined && !Number.isNaN(estimatedValue)) {
+        payload.estimatedValue = estimatedValue;
+      }
+      await apiClient.upsertCrmCustomerOpportunity(profileId, payload);
       message.success("Oportunidad guardada");
       setEditOpportunityOpen(false);
       fetchDetail();
