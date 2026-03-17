@@ -209,10 +209,15 @@ function StockContent() {
             {rows.map((row, index) => (
               <Space key={index} style={{ display: "flex", marginBottom: 8 }} align="baseline">
                 <Select
+                  showSearch
                   placeholder="Producto"
-                  style={{ minWidth: 220 }}
+                  style={{ minWidth: 260 }}
                   value={row.productId}
                   options={products.map((p) => ({ label: p.name, value: p.id }))}
+                  optionFilterProp="label"
+                  filterOption={(input, option) =>
+                    (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
+                  }
                   onChange={(value) => {
                     const next = [...rows];
                     next[index].productId = value;
