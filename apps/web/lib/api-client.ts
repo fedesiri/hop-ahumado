@@ -456,8 +456,19 @@ export class ApiClient {
   }
 
   // Orders
-  async getOrders(page = 1, limit = 10): Promise<PaginatedResponse<Order>> {
-    return this.request(`/orders${this.buildParams({ page, limit })}`);
+  async getOrders(
+    page = 1,
+    limit = 10,
+    customerId?: string,
+    userId?: string,
+    dateFrom?: string,
+    dateTo?: string,
+    minTotal?: number,
+    maxTotal?: number,
+  ): Promise<PaginatedResponse<Order>> {
+    return this.request(
+      `/orders${this.buildParams({ page, limit, customerId, userId, dateFrom, dateTo, minTotal, maxTotal })}`,
+    );
   }
 
   async getOrder(id: string): Promise<Order> {

@@ -101,10 +101,47 @@ export class OrderService {
   async findAll(
     page: number = PAGINATION.defaultPage,
     limit: number = PAGINATION.defaultLimit,
+    customerId?: string,
+    userId?: string,
+    dateFrom?: string,
+    dateTo?: string,
+    minTotal?: number,
+    maxTotal?: number,
   ): Promise<PaginatedResponse<OrderWithRelations>> {
     const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (customerId) {
+      where.customerId = customerId;
+    }
+    if (userId) {
+      where.userId = userId;
+    }
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) {
+        where.createdAt.gte = new Date(dateFrom);
+      }
+      if (dateTo) {
+        // incluir hasta el final del día
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+    if (minTotal !== undefined || maxTotal !== undefined) {
+      where.total = {};
+      if (minTotal !== undefined) {
+        where.total.gte = minTotal;
+      }
+      if (maxTotal !== undefined) {
+        where.total.lte = maxTotal;
+      }
+    }
+
     const [data, total] = await Promise.all([
       this.prisma.order.findMany({
+        where,
         orderBy: { createdAt: "desc" },
         include: {
           orderItems: { include: { product: { select: { id: true, name: true } } } },
@@ -115,7 +152,7 @@ export class OrderService {
         skip,
         take: limit,
       }),
-      this.prisma.order.count(),
+      this.prisma.order.count({ where }),
     ]);
     return buildPaginatedResponse(data, total, page, limit);
   }

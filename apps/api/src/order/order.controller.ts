@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { PaginationQueryDto, toLimit, toPage } from "../common/pagination";
+import { toLimit, toPage } from "../common/pagination";
 import { CreateOrderDto } from "./dto/create-order.dto";
+import { GetOrdersQueryDto } from "./dto/get-orders-query.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
 import { OrderService } from "./order.service";
 
@@ -14,8 +15,17 @@ export class OrderController {
   }
 
   @Get()
-  findAll(@Query() query: PaginationQueryDto) {
-    return this.orderService.findAll(toPage(query), toLimit(query));
+  findAll(@Query() query: GetOrdersQueryDto) {
+    return this.orderService.findAll(
+      toPage(query),
+      toLimit(query),
+      query.customerId,
+      query.userId,
+      query.dateFrom,
+      query.dateTo,
+      query.minTotal ? Number(query.minTotal) : undefined,
+      query.maxTotal ? Number(query.maxTotal) : undefined,
+    );
   }
 
   @Get(":id")

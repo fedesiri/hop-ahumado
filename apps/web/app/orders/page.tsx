@@ -34,6 +34,7 @@ import {
   Table,
   Tabs,
 } from "antd";
+import { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 
 export default function OrdersPage() {
@@ -62,16 +63,38 @@ function OrdersContent() {
   const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
   const [orderItems, setOrderItems] = useState<Partial<OrderItem>[]>([]);
   const [orderPayments, setOrderPayments] = useState<Partial<OrderPayment>[]>([]);
+  const [filterCustomerId, setFilterCustomerId] = useState<string | undefined>(undefined);
+  const [filterUserId, setFilterUserId] = useState<string | undefined>(undefined);
+  const [filterDateRange, setFilterDateRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [filterMinTotal, setFilterMinTotal] = useState<number | undefined>(undefined);
+  const [filterMaxTotal, setFilterMaxTotal] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     fetchOrders();
     fetchRelatedData();
-  }, [pagination.page, pagination.limit]);
+  }, [
+    pagination.page,
+    pagination.limit,
+    filterCustomerId,
+    filterUserId,
+    filterDateRange,
+    filterMinTotal,
+    filterMaxTotal,
+  ]);
 
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.getOrders(pagination.page, pagination.limit);
+      const response = await apiClient.getOrders(
+        pagination.page,
+        pagination.limit,
+        filterCustomerId,
+        filterUserId,
+        filterDateRange ? filterDateRange[0]?.startOf("day").toISOString() : undefined,
+        filterDateRange ? filterDateRange[1]?.endOf("day").toISOString() : undefined,
+        filterMinTotal,
+        filterMaxTotal,
+      );
       setOrders(response.data);
       setMeta(response.meta);
     } catch (error) {
@@ -247,6 +270,60 @@ function OrdersContent() {
           Nueva Orden
         </Button>
       </div>
+
+      <Card style={{ marginBottom: "16px", background: "#1f2937", borderColor: "#2d3748" }}>
+        <Space wrap>
+          <Select
+            allowClear
+            placeholder="Filtrar por cliente"
+            style={{ minWidth: 200 }}
+            value={filterCustomerId}
+            options={customers.map((c) => ({ label: c.name, value: c.id }))}
+            onChange={(value) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              setFilterCustomerId(value || undefined);
+            }}
+          />
+          <Select
+            allowClear
+            placeholder="Filtrar por usuario"
+            style={{ minWidth: 200 }}
+            value={filterUserId}
+            options={users.map((u) => ({ label: u.name, value: u.id }))}
+            onChange={(value) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              setFilterUserId(value || undefined);
+            }}
+          />
+          <DatePicker.RangePicker
+            allowClear
+            placeholder={["Desde fecha", "Hasta fecha"]}
+            value={filterDateRange as any}
+            onChange={(values) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              setFilterDateRange(values as [Dayjs, Dayjs] | null);
+            }}
+          />
+          <InputNumber
+            placeholder="Total mínimo"
+            min={0}
+            value={filterMinTotal}
+            onChange={(value) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              setFilterMinTotal(value ?? undefined);
+            }}
+          />
+          <InputNumber
+            placeholder="Total máximo"
+            min={0}
+            value={filterMaxTotal}
+            onChange={(value) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              setFilterMaxTotal(value ?? undefined);
+            }}
+          />
+        </Space>
+      </Card>
 
       {loading ? (
         <Spin />
