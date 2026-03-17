@@ -4,7 +4,7 @@ import { apiClient } from "@/lib/api-client";
 import type { CreateCrmCustomerRequest, CrmCustomerListItem, PaginationMeta, User } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
 import { EditOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table } from "antd";
+import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag } from "antd";
 import dayjs from "dayjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -32,6 +32,25 @@ function CrmContent() {
   const [sourceFilter, setSourceFilter] = useState<string | undefined>(undefined);
   const [customerTypeFilter, setCustomerTypeFilter] = useState<string | undefined>(undefined);
   const [responsibleFilter, setResponsibleFilter] = useState<string | undefined>(undefined);
+
+  const STATUS_OPTIONS = [
+    { value: "Lead", label: "Lead" },
+    { value: "Prospecto", label: "Prospecto" },
+    { value: "Cliente", label: "Cliente" },
+    { value: "Pausado", label: "Pausado" },
+    { value: "Perdido", label: "Perdido" },
+  ];
+
+  const getStatusColor = (status: string | null) => {
+    if (!status) return "default";
+    const normalized = formatStatusLabel(status).toLowerCase();
+    if (normalized === "lead") return "geekblue";
+    if (normalized === "prospecto") return "blue";
+    if (normalized === "cliente") return "green";
+    if (normalized === "pausado") return "orange";
+    if (normalized === "perdido") return "red";
+    return "default";
+  };
 
   useEffect(() => {
     fetchList();
@@ -196,7 +215,11 @@ function CrmContent() {
       title: "Estado del contacto",
       dataIndex: "status",
       key: "status",
-      render: (v: string | null) => formatStatusLabel(v) || "—",
+      render: (v: string | null) => {
+        const label = formatStatusLabel(v);
+        if (!label) return "—";
+        return <Tag color={getStatusColor(v)}>{label}</Tag>;
+      },
     },
     { title: "Origen (cómo nos conoció)", dataIndex: "source", key: "source" },
     { title: "Socio responsable", dataIndex: "responsibleName", key: "responsibleName" },
@@ -284,15 +307,15 @@ function CrmContent() {
               setCustomerTypeFilter(value || undefined);
             }}
           />
-          <Input
+          <Select
             allowClear
-            placeholder="Estado (ej: Prospecto, Cliente)"
+            placeholder="Estado del contacto"
             style={{ minWidth: 180 }}
             value={statusFilter}
-            onChange={(e) => {
+            options={STATUS_OPTIONS}
+            onChange={(value) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
-              const v = e.target.value.trim();
-              setStatusFilter(v || undefined);
+              setStatusFilter(value || undefined);
             }}
           />
           <Input
@@ -377,7 +400,11 @@ function CrmContent() {
             <Input type="email" placeholder="Email de contacto" />
           </Form.Item>
           <Form.Item name="status" label="Estado del contacto">
-            <Input placeholder="Ej: Prospecto, Cliente, Inactivo" />
+            <Select
+              allowClear
+              placeholder="Seleccioná un estado"
+              options={STATUS_OPTIONS}
+            />
           </Form.Item>
           <Form.Item name="source" label="¿De dónde nos conoció? (origen del cliente)">
             <Input placeholder="Ej: Web, Referido, Evento, Redes sociales, Google" />
