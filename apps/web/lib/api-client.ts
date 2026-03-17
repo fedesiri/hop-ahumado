@@ -264,8 +264,18 @@ export class ApiClient {
   }
 
   // CRM
-  async listCrmCustomers(page = 1, limit = 10): Promise<PaginatedResponse<CrmCustomerListItem>> {
-    return this.request(`/crm/customers${this.buildParams({ page, limit })}`);
+  async listCrmCustomers(
+    page = 1,
+    limit = 10,
+    search?: string,
+    status?: string,
+    source?: string,
+    customerType?: string,
+    responsibleId?: string,
+  ): Promise<PaginatedResponse<CrmCustomerListItem>> {
+    return this.request(
+      `/crm/customers${this.buildParams({ page, limit, search, status, source, customerType, responsibleId })}`,
+    );
   }
 
   async getCrmCustomerDetail(profileId: string): Promise<

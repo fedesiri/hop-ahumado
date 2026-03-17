@@ -38,10 +38,52 @@ export class CrmService {
   async listCrmCustomers(
     page: number = PAGINATION.defaultPage,
     limit: number = PAGINATION.defaultLimit,
+    search?: string,
+    status?: string,
+    source?: string,
+    customerType?: string,
+    responsibleId?: string,
   ): Promise<PaginatedResponse<CrmCustomerListItem>> {
     const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    const or: any[] = [];
+    if (search) {
+      const trimmed = search.trim();
+      if (trimmed) {
+        or.push({ name: { contains: trimmed, mode: "insensitive" } });
+        or.push({ profile: { is: { contactName: { contains: trimmed, mode: "insensitive" } } } });
+        or.push({ profile: { is: { email: { contains: trimmed, mode: "insensitive" } } } });
+        or.push({ profile: { is: { phone: { contains: trimmed, mode: "insensitive" } } } });
+        or.push({ profile: { is: { source: { contains: trimmed, mode: "insensitive" } } } });
+        or.push({ profile: { is: { status: { contains: trimmed, mode: "insensitive" } } } });
+      }
+    }
+    if (or.length) {
+      where.OR = or;
+    }
+
+    const profileWhere: any = {};
+    if (status) {
+      profileWhere.status = { equals: status, mode: "insensitive" };
+    }
+    if (source) {
+      profileWhere.source = { equals: source, mode: "insensitive" };
+    }
+    if (customerType) {
+      profileWhere.customerType = { equals: customerType, mode: "insensitive" };
+    }
+    if (responsibleId) {
+      profileWhere.responsibleId = responsibleId;
+    }
+    if (Object.keys(profileWhere).length > 0) {
+      where.profile = { is: profileWhere };
+    }
+
     const [customers, total] = await Promise.all([
       this.prisma.customer.findMany({
+        where,
         orderBy: { name: "asc" },
         include: {
           profile: {
@@ -58,7 +100,7 @@ export class CrmService {
         skip,
         take: limit,
       }),
-      this.prisma.customer.count(),
+      this.prisma.customer.count({ where }),
     ]);
 
     const now = new Date();

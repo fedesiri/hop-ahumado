@@ -26,16 +26,30 @@ function CrmContent() {
   const [creatingProfileForId, setCreatingProfileForId] = useState<string | null>(null);
   const [editingRecord, setEditingRecord] = useState<CrmCustomerListItem | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState<string | undefined>(undefined);
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [sourceFilter, setSourceFilter] = useState<string | undefined>(undefined);
+  const [customerTypeFilter, setCustomerTypeFilter] = useState<string | undefined>(undefined);
+  const [responsibleFilter, setResponsibleFilter] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     fetchList();
     fetchUsers();
-  }, [pagination.page, pagination.limit]);
+  }, [pagination.page, pagination.limit, search, statusFilter, sourceFilter, customerTypeFilter, responsibleFilter]);
 
   const fetchList = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.listCrmCustomers(pagination.page, pagination.limit);
+      const response = await apiClient.listCrmCustomers(
+        pagination.page,
+        pagination.limit,
+        search,
+        statusFilter,
+        sourceFilter,
+        customerTypeFilter,
+        responsibleFilter,
+      );
       setList(response.data);
       setMeta(response.meta);
     } catch (error) {
@@ -240,6 +254,70 @@ function CrmContent() {
         <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
           Nuevo cliente
         </Button>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <Space wrap>
+          <Input.Search
+            placeholder="Buscar por nombre, contacto, email, teléfono, estado u origen"
+            allowClear
+            style={{ minWidth: 260 }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onSearch={(value) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              const trimmed = value.trim();
+              setSearch(trimmed || undefined);
+            }}
+          />
+          <Select
+            allowClear
+            placeholder="Tipo de cliente"
+            style={{ minWidth: 160 }}
+            value={customerTypeFilter}
+            options={[
+              { value: "Empresa", label: "Empresa" },
+              { value: "Particular", label: "Particular" },
+            ]}
+            onChange={(value) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              setCustomerTypeFilter(value || undefined);
+            }}
+          />
+          <Input
+            allowClear
+            placeholder="Estado (ej: Prospecto, Cliente)"
+            style={{ minWidth: 180 }}
+            value={statusFilter}
+            onChange={(e) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              const v = e.target.value.trim();
+              setStatusFilter(v || undefined);
+            }}
+          />
+          <Input
+            allowClear
+            placeholder="Origen (ej: Web, Referido)"
+            style={{ minWidth: 180 }}
+            value={sourceFilter}
+            onChange={(e) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              const v = e.target.value.trim();
+              setSourceFilter(v || undefined);
+            }}
+          />
+          <Select
+            allowClear
+            placeholder="Socio responsable"
+            style={{ minWidth: 200 }}
+            value={responsibleFilter}
+            options={users.map((u) => ({ value: u.id, label: u.name }))}
+            onChange={(value) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              setResponsibleFilter(value || undefined);
+            }}
+          />
+        </Space>
       </div>
 
       <Spin spinning={loading}>

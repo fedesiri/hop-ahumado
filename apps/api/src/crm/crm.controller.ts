@@ -8,6 +8,7 @@ import { CustomerProfileService } from "../customer-profile/customer-profile.ser
 import { UpdateCustomerProfileDto } from "../customer-profile/dto/update-customer-profile.dto";
 import { CrmService } from "./crm.service";
 import { CreateCrmCustomerDto } from "./dto/create-crm-customer.dto";
+import { GetCrmCustomersQueryDto } from "./dto/get-crm-customers-query.dto";
 
 @Controller("crm")
 export class CrmController {
@@ -24,8 +25,16 @@ export class CrmController {
   }
 
   @Get("customers")
-  listCustomers(@Query() query: PaginationQueryDto) {
-    return this.crmService.listCrmCustomers(toPage(query), toLimit(query));
+  listCustomers(@Query() query: GetCrmCustomersQueryDto) {
+    return this.crmService.listCrmCustomers(
+      toPage(query),
+      toLimit(query),
+      query.search,
+      query.status,
+      query.source,
+      query.customerType,
+      query.responsibleId,
+    );
   }
 
   @Get("customers/:profileId")
