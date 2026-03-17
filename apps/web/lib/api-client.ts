@@ -111,9 +111,21 @@ export class ApiClient {
   }
 
   // Products
-  async getProducts(page = 1, limit = 10, includeDeactivated = false): Promise<PaginatedResponse<Product>> {
+  async getProducts(
+    page = 1,
+    limit = 10,
+    includeDeactivated = false,
+    search?: string,
+    categoryId?: string,
+  ): Promise<PaginatedResponse<Product>> {
     return this.request(
-      `/products${this.buildParams({ page, limit, includeDeactivated: includeDeactivated ? "true" : undefined })}`,
+      `/products${this.buildParams({
+        page,
+        limit,
+        includeDeactivated: includeDeactivated ? "true" : undefined,
+        search,
+        categoryId,
+      })}`,
     );
   }
 

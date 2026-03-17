@@ -23,8 +23,39 @@ export class ProductService {
     includeDeactivated = false,
     page: number = PAGINATION.defaultPage,
     limit: number = PAGINATION.defaultLimit,
+    search?: string,
+    categoryId?: string,
   ): Promise<PaginatedResponse<ProductWithCategory>> {
-    const where = includeDeactivated ? undefined : { deactivationDate: null };
+    const where: any = {};
+
+    // Cuando includeDeactivated es true mostramos SOLO desactivados,
+    // cuando es false mostramos SOLO activos (deactivationDate = null).
+    if (includeDeactivated) {
+      where.deactivationDate = { not: null };
+    } else {
+      where.deactivationDate = null;
+    }
+
+    if (search) {
+      const trimmed = search.trim();
+      if (trimmed) {
+        where.AND = [
+          ...(where.AND ?? []),
+          {
+            OR: [
+              { name: { contains: trimmed, mode: "insensitive" } },
+              { sku: { contains: trimmed, mode: "insensitive" } },
+              { barcode: { contains: trimmed, mode: "insensitive" } },
+            ],
+          },
+        ];
+      }
+    }
+
+    if (categoryId) {
+      where.categoryId = categoryId;
+    }
+
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
       this.prisma.product.findMany({
