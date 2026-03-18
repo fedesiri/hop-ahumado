@@ -71,6 +71,7 @@ function CustomerProfilesContent() {
       const response = await apiClient.getUsers(1, 100);
       setUsers(response.data);
     } catch (error) {
+      message.error("Error al cargar usuarios para responsables");
       console.error(error);
     }
   };

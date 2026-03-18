@@ -97,10 +97,11 @@ export default function CrmCustomerDetailPage() {
 
   const fetchUsers = async () => {
     try {
-      const res = await apiClient.getUsers(1, 200);
+      const res = await apiClient.getUsers(1, 100);
       setUsers(res.data);
-    } catch {
-      // ignore
+    } catch (error) {
+      message.error("Error al cargar usuarios para el responsable");
+      console.error(error);
     }
   };
 
@@ -330,6 +331,7 @@ export default function CrmCustomerDetailPage() {
         okText="Guardar"
         width={500}
         forceRender
+        destroyOnClose={false}
       >
         <Form form={profileForm} layout="vertical" onFinish={handleUpdateProfile}>
           <Form.Item name="contactName" label="Persona de contacto (opcional)">
@@ -380,6 +382,7 @@ export default function CrmCustomerDetailPage() {
         okText="Guardar"
         width={500}
         forceRender
+        destroyOnClose={false}
       >
         <Form form={opportunityForm} layout="vertical" onFinish={handleUpsertOpportunity}>
           <Form.Item name="stage" label="Etapa">
@@ -405,6 +408,7 @@ export default function CrmCustomerDetailPage() {
         okText="Agregar"
         width={500}
         forceRender
+        destroyOnClose={false}
       >
         <Form
           form={interactionForm}

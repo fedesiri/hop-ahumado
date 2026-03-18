@@ -116,6 +116,7 @@ function OrdersContent() {
       setCustomers(customersRes.data);
       setUsers(usersRes.data);
     } catch (error) {
+      message.error("Error al cargar usuarios para órdenes");
       console.error(error);
     }
   };

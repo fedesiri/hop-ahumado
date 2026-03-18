@@ -81,10 +81,11 @@ function CrmContent() {
 
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.getUsers(1, 200);
+      const response = await apiClient.getUsers(1, 100);
       setUsers(response.data);
-    } catch {
-      // ignore
+    } catch (error) {
+      message.error("Error al cargar usuarios para responsables");
+      console.error(error);
     }
   };
 
@@ -370,6 +371,8 @@ function CrmContent() {
       <Modal
         title={editingRecord ? "Editar cliente" : "Nuevo cliente"}
         open={modalOpen}
+        forceRender
+        destroyOnClose={false}
         onCancel={() => {
           setModalOpen(false);
           setEditingRecord(null);
@@ -400,11 +403,7 @@ function CrmContent() {
             <Input type="email" placeholder="Email de contacto" />
           </Form.Item>
           <Form.Item name="status" label="Estado del contacto">
-            <Select
-              allowClear
-              placeholder="Seleccioná un estado"
-              options={STATUS_OPTIONS}
-            />
+            <Select allowClear placeholder="Seleccioná un estado" options={STATUS_OPTIONS} />
           </Form.Item>
           <Form.Item name="source" label="¿De dónde nos conoció? (origen del cliente)">
             <Input placeholder="Ej: Web, Referido, Evento, Redes sociales, Google" />
