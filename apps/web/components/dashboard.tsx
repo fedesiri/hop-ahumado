@@ -2,8 +2,7 @@
 
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
-import { useLineContext } from "@/lib/line-context";
-import type { Order, Product } from "@/lib/types";
+import type { Customer, Order, Product } from "@/lib/types";
 import {
   AlertOutlined,
   ApiOutlined,
@@ -23,26 +22,36 @@ export function Dashboard() {
     totalRevenue: 0,
     lowStockProducts: [] as Product[],
     recentOrders: [] as Order[],
+    totalCustomers: 0,
   });
-  const { selectedLine } = useLineContext();
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       setApiConnected(null);
 
-      const [ordersRes, productsRes] = await Promise.all([apiClient.getOrders(1, 100), apiClient.getProducts(1, 100)]);
+      const [ordersRes, productsRes, customersRes] = await Promise.all([
+        apiClient.getOrders(1, 100),
+        apiClient.getProducts(1, 100),
+        apiClient.getCustomers(1, 50),
+      ]);
 
       setApiConnected(true);
       const lowStock = productsRes.data.filter((p) => p.stock < 10);
       const recentOrders = ordersRes.data.slice(0, 5);
       const totalRevenue = ordersRes.data.reduce((sum, order) => sum + Number(order.total ?? 0), 0);
 
+      const sortedCustomers = [...customersRes.data].sort(
+        (a: Customer, b: Customer) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      const lastCustomer = sortedCustomers[0];
+
       setStats({
         totalOrders: ordersRes.meta.total,
         totalRevenue,
         lowStockProducts: lowStock,
         recentOrders,
+        totalCustomers: customersRes.meta.total,
       });
     } catch (error) {
       setApiConnected(false);
@@ -187,9 +196,9 @@ export function Dashboard() {
             <Col xs={24} sm={12} lg={6}>
               <Card style={{ background: "#1f2937", borderColor: "#2d3748" }} variant="outlined">
                 <Statistic
-                  title="Linea Seleccionada"
-                  value={selectedLine === "MEAT" ? "Carnes" : "Cerveza"}
-                  valueStyle={{ color: "#22c55e", fontSize: "14px" }}
+                  title="Clientes registrados"
+                  value={stats.totalCustomers}
+                  valueStyle={{ color: "#22c55e" }}
                 />
               </Card>
             </Col>

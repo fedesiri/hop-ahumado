@@ -1,9 +1,7 @@
 "use client";
 
-import { useLineContext } from "@/lib/line-context";
-import { BusinessLine } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { Drawer, Layout, Tabs } from "antd";
+import { Drawer, Layout } from "antd";
 import { Flower2 } from "lucide-react";
 import React, { useState } from "react";
 import { AppSidebar, ToggleSidebarButton } from "./app-sidebar";
@@ -13,13 +11,11 @@ const { Header, Content } = Layout;
 
 interface AppLayoutProps {
   children: React.ReactNode;
-  showLineTabs?: boolean;
 }
 
-export function AppLayout({ children, showLineTabs = true }: AppLayoutProps) {
+export function AppLayout({ children }: AppLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const { selectedLine, setSelectedLine } = useLineContext();
   const isMobile = useMediaQuery("(max-width: 768px)");
 
   const toggleCollapsed = () => {
@@ -29,11 +25,6 @@ export function AppLayout({ children, showLineTabs = true }: AppLayoutProps) {
       setCollapsed(!collapsed);
     }
   };
-
-  const lineTabItems = [
-    { key: BusinessLine.MEAT, label: "🥩 Carnes" },
-    { key: BusinessLine.BEER, label: "🍺 Cerveza" },
-  ];
 
   return (
     <Layout style={{ minHeight: "100vh", width: "100%", maxWidth: "100vw", overflow: "hidden" }}>
@@ -97,17 +88,6 @@ export function AppLayout({ children, showLineTabs = true }: AppLayoutProps) {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {showLineTabs && selectedLine && (
-              <div style={{ display: "flex", alignItems: "center" }}>
-                <Tabs
-                  activeKey={selectedLine}
-                  onChange={(key) => setSelectedLine(key as BusinessLine)}
-                  items={lineTabItems}
-                  style={{ marginBottom: 0 }}
-                  size="small"
-                />
-              </div>
-            )}
             <UserMenu />
           </div>
         </Header>

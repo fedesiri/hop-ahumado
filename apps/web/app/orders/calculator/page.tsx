@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 export default function OrderCalculatorPage() {
   return (
     <LineProvider>
-      <AppLayout showLineTabs={false}>
+      <AppLayout>
         <OrderCalculatorPageContent />
       </AppLayout>
     </LineProvider>

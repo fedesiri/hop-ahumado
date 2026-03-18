@@ -6,7 +6,7 @@ import { LineProvider } from "@/lib/line-context";
 export default function CrmLayout({ children }: { children: React.ReactNode }) {
   return (
     <LineProvider>
-      <AppLayout showLineTabs={false}>{children}</AppLayout>
+      <AppLayout>{children}</AppLayout>
     </LineProvider>
   );
 }
