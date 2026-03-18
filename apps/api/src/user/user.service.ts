@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { User } from "@prisma/client";
+import { firebaseAdmin } from "../auth/firebase-admin";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
@@ -11,9 +12,33 @@ export class UserService {
 
   async create(dto: CreateUserDto) {
     const email = dto.email.toLowerCase();
-    await this.validateEmailUnique(email);
-    return this.prisma.user.create({
-      data: { name: dto.name, email },
+
+    // Si el usuario existe en Firebase, solo actualizamos su displayName (password no lo tocamos).
+    // Si no existe, lo creamos con password.
+    const auth = firebaseAdmin.auth();
+    const name = dto.name;
+
+    try {
+      const existingFirebaseUser = (await auth.getUserByEmail(email)) as any;
+      await auth.updateUser(existingFirebaseUser.uid, { displayName: name });
+    } catch (e: any) {
+      const code = e?.code ?? e?.errorInfo?.code;
+      if (code === "auth/user-not-found") {
+        await auth.createUser({
+          email,
+          password: dto.password,
+          displayName: name,
+        });
+      } else {
+        throw e;
+      }
+    }
+
+    // DB: creamos o actualizamos el registro por email
+    return this.prisma.user.upsert({
+      where: { email },
+      update: { name },
+      create: { name, email },
     });
   }
 
@@ -45,20 +70,49 @@ export class UserService {
 
   async update(id: string, dto: UpdateUserDto) {
     await this.findOne(id);
-    const data: { name?: string; email?: string } = {};
-    if (dto.name !== undefined) data.name = dto.name;
-    if (dto.email !== undefined) {
-      data.email = dto.email.toLowerCase();
-      await this.validateEmailUnique(data.email, id);
+
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException(`Usuario con id "${id}" no encontrado`);
+
+    const nextName = dto.name !== undefined ? dto.name : existing.name;
+    const nextEmail = dto.email !== undefined ? dto.email.toLowerCase() : existing.email;
+
+    if (dto.email !== undefined && nextEmail !== existing.email) {
+      await this.validateEmailUnique(nextEmail, id);
     }
+
+    // Firebase: actualizar por UID buscando por email (no guardamos uid en DB).
+    const auth = firebaseAdmin.auth();
+    const firebaseUser = await auth.getUserByEmail(existing.email);
+    const updatePayload: any = {};
+    if (nextName !== existing.name) updatePayload.displayName = nextName;
+    if (nextEmail !== existing.email) updatePayload.email = nextEmail;
+
+    if (Object.keys(updatePayload).length > 0) {
+      await auth.updateUser(firebaseUser.uid, updatePayload);
+    }
+
     return this.prisma.user.update({
       where: { id },
-      data,
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.email !== undefined ? { email: nextEmail } : {}),
+      },
     });
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+
+    // Firebase: intentar borrar por email (si no existe, igualmente borramos DB).
+    try {
+      const auth = firebaseAdmin.auth();
+      const firebaseUser = await auth.getUserByEmail(existing.email);
+      await auth.deleteUser(firebaseUser.uid);
+    } catch {
+      // ignore (user no existe en Firebase, pero DB sí la borramos)
+    }
+
     return this.prisma.user.delete({
       where: { id },
     });

@@ -1,6 +1,9 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
+import { AuthModule } from "./auth/auth.module";
+import { FirebaseAuthGuard } from "./auth/firebase-auth.guard";
 import { CategoryModule } from "./category/category.module";
 import { CostModule } from "./cost/cost.module";
 import { CrmModule } from "./crm/crm.module";
@@ -19,6 +22,7 @@ import { UserModule } from "./user/user.module";
 @Module({
   imports: [
     PrismaModule,
+    AuthModule,
     CategoryModule,
     ProductModule,
     UserModule,
@@ -34,6 +38,12 @@ import { UserModule } from "./user/user.module";
     RecipeItemModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: FirebaseAuthGuard,
+    },
+  ],
 })
 export class AppModule {}

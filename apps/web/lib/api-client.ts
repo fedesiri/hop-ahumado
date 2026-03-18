@@ -56,7 +56,7 @@ export class ApiClient {
       ...options.headers,
     };
 
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(url, { ...options, credentials: "include", headers });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));

@@ -32,6 +32,9 @@ pnpm-debug.log*
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal
 
+# Firebase service account (no subir secretos)
+apps/api/firebase-service-account.json
+
 # Testing
 coverage
 .nyc_output

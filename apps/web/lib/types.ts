@@ -242,6 +242,7 @@ export interface UpdateProductRequest {
 export interface CreateUserRequest {
   name: string;
   email: string;
+  password: string;
 }
 
 export interface UpdateUserRequest {

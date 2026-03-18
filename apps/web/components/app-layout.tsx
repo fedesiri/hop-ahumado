@@ -7,6 +7,7 @@ import { Drawer, Layout, Tabs } from "antd";
 import { Flower2 } from "lucide-react";
 import React, { useState } from "react";
 import { AppSidebar, ToggleSidebarButton } from "./app-sidebar";
+import { UserMenu } from "./auth/user-menu";
 
 const { Header, Content } = Layout;
 
@@ -95,17 +96,20 @@ export function AppLayout({ children, showLineTabs = true }: AppLayoutProps) {
             )}
           </div>
 
-          {showLineTabs && selectedLine && (
-            <div style={{ display: "flex", alignItems: "center" }}>
-              <Tabs
-                activeKey={selectedLine}
-                onChange={(key) => setSelectedLine(key as BusinessLine)}
-                items={lineTabItems}
-                style={{ marginBottom: 0 }}
-                size="small"
-              />
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {showLineTabs && selectedLine && (
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <Tabs
+                  activeKey={selectedLine}
+                  onChange={(key) => setSelectedLine(key as BusinessLine)}
+                  items={lineTabItems}
+                  style={{ marginBottom: 0 }}
+                  size="small"
+                />
+              </div>
+            )}
+            <UserMenu />
+          </div>
         </Header>
 
         <Content
