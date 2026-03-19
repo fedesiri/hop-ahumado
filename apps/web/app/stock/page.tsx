@@ -5,7 +5,7 @@ import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { Cost, PaginationMeta, Product, StockMovement, StockMovementType } from "@/lib/types";
-import { PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag } from "antd";
 import { useEffect, useState } from "react";
 
@@ -424,11 +424,34 @@ function StockContent() {
                 <p style={{ margin: "0 0 8px 0", color: "#ffffff", fontWeight: 600 }}>
                   Otros egresos variables (opcionales)
                 </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr) 120px 120px 36px",
+                    gap: 8,
+                    marginBottom: 8,
+                    color: "#9ca3af",
+                    fontSize: 12,
+                  }}
+                >
+                  <span>Concepto</span>
+                  <span>Efectivo</span>
+                  <span>Tarjeta</span>
+                  <span />
+                </div>
                 {extraExpenseRows.map((row, index) => (
-                  <Space key={index} style={{ display: "flex", marginBottom: 8 }} align="baseline" size="middle">
+                  <div
+                    key={index}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "minmax(0, 1fr) 120px 120px 36px",
+                      gap: 8,
+                      marginBottom: 8,
+                      alignItems: "center",
+                    }}
+                  >
                     <Input
                       placeholder="Concepto (ej. leña, nafta, peaje)"
-                      style={{ minWidth: 240 }}
                       value={row.description}
                       onChange={(e) => {
                         const next = [...extraExpenseRows];
@@ -460,18 +483,17 @@ function StockContent() {
                         setExtraExpenseRows(next);
                       }}
                     />
-                    {extraExpenseRows.length > 1 && (
-                      <Button
-                        danger
-                        onClick={() => {
-                          const next = extraExpenseRows.filter((_, i) => i !== index);
-                          setExtraExpenseRows(next.length ? next : [{ description: "", cash: 0, card: 0 }]);
-                        }}
-                      >
-                        Quitar
-                      </Button>
-                    )}
-                  </Space>
+                    <Button
+                      danger
+                      type="text"
+                      icon={<DeleteOutlined />}
+                      disabled={extraExpenseRows.length === 1}
+                      onClick={() => {
+                        const next = extraExpenseRows.filter((_, i) => i !== index);
+                        setExtraExpenseRows(next.length ? next : [{ description: "", cash: 0, card: 0 }]);
+                      }}
+                    />
+                  </div>
                 ))}
                 <Button
                   onClick={() => setExtraExpenseRows([...extraExpenseRows, { description: "", cash: 0, card: 0 }])}
