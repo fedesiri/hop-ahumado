@@ -10,7 +10,7 @@ import {
   ReloadOutlined,
   ShoppingCartOutlined,
 } from "@ant-design/icons";
-import { Button, Card, Col, Empty, Result, Row, Spin, Statistic, Table, Tag } from "antd";
+import { Button, Card, Col, Empty, Modal, Result, Row, Spin, Statistic, Table, Tag } from "antd";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -20,26 +20,75 @@ export function Dashboard() {
   const [stats, setStats] = useState({
     totalOrders: 0,
     totalRevenue: 0,
+    incomeCash: 0,
+    incomeCard: 0,
+    expenseCash: 0,
+    expenseCard: 0,
     lowStockProducts: [] as Product[],
     recentOrders: [] as Order[],
     totalCustomers: 0,
+    netCash: 0,
+    netCard: 0,
   });
+  const [cashFlowModalOpen, setCashFlowModalOpen] = useState(false);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       setApiConnected(null);
 
-      const [ordersRes, productsRes, customersRes] = await Promise.all([
-        apiClient.getOrders(1, 100),
+      const limit = 100; // máximo que permite la API
+      const [productsRes, customersRes] = await Promise.all([
         apiClient.getProducts(1, 100),
         apiClient.getCustomers(1, 50),
       ]);
 
       setApiConnected(true);
+
+      // Órdenes: paginar para calcular ingresos reales desde el inicio
+      let page = 1;
+      let ordersRes = await apiClient.getOrders(page, limit);
+      const firstOrdersPage = ordersRes.data;
+      let allOrders = [...ordersRes.data];
+      while (ordersRes.meta.totalPages > page) {
+        page += 1;
+        ordersRes = await apiClient.getOrders(page, limit);
+        allOrders = [...allOrders, ...ordersRes.data];
+      }
+
+      // Ingresos (pagos por método)
+      const incomeCash = allOrders.reduce((sum, order) => {
+        const payments = order.payments ?? [];
+        return sum + payments.filter((p) => p.method === "CASH").reduce((ps, p) => ps + Number(p.amount ?? 0), 0);
+      }, 0);
+      const incomeCard = allOrders.reduce((sum, order) => {
+        const payments = order.payments ?? [];
+        return sum + payments.filter((p) => p.method === "CARD").reduce((ps, p) => ps + Number(p.amount ?? 0), 0);
+      }, 0);
+
+      // Egresos (payments CASH/CARD desde expenses)
+      page = 1;
+      let expensesRes = await apiClient.getExpenses(page, limit);
+      let allExpenses = [...expensesRes.data];
+      while (expensesRes.meta.totalPages > page) {
+        page += 1;
+        expensesRes = await apiClient.getExpenses(page, limit);
+        allExpenses = [...allExpenses, ...expensesRes.data];
+      }
+
+      const expenseCash = allExpenses
+        .filter((e) => e.method === "CASH")
+        .reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
+      const expenseCard = allExpenses
+        .filter((e) => e.method === "CARD")
+        .reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
+
+      const netCash = incomeCash - expenseCash;
+      const netCard = incomeCard - expenseCard;
+      const totalRevenue = netCash + netCard;
+
       const lowStock = productsRes.data.filter((p) => p.stock < 10);
-      const recentOrders = ordersRes.data.slice(0, 5);
-      const totalRevenue = ordersRes.data.reduce((sum, order) => sum + Number(order.total ?? 0), 0);
+      const recentOrders = firstOrdersPage.slice(0, 5);
 
       const sortedCustomers = [...customersRes.data].sort(
         (a: Customer, b: Customer) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -49,9 +98,15 @@ export function Dashboard() {
       setStats({
         totalOrders: ordersRes.meta.total,
         totalRevenue,
+        incomeCash,
+        incomeCard,
+        expenseCash,
+        expenseCard,
         lowStockProducts: lowStock,
         recentOrders,
         totalCustomers: customersRes.meta.total,
+        netCash,
+        netCard,
       });
     } catch (error) {
       setApiConnected(false);
@@ -171,9 +226,13 @@ export function Dashboard() {
             </Col>
 
             <Col xs={24} sm={12} lg={6}>
-              <Card style={{ background: "#1f2937", borderColor: "#2d3748" }} variant="outlined">
+              <Card
+                style={{ background: "#1f2937", borderColor: "#2d3748", cursor: "pointer" }}
+                variant="outlined"
+                onClick={() => setCashFlowModalOpen(true)}
+              >
                 <Statistic
-                  title="Ingresos Totales"
+                  title="Flujo de Caja Actual"
                   value={Number(stats.totalRevenue)}
                   formatter={(value) => formatCurrency(value)}
                   valueStyle={{ color: "#22c55e" }}
@@ -263,6 +322,40 @@ export function Dashboard() {
           </Row>
         </>
       )}
+
+      <Modal
+        title="Detalle de Flujo de Caja"
+        open={cashFlowModalOpen}
+        onCancel={() => setCashFlowModalOpen(false)}
+        footer={null}
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div>
+            <p style={{ color: "#ffffff", margin: 0, fontWeight: 600 }}>Efectivo</p>
+            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
+              Ingresos: <span style={{ color: "#22c55e" }}>{formatCurrency(stats.incomeCash)}</span>
+            </p>
+            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
+              Egresos: <span style={{ color: "#f97316" }}>{formatCurrency(stats.expenseCash)}</span>
+            </p>
+            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
+              Neto: <span style={{ color: "#22c55e" }}>{formatCurrency(stats.netCash)}</span>
+            </p>
+          </div>
+          <div>
+            <p style={{ color: "#ffffff", margin: 0, fontWeight: 600 }}>Tarjeta</p>
+            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
+              Ingresos: <span style={{ color: "#22c55e" }}>{formatCurrency(stats.incomeCard)}</span>
+            </p>
+            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
+              Egresos: <span style={{ color: "#f97316" }}>{formatCurrency(stats.expenseCard)}</span>
+            </p>
+            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
+              Neto: <span style={{ color: "#22c55e" }}>{formatCurrency(stats.netCard)}</span>
+            </p>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

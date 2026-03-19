@@ -154,6 +154,15 @@ export interface Cost {
   product?: Product;
 }
 
+export interface Expense {
+  id: string;
+  amount: number;
+  method: PaymentMethod;
+  description?: string | null;
+  createdAt: string;
+  groupId: string;
+}
+
 export interface StockMovement {
   id: string;
   productId: string;
@@ -340,6 +349,12 @@ export interface UpdatePriceRequest {
 export interface CreateCostRequest {
   productId: string;
   value: number;
+}
+
+export interface CreateExpenseRequest {
+  description?: string;
+  cashAmount?: number;
+  cardAmount?: number;
 }
 
 export interface UpdateCostRequest {

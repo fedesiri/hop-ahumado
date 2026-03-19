@@ -2,11 +2,16 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
-import type { PaginationMeta, Product, StockMovement, StockMovementType } from "@/lib/types";
+import type { Cost, PaginationMeta, Product, StockMovement, StockMovementType } from "@/lib/types";
 import { PlusOutlined } from "@ant-design/icons";
 import { App, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag } from "antd";
 import { useEffect, useState } from "react";
+
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
 
 export default function StockPage() {
   return (
@@ -22,19 +27,30 @@ function StockContent() {
   const { message } = App.useApp();
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [costsByProductId, setCostsByProductId] = useState<Record<string, Cost>>({});
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
+  const selectedMovementType = Form.useWatch("type", form);
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
   const [rows, setRows] = useState<Array<{ productId?: string; quantity?: number }>>([
     { productId: undefined, quantity: undefined },
   ]);
+  const [extraExpenseRows, setExtraExpenseRows] = useState<
+    Array<{ description?: string; cash?: number; card?: number }>
+  >([{ description: "", cash: 0, card: 0 }]);
 
   useEffect(() => {
     fetchMovements();
     fetchProducts();
   }, [pagination.page, pagination.limit]);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    fetchCosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen]);
 
   const fetchMovements = async () => {
     try {
@@ -59,9 +75,64 @@ function StockContent() {
     }
   };
 
+  const fetchCosts = async () => {
+    try {
+      const limit = 100;
+      let page = 1;
+      let res = await apiClient.getCosts(page, limit, undefined, true);
+      const all: Cost[] = [...res.data];
+
+      while (res.meta.totalPages > page) {
+        page += 1;
+        res = await apiClient.getCosts(page, limit, undefined, true);
+        all.push(...res.data);
+      }
+
+      const map: Record<string, Cost> = {};
+      for (const c of all) map[c.productId] = c;
+      setCostsByProductId(map);
+    } catch (error) {
+      console.error(error);
+      message.error("Error al cargar costos");
+      setCostsByProductId({});
+    }
+  };
+
+  const computedProductsCostTotal = (() => {
+    const validRows = rows.filter((r) => r.productId && r.quantity && r.quantity !== 0) as Array<{
+      productId: string;
+      quantity: number;
+    }>;
+    const total = validRows.reduce((sum, r) => {
+      const cost = costsByProductId[r.productId];
+      const unitCost = cost ? Number(cost.value ?? 0) : 0;
+      return sum + r.quantity * unitCost;
+    }, 0);
+    return roundMoney(total);
+  })();
+
+  const hasMissingCostForSelectedProducts = (() => {
+    const validRows = rows.filter((r) => r.productId && r.quantity && r.quantity !== 0) as Array<{
+      productId: string;
+      quantity: number;
+    }>;
+    return validRows.some((r) => !costsByProductId[r.productId]);
+  })();
+
+  const missingCostProductNames = (() => {
+    const validRows = rows.filter((r) => r.productId && r.quantity && r.quantity !== 0) as Array<{
+      productId: string;
+      quantity: number;
+    }>;
+    return validRows
+      .filter((r) => !costsByProductId[r.productId])
+      .map((r) => products.find((p) => p.id === r.productId)?.name || r.productId);
+  })();
+
   const handleCreate = () => {
     form.resetFields();
     setRows([{ productId: undefined, quantity: undefined }]);
+    setExtraExpenseRows([{ description: "", cash: 0, card: 0 }]);
     setModalOpen(true);
   };
 
@@ -76,6 +147,50 @@ function StockContent() {
         return;
       }
 
+      let productsCashAmount = 0;
+      let productsCardAmount = 0;
+      let productsDescription = "";
+
+      // Validaciones de egreso (MVP) ANTES de crear el movimiento de stock.
+      if (type === "IN") {
+        if (hasMissingCostForSelectedProducts) {
+          message.error(`Falta costo para: ${missingCostProductNames.join(", ")}.`);
+          return;
+        }
+
+        productsCashAmount = Number(values.productsCashAmount ?? 0);
+        productsCardAmount = Number(values.productsCardAmount ?? 0);
+
+        const productsTotalPaid = productsCashAmount + productsCardAmount;
+
+        if (productsTotalPaid <= 0) {
+          message.error("Para una entrada de stock, informá el pago de los productos (efectivo y/o tarjeta).");
+          return;
+        }
+
+        const computedTotal = computedProductsCostTotal;
+        const shouldValidateProductsTotal = computedTotal > 0 && !hasMissingCostForSelectedProducts;
+        if (shouldValidateProductsTotal) {
+          const diff = Math.abs(productsTotalPaid - computedTotal);
+          if (diff > 0.01) {
+            message.error(
+              `El pago informado para productos no coincide con el costo calculado (${computedTotal.toFixed(2)}).`,
+            );
+            return;
+          }
+        }
+
+        const invalidExtra = extraExpenseRows.find(
+          (r) => (Number(r.cash ?? 0) > 0 || Number(r.card ?? 0) > 0) && !(r.description || "").trim(),
+        );
+        if (invalidExtra) {
+          message.error("Si cargás un egreso variable con monto, tenés que ponerle una descripción.");
+          return;
+        }
+
+        productsDescription = reason ? `Productos (costo) - ${reason}` : "Productos (costo)";
+      }
+
       await Promise.all(
         validRows.map((r) =>
           apiClient.createStockMovement({
@@ -86,6 +201,25 @@ function StockContent() {
           }),
         ),
       );
+
+      // Si es una entrada (IN), registramos egreso monetario en `expenses`.
+      if (type === "IN") {
+        await apiClient.createExpense({
+          description: productsDescription,
+          cashAmount: productsCashAmount,
+          cardAmount: productsCardAmount,
+        });
+
+        const validExtras = extraExpenseRows.filter((r) => Number(r.cash ?? 0) > 0 || Number(r.card ?? 0) > 0);
+        for (const extra of validExtras) {
+          const description = (extra.description || "").trim();
+          await apiClient.createExpense({
+            description: reason ? `${description} - ${reason}` : description,
+            cashAmount: Number(extra.cash ?? 0),
+            cardAmount: Number(extra.card ?? 0),
+          });
+        }
+      }
 
       message.success("Movimientos de stock registrados");
       setModalOpen(false);
@@ -251,6 +385,102 @@ function StockContent() {
               Agregar producto
             </Button>
           </div>
+
+          {selectedMovementType === "IN" && (
+            <>
+              <div style={{ marginBottom: 16, paddingTop: 12, borderTop: "1px solid #2d3748" }}>
+                <p style={{ margin: "0 0 8px 0", color: "#ffffff", fontWeight: 600 }}>
+                  Pago de productos (solo para `Entrada`)
+                </p>
+                <p style={{ margin: "0 0 12px 0", color: "#9ca3af" }}>
+                  Costo total calculado (productos):{" "}
+                  <span style={{ color: "#22c55e" }}>{formatCurrency(computedProductsCostTotal)}</span>
+                </p>
+
+                <Form.Item name="productsCashAmount" label="Productos - Efectivo" rules={[{ required: false }]}>
+                  <InputNumber
+                    min={0}
+                    step={0.01}
+                    precision={2}
+                    placeholder="Ingresá monto en efectivo"
+                    style={{ width: "100%" }}
+                  />
+                </Form.Item>
+                <Form.Item name="productsCardAmount" label="Productos - Tarjeta" rules={[{ required: false }]}>
+                  <InputNumber
+                    min={0}
+                    step={0.01}
+                    precision={2}
+                    placeholder="Ingresá monto en tarjeta"
+                    style={{ width: "100%" }}
+                  />
+                </Form.Item>
+                <p style={{ margin: "8px 0 0 0", color: "#9ca3af" }}>
+                  El total de efectivo + tarjeta debe coincidir con el costo calculado.
+                </p>
+              </div>
+
+              <div style={{ marginBottom: 16, paddingTop: 12, borderTop: "1px solid #2d3748" }}>
+                <p style={{ margin: "0 0 8px 0", color: "#ffffff", fontWeight: 600 }}>
+                  Otros egresos variables (opcionales)
+                </p>
+                {extraExpenseRows.map((row, index) => (
+                  <Space key={index} style={{ display: "flex", marginBottom: 8 }} align="baseline" size="middle">
+                    <Input
+                      placeholder="Concepto (ej. leña, nafta, peaje)"
+                      style={{ minWidth: 240 }}
+                      value={row.description}
+                      onChange={(e) => {
+                        const next = [...extraExpenseRows];
+                        next[index].description = e.target.value;
+                        setExtraExpenseRows(next);
+                      }}
+                    />
+                    <InputNumber
+                      placeholder="Efectivo"
+                      min={0}
+                      step={0.01}
+                      precision={2}
+                      value={row.cash}
+                      onChange={(value) => {
+                        const next = [...extraExpenseRows];
+                        next[index].cash = Number(value || 0);
+                        setExtraExpenseRows(next);
+                      }}
+                    />
+                    <InputNumber
+                      placeholder="Tarjeta"
+                      min={0}
+                      step={0.01}
+                      precision={2}
+                      value={row.card}
+                      onChange={(value) => {
+                        const next = [...extraExpenseRows];
+                        next[index].card = Number(value || 0);
+                        setExtraExpenseRows(next);
+                      }}
+                    />
+                    {extraExpenseRows.length > 1 && (
+                      <Button
+                        danger
+                        onClick={() => {
+                          const next = extraExpenseRows.filter((_, i) => i !== index);
+                          setExtraExpenseRows(next.length ? next : [{ description: "", cash: 0, card: 0 }]);
+                        }}
+                      >
+                        Quitar
+                      </Button>
+                    )}
+                  </Space>
+                ))}
+                <Button
+                  onClick={() => setExtraExpenseRows([...extraExpenseRows, { description: "", cash: 0, card: 0 }])}
+                >
+                  Agregar egreso variable
+                </Button>
+              </div>
+            </>
+          )}
 
           <Form.Item name="reason" label="Razón (Opcional)">
             <Input placeholder="Razón del movimiento" />

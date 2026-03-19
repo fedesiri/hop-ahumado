@@ -7,6 +7,7 @@ import type {
   CreateCustomerInteractionRequest,
   CreateCustomerProfileRequest,
   CreateCustomerRequest,
+  CreateExpenseRequest,
   CreateOrderRequest,
   CreatePriceRequest,
   CreateProductRequest,
@@ -19,6 +20,7 @@ import type {
   CustomerInteraction,
   CustomerOpportunity,
   CustomerProfile,
+  Expense,
   HealthResponse,
   Order,
   PaginatedResponse,
@@ -410,6 +412,22 @@ export class ApiClient {
 
   async deleteCost(id: string): Promise<void> {
     return this.request(`/costs/${id}`, { method: "DELETE" });
+  }
+
+  // Expenses (egresos monetarios)
+  async getExpenses(page = 1, limit = 10): Promise<PaginatedResponse<Expense>> {
+    return this.request(`/expenses${this.buildParams({ page, limit })}`);
+  }
+
+  async createExpense(data: CreateExpenseRequest): Promise<Expense[]> {
+    return this.request("/expenses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteExpenseGroup(groupId: string): Promise<void> {
+    return this.request(`/expenses/group/${groupId}`, { method: "DELETE" });
   }
 
   // Stock Movements

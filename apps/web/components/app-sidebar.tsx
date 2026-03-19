@@ -52,6 +52,7 @@ const menuItems: MenuProps["items"] = [
   },
   { key: "/prices", icon: <DollarOutlined />, label: "Precios" },
   { key: "/costs", icon: <DollarOutlined />, label: "Costos" },
+  { key: "/expenses", icon: <DollarOutlined />, label: "Egresos" },
   { key: "divider-3", type: "divider" },
   { key: "/stock", icon: <DatabaseOutlined />, label: "Stock" },
   { key: "/recipes", icon: <BgColorsOutlined />, label: "Recetas" },

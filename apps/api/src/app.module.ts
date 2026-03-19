@@ -11,6 +11,7 @@ import { CustomerInteractionModule } from "./customer-interaction/customer-inter
 import { CustomerOpportunityModule } from "./customer-opportunity/customer-opportunity.module";
 import { CustomerProfileModule } from "./customer-profile/customer-profile.module";
 import { CustomerModule } from "./customer/customer.module";
+import { ExpenseModule } from "./expense/expense.module";
 import { OrderModule } from "./order/order.module";
 import { PriceModule } from "./price/price.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -34,6 +35,7 @@ import { UserModule } from "./user/user.module";
     OrderModule,
     PriceModule,
     CostModule,
+    ExpenseModule,
     StockMovementModule,
     RecipeItemModule,
   ],

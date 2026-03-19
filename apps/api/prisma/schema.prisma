@@ -187,6 +187,17 @@ model Payment {
   order  Order         @relation(fields: [orderId], references: [id])
 }
 
+model Expense {
+  id          String        @id @default(uuid())
+  amount      Decimal
+  method      PaymentMethod
+  description String?
+  createdAt   DateTime      @default(now())
+
+  // Se usa para agrupar splits (p.ej. efectivo + tarjeta) dentro de un mismo egreso.
+  groupId String @default(uuid())
+}
+
 model StockMovement {
   id        String            @id @default(uuid())
   productId String
