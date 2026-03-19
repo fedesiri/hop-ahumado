@@ -3,6 +3,7 @@
 import { AppLayout } from "@/components/app-layout";
 import { OrderCalculator } from "@/components/order-calculator/order-calculator";
 import { apiClient } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { CreateOrderRequest, Customer, Price, Product } from "@/lib/types";
@@ -22,6 +23,7 @@ export default function OrderCalculatorPage() {
 
 function OrderCalculatorPageContent() {
   const { message } = App.useApp();
+  const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -143,6 +145,7 @@ function OrderCalculatorPageContent() {
     try {
       const data: CreateOrderRequest = {
         customerId: customerId ?? undefined,
+        userId: user?.id,
         total,
         items: items.map((item) => ({
           productId: item.productId,

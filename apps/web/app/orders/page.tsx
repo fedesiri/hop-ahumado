@@ -287,7 +287,7 @@ function OrdersContent() {
           />
           <Select
             allowClear
-            placeholder="Filtrar por usuario"
+            placeholder="Filtrar por vendedor"
             style={{ minWidth: 200 }}
             value={filterUserId}
             options={users.map((u) => ({ label: u.name, value: u.id }))}
@@ -372,9 +372,9 @@ function OrdersContent() {
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item name="userId" label="Usuario">
+                      <Form.Item name="userId" label="Vendedor">
                         <Select
-                          placeholder="Selecciona usuario"
+                          placeholder="Selecciona vendedor"
                           options={users.map((u) => ({ label: u.name, value: u.id }))}
                         />
                       </Form.Item>
@@ -524,7 +524,7 @@ function OrdersContent() {
                   <strong>Cliente:</strong> {selectedOrder.customer?.name || "-"}
                 </Col>
                 <Col span={12}>
-                  <strong>Usuario:</strong> {selectedOrder.user?.name || "-"}
+                  <strong>Vendedor:</strong> {selectedOrder.user?.name || "-"}
                 </Col>
                 <Col span={12}>
                   <strong>Total:</strong> {formatCurrency(selectedOrder.total)}

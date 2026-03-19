@@ -87,7 +87,7 @@ function OrderDetailContent({ id }: { id: string }) {
             <strong>Cliente:</strong> {order.customer?.name || "-"}
           </Col>
           <Col span={12}>
-            <strong>Usuario:</strong> {order.user?.name || "-"}
+            <strong>Vendedor:</strong> {order.user?.name || "-"}
           </Col>
           <Col span={12}>
             <strong>Total:</strong> {formatCurrency(order.total)}
