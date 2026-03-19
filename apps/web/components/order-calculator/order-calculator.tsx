@@ -220,7 +220,7 @@ export function OrderCalculator({ products, pricesByProductId, customers, onConf
       ),
     );
     setPriceType("mayorista");
-    toast.info("Nuevo pedido");
+    toast.info("Nueva orden");
   }, [productIds]);
 
   const handleConfirmOrder = useCallback(() => {
@@ -253,7 +253,7 @@ export function OrderCalculator({ products, pricesByProductId, customers, onConf
       {/* Header: título + filtros */}
       <div style={SECTION_STYLE}>
         <div style={CONTAINER_STYLE}>
-          <h1 style={{ margin: "0 0 12px 0", color: "#ffffff", fontSize: 18 }}>Calculadora de Pedidos</h1>
+          <h1 style={{ margin: "0 0 12px 0", color: "#ffffff", fontSize: 18 }}>Nueva orden</h1>
           <Row gutter={[12, 12]}>
             <Col xs={24} md={12} lg={6}>
               <Select

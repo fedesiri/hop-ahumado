@@ -4,18 +4,8 @@ import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
-import type {
-  CreateOrderRequest,
-  Customer,
-  Order,
-  OrderItem,
-  OrderPayment,
-  PaymentMethod,
-  Product,
-  UpdateOrderRequest,
-  User,
-} from "@/lib/types";
-import { DeleteOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
+import type { Customer, Order, OrderItem, User } from "@/lib/types";
+import { DeleteOutlined, EyeOutlined } from "@ant-design/icons";
 import {
   Table as AntTable,
   App,
@@ -24,7 +14,6 @@ import {
   Col,
   DatePicker,
   Empty,
-  Form,
   InputNumber,
   Modal,
   Row,
@@ -32,7 +21,6 @@ import {
   Space,
   Spin,
   Table,
-  Tabs,
 } from "antd";
 import { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
@@ -50,19 +38,13 @@ export default function OrdersPage() {
 function OrdersContent() {
   const { message, modal } = App.useApp();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form] = Form.useForm();
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
-  const [orderItems, setOrderItems] = useState<Partial<OrderItem>[]>([]);
-  const [orderPayments, setOrderPayments] = useState<Partial<OrderPayment>[]>([]);
   const [filterCustomerId, setFilterCustomerId] = useState<string | undefined>(undefined);
   const [filterUserId, setFilterUserId] = useState<string | undefined>(undefined);
   const [filterDateRange, setFilterDateRange] = useState<[Dayjs, Dayjs] | null>(null);
@@ -107,26 +89,13 @@ function OrdersContent() {
 
   const fetchRelatedData = async () => {
     try {
-      const [productsRes, customersRes, usersRes] = await Promise.all([
-        apiClient.getProducts(1, 100),
-        apiClient.getCustomers(1, 100),
-        apiClient.getUsers(1, 100),
-      ]);
-      setProducts(productsRes.data);
+      const [customersRes, usersRes] = await Promise.all([apiClient.getCustomers(1, 100), apiClient.getUsers(1, 100)]);
       setCustomers(customersRes.data);
       setUsers(usersRes.data);
     } catch (error) {
-      message.error("Error al cargar usuarios para órdenes");
+      message.error("Error al cargar datos para filtros de órdenes");
       console.error(error);
     }
-  };
-
-  const handleCreate = () => {
-    setEditingId(null);
-    form.resetFields();
-    setOrderItems([{ quantity: 0, price: 0 }]);
-    setOrderPayments([{ amount: 0, method: "CASH" as PaymentMethod }]);
-    setModalOpen(true);
   };
 
   const handleViewOrder = (record: Order) => {
@@ -150,73 +119,6 @@ function OrdersContent() {
         }
       },
     });
-  };
-
-  const calculateTotal = () => {
-    const itemsTotal = orderItems.reduce((sum, item) => {
-      return sum + (item.price || 0) * (item.quantity || 0);
-    }, 0);
-    return itemsTotal;
-  };
-
-  const handleSubmit = async (values: any) => {
-    try {
-      // Validate items
-      if (!orderItems.some((item) => item.productId && item.quantity && item.price)) {
-        message.error("Debe agregar al menos un ítem");
-        return;
-      }
-
-      // Validate payments
-      if (!orderPayments.some((payment) => payment.amount && payment.method)) {
-        message.error("Debe agregar al menos un pago");
-        return;
-      }
-
-      const itemsTotal = calculateTotal();
-      const paymentsTotal = orderPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-
-      if (Math.abs(itemsTotal - paymentsTotal) > 0.01) {
-        message.error("El total de pagos debe coincidir con el total de ítems");
-        return;
-      }
-
-      const data: CreateOrderRequest = {
-        customerId: values.customerId,
-        userId: values.userId,
-        deliveryDate: values.deliveryDate?.toISOString(),
-        total: itemsTotal,
-        items: orderItems
-          .filter((item) => item.productId && item.quantity)
-          .map((item) => ({
-            productId: item.productId!,
-            quantity: item.quantity!,
-            price: item.price!,
-          })),
-        payments: orderPayments
-          .filter((payment) => payment.amount && payment.method)
-          .map((payment) => ({
-            amount: payment.amount!,
-            method: payment.method!,
-          })),
-      };
-
-      if (editingId) {
-        await apiClient.updateOrder(editingId, {
-          customerId: values.customerId,
-          userId: values.userId,
-          deliveryDate: values.deliveryDate?.toISOString(),
-        } as UpdateOrderRequest);
-        message.success("Orden actualizada");
-      } else {
-        await apiClient.createOrder(data);
-        message.success("Orden creada");
-      }
-      setModalOpen(false);
-      fetchOrders();
-    } catch (error) {
-      message.error("Error al guardar orden");
-    }
   };
 
   const columns = [
@@ -267,9 +169,6 @@ function OrdersContent() {
     <div>
       <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between" }}>
         <h1 style={{ margin: 0, color: "#ffffff" }}>Órdenes</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-          Nueva Orden
-        </Button>
       </div>
 
       <Card style={{ marginBottom: "16px", background: "#1f2937", borderColor: "#2d3748" }}>
@@ -347,168 +246,6 @@ function OrdersContent() {
         <Empty description="No hay órdenes" style={{ color: "#9ca3af" }} />
       )}
 
-      {/* Create/Edit Modal */}
-      <Modal
-        title={editingId ? "Editar Orden" : "Nueva Orden"}
-        open={modalOpen}
-        onOk={() => form.submit()}
-        onCancel={() => setModalOpen(false)}
-        width={900}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Tabs
-            items={[
-              {
-                key: "header",
-                label: "Cabecera",
-                children: (
-                  <Row gutter={16}>
-                    <Col span={12}>
-                      <Form.Item name="customerId" label="Cliente">
-                        <Select
-                          placeholder="Selecciona cliente"
-                          options={customers.map((c) => ({ label: c.name, value: c.id }))}
-                        />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item name="userId" label="Vendedor">
-                        <Select
-                          placeholder="Selecciona vendedor"
-                          options={users.map((u) => ({ label: u.name, value: u.id }))}
-                        />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item name="deliveryDate" label="Fecha de Entrega">
-                        <DatePicker placeholder="Selecciona fecha" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                ),
-              },
-              {
-                key: "items",
-                label: "Ítems",
-                children: (
-                  <div>
-                    <div style={{ marginBottom: "16px" }}>
-                      {orderItems.map((item, index) => (
-                        <Row key={index} gutter={8} style={{ marginBottom: "8px" }}>
-                          <Col span={12}>
-                            <Select
-                              placeholder="Producto"
-                              value={item.productId}
-                              onChange={(value) => {
-                                const newItems = [...orderItems];
-                                newItems[index].productId = value;
-                                setOrderItems(newItems);
-                              }}
-                              options={products.map((p) => ({ label: p.name, value: p.id }))}
-                            />
-                          </Col>
-                          <Col span={6}>
-                            <InputNumber
-                              placeholder="Cant"
-                              value={item.quantity}
-                              onChange={(value) => {
-                                const newItems = [...orderItems];
-                                newItems[index].quantity = value || 0;
-                                setOrderItems(newItems);
-                              }}
-                              min={0}
-                            />
-                          </Col>
-                          <Col span={6}>
-                            <InputNumber
-                              placeholder="Precio"
-                              value={item.price}
-                              onChange={(value) => {
-                                const newItems = [...orderItems];
-                                newItems[index].price = value || 0;
-                                setOrderItems(newItems);
-                              }}
-                              min={0}
-                              step={0.01}
-                            />
-                          </Col>
-                        </Row>
-                      ))}
-                    </div>
-                    <Button onClick={() => setOrderItems([...orderItems, { quantity: 0, price: 0 }])}>
-                      Agregar Ítem
-                    </Button>
-                  </div>
-                ),
-              },
-              {
-                key: "payments",
-                label: "Pagos",
-                children: (
-                  <div>
-                    <div style={{ marginBottom: "16px" }}>
-                      {orderPayments.map((payment, index) => (
-                        <Row key={index} gutter={8} style={{ marginBottom: "8px" }}>
-                          <Col span={12}>
-                            <Select
-                              placeholder="Método"
-                              value={payment.method}
-                              onChange={(value) => {
-                                const newPayments = [...orderPayments];
-                                newPayments[index].method = value;
-                                setOrderPayments(newPayments);
-                              }}
-                              options={[
-                                { label: "Efectivo", value: "CASH" },
-                                { label: "Tarjeta", value: "CARD" },
-                              ]}
-                            />
-                          </Col>
-                          <Col span={12}>
-                            <InputNumber
-                              placeholder="Monto"
-                              value={payment.amount}
-                              onChange={(value) => {
-                                const newPayments = [...orderPayments];
-                                newPayments[index].amount = value || 0;
-                                setOrderPayments(newPayments);
-                              }}
-                              min={0}
-                              step={0.01}
-                            />
-                          </Col>
-                        </Row>
-                      ))}
-                    </div>
-                    <Button
-                      onClick={() =>
-                        setOrderPayments([...orderPayments, { amount: 0, method: "CASH" as PaymentMethod }])
-                      }
-                    >
-                      Agregar Pago
-                    </Button>
-                    <Card
-                      style={{
-                        marginTop: "16px",
-                        background: "#1f2937",
-                      }}
-                    >
-                      <div style={{ color: "#9ca3af" }}>
-                        <div>Total Ítems: {formatCurrency(calculateTotal())}</div>
-                        <div>
-                          Total Pagos: {formatCurrency(orderPayments.reduce((sum, p) => sum + (p.amount || 0), 0))}
-                        </div>
-                      </div>
-                    </Card>
-                  </div>
-                ),
-              },
-            ]}
-          />
-        </Form>
-      </Modal>
-
-      {/* View Modal */}
       <Modal
         title="Detalles de la Orden"
         open={viewModalOpen}

@@ -59,7 +59,7 @@ export function StickyFooter({ total, hasItems, onCopy, onClear, onNewOrder, onC
           </span>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-          <Button icon={<RollbackOutlined />} onClick={onNewOrder} title="Nuevo pedido" />
+          <Button icon={<RollbackOutlined />} onClick={onNewOrder} title="Nueva orden" />
           <Button icon={<DeleteOutlined />} onClick={onClear} disabled={!hasItems} title="Limpiar" />
           <Button type="primary" icon={<CopyOutlined />} onClick={onCopy} disabled={!hasItems}>
             Copiar pedido

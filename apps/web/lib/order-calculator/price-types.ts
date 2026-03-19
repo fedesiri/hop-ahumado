@@ -1,5 +1,5 @@
 /**
- * Tipos de precio para la calculadora. Los precios en BD (Price.description)
+ * Tipos de precio para la pantalla Nueva orden. Los precios en BD (Price.description)
  * pueden coincidir con estos valores para mostrar mayorista/minorista/fábrica.
  */
 
