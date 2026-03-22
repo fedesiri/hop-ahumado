@@ -8,7 +8,8 @@ import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { CreateOrderRequest, Customer, Price, Product } from "@/lib/types";
 import { PaymentMethod } from "@/lib/types";
-import { Alert, App, Button, Modal, Select, Spin } from "antd";
+import dayjs, { type Dayjs } from "@/lib/dayjs";
+import { Alert, App, Button, DatePicker, Modal, Select, Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function OrderCalculatorPage() {
@@ -36,6 +37,7 @@ function OrderCalculatorPageContent() {
     customerId: string | null;
   } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
+  const [deliveryDate, setDeliveryDate] = useState<Dayjs | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const pricesByProductId = useMemo(() => {
@@ -134,6 +136,7 @@ function OrderCalculatorPageContent() {
     total: number,
     customerId?: string | null,
   ) => {
+    setDeliveryDate(dayjs().startOf("day"));
     setPendingOrder({ items, total, customerId: customerId ?? null });
     setConfirmModalOpen(true);
   };
@@ -146,6 +149,7 @@ function OrderCalculatorPageContent() {
       const data: CreateOrderRequest = {
         customerId: customerId ?? undefined,
         userId: user?.id,
+        deliveryDate: (deliveryDate ?? dayjs().startOf("day")).toISOString(),
         total,
         items: items.map((item) => ({
           productId: item.productId,
@@ -250,6 +254,15 @@ function OrderCalculatorPageContent() {
                 }
               />
             )}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Fecha de entrega</label>
+              <DatePicker
+                style={{ width: "100%" }}
+                value={deliveryDate}
+                onChange={(v) => setDeliveryDate(v)}
+                format="DD/MM/YYYY"
+              />
+            </div>
             <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Método de pago</label>
             <Select
               value={paymentMethod}
