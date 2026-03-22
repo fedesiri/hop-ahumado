@@ -14,6 +14,12 @@ import { Button, Card, Col, Empty, Modal, Result, Row, Spin, Statistic, Table, T
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+function startOfLocalDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
 export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
@@ -48,7 +54,6 @@ export function Dashboard() {
       // Órdenes: paginar para calcular ingresos reales desde el inicio
       let page = 1;
       let ordersRes = await apiClient.getOrders(page, limit);
-      const firstOrdersPage = ordersRes.data;
       let allOrders = [...ordersRes.data];
       while (ordersRes.meta.totalPages > page) {
         page += 1;
@@ -88,7 +93,15 @@ export function Dashboard() {
       const totalRevenue = netCash + netCard;
 
       const lowStock = productsRes.data.filter((p) => p.stock < 10);
-      const recentOrders = firstOrdersPage.slice(0, 5);
+
+      const todayStart = startOfLocalDay(new Date());
+      const recentOrders = allOrders
+        .filter((order) => {
+          if (!order.deliveryDate) return false;
+          return startOfLocalDay(new Date(order.deliveryDate)).getTime() >= todayStart.getTime();
+        })
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 5);
 
       const sortedCustomers = [...customersRes.data].sort(
         (a: Customer, b: Customer) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -140,10 +153,10 @@ export function Dashboard() {
       render: (amount: number | string) => formatCurrency(amount),
     },
     {
-      title: "Fecha",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      render: (date: string) => new Date(date).toLocaleDateString("es-AR"),
+      title: "Entrega",
+      key: "deliveryDate",
+      render: (_: unknown, record: Order) =>
+        record.deliveryDate ? new Date(record.deliveryDate).toLocaleDateString("es-AR") : "—",
     },
     {
       title: "Acciones",
@@ -267,7 +280,7 @@ export function Dashboard() {
           <Row gutter={[16, 16]} style={{ marginBottom: "24px" }}>
             <Col span={24}>
               <Card
-                title="Ordenes Recientes"
+                title="Órdenes recientes (entrega hoy o posterior)"
                 style={{ background: "#1f2937", borderColor: "#2d3748" }}
                 extra={
                   <Link href="/orders">
@@ -286,7 +299,10 @@ export function Dashboard() {
                     style={{ backgroundColor: "#111111" }}
                   />
                 ) : (
-                  <Empty description="No hay ordenes" style={{ color: "#9ca3af" }} />
+                  <Empty
+                    description="No hay órdenes con entrega hoy o fecha futura"
+                    style={{ color: "#9ca3af" }}
+                  />
                 )}
               </Card>
             </Col>
