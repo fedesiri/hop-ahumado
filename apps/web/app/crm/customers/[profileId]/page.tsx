@@ -1,6 +1,8 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
+import type { Dayjs } from "@/lib/dayjs";
+import dayjs from "@/lib/dayjs";
 import type {
   Customer,
   CustomerInteraction,
@@ -15,7 +17,6 @@ import { InteractionChannel as ChannelEnum } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
 import { ArrowLeftOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, Card, DatePicker, Descriptions, Form, Input, Modal, Select, Space, Spin, Tabs } from "antd";
-import dayjs from "dayjs";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -105,9 +106,7 @@ export default function CrmCustomerDetailPage() {
     }
   };
 
-  const handleUpdateProfile = async (
-    values: UpdateCustomerProfileRequest & { nextFollowUpAt?: dayjs.Dayjs | null },
-  ) => {
+  const handleUpdateProfile = async (values: UpdateCustomerProfileRequest & { nextFollowUpAt?: Dayjs | null }) => {
     try {
       await apiClient.updateCrmCustomerProfile(profileId, {
         ...values,
@@ -124,7 +123,7 @@ export default function CrmCustomerDetailPage() {
 
   const handleUpsertOpportunity = async (
     values: UpdateCustomerOpportunityRequest & {
-      expectedClosingDate?: dayjs.Dayjs | null;
+      expectedClosingDate?: Dayjs | null;
       estimatedValue?: number | string;
     },
   ) => {
@@ -152,7 +151,7 @@ export default function CrmCustomerDetailPage() {
 
   const handleAddInteraction = async (values: {
     channel?: InteractionChannel;
-    date?: dayjs.Dayjs;
+    date?: Dayjs;
     notes?: string;
     nextStep?: string;
   }) => {

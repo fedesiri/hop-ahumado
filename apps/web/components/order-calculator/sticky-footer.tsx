@@ -11,9 +11,18 @@ interface StickyFooterProps {
   onClear: () => void;
   onNewOrder: () => void;
   onConfirmOrder?: () => void;
+  confirmButtonLabel?: string;
 }
 
-export function StickyFooter({ total, hasItems, onCopy, onClear, onNewOrder, onConfirmOrder }: StickyFooterProps) {
+export function StickyFooter({
+  total,
+  hasItems,
+  onCopy,
+  onClear,
+  onNewOrder,
+  onConfirmOrder,
+  confirmButtonLabel = "Confirmar pedido (descontar stock)",
+}: StickyFooterProps) {
   return (
     <div
       style={{
@@ -66,7 +75,7 @@ export function StickyFooter({ total, hasItems, onCopy, onClear, onNewOrder, onC
           </Button>
           {onConfirmOrder && (
             <Button type="primary" icon={<CheckCircleOutlined />} onClick={onConfirmOrder} disabled={!hasItems}>
-              Confirmar pedido (descontar stock)
+              {confirmButtonLabel}
             </Button>
           )}
         </div>

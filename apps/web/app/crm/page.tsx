@@ -1,11 +1,12 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
+import type { Dayjs } from "@/lib/dayjs";
+import dayjs from "@/lib/dayjs";
 import type { CreateCrmCustomerRequest, CrmCustomerListItem, PaginationMeta, User } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
 import { EditOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag } from "antd";
-import dayjs from "dayjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -156,7 +157,7 @@ function CrmContent() {
     }
   };
 
-  const handleSubmit = async (values: CreateCrmCustomerRequest & { nextFollowUpAt?: dayjs.Dayjs | null }) => {
+  const handleSubmit = async (values: CreateCrmCustomerRequest & { nextFollowUpAt?: Dayjs | null }) => {
     try {
       const profilePayload = {
         contactName: values.contactName,

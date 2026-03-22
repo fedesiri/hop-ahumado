@@ -2,10 +2,11 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
+import type { Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { Customer, Order, OrderItem, User } from "@/lib/types";
-import { DeleteOutlined, EyeOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import {
   Table as AntTable,
   App,
@@ -22,7 +23,7 @@ import {
   Spin,
   Table,
 } from "antd";
-import { Dayjs } from "dayjs";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 export default function OrdersPage() {
@@ -147,18 +148,21 @@ function OrdersContent() {
       render: (items: OrderItem[]) => items?.length || 0,
     },
     {
-      title: "Fecha",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      render: (date: string) => new Date(date).toLocaleDateString("es-AR"),
+      title: "Entrega",
+      key: "deliveryDate",
+      render: (_: unknown, record: Order) =>
+        record.deliveryDate ? new Date(record.deliveryDate).toLocaleDateString("es-AR") : "—",
     },
     {
       title: "Acciones",
       key: "actions",
-      width: 150,
+      width: 200,
       render: (_: any, record: Order) => (
         <Space>
           <Button type="primary" size="small" icon={<EyeOutlined />} onClick={() => handleViewOrder(record)} />
+          <Link href={`/orders/${record.id}/edit`}>
+            <Button type="default" size="small" icon={<EditOutlined />} title="Editar ítems y stock" />
+          </Link>
           <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
         </Space>
       ),
@@ -267,7 +271,11 @@ function OrdersContent() {
                   <strong>Total:</strong> {formatCurrency(selectedOrder.total)}
                 </Col>
                 <Col span={12}>
-                  <strong>Fecha:</strong> {new Date(selectedOrder.createdAt).toLocaleDateString("es-AR")}
+                  <strong>Creada:</strong> {new Date(selectedOrder.createdAt).toLocaleDateString("es-AR")}
+                </Col>
+                <Col span={12}>
+                  <strong>Entrega:</strong>{" "}
+                  {selectedOrder.deliveryDate ? new Date(selectedOrder.deliveryDate).toLocaleDateString("es-AR") : "—"}
                 </Col>
               </Row>
             </Card>

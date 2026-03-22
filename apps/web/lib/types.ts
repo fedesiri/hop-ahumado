@@ -399,9 +399,13 @@ export interface CreateOrderRequest {
 }
 
 export interface UpdateOrderRequest {
-  customerId?: string;
-  userId?: string;
+  customerId?: string | null;
+  userId?: string | null;
   deliveryDate?: string;
+  /** Si se envían, deben ir juntos con payments y total; reemplaza líneas y pagos y ajusta stock. */
+  total?: number;
+  items?: CreateOrderItemRequest[];
+  payments?: CreateOrderPaymentRequest[];
 }
 
 // Context types for line selection

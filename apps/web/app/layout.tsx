@@ -1,6 +1,7 @@
 import { AntdProvider } from "@/components/antd-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth-context";
+import "@/lib/dayjs";
 import "@ant-design/v5-patch-for-react-19";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";

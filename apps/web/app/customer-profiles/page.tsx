@@ -2,6 +2,8 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
+import type { Dayjs } from "@/lib/dayjs";
+import dayjs from "@/lib/dayjs";
 import { LineProvider } from "@/lib/line-context";
 import type {
   CreateCustomerProfileRequest,
@@ -12,7 +14,6 @@ import type {
 } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table } from "antd";
-import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 
 export default function CustomerProfilesPage() {
@@ -127,7 +128,7 @@ function CustomerProfilesContent() {
     source?: string;
     responsibleId?: string;
     generalNotes?: string;
-    nextFollowUpAt?: dayjs.Dayjs;
+    nextFollowUpAt?: Dayjs;
   }) => {
     try {
       const data: CreateCustomerProfileRequest = {

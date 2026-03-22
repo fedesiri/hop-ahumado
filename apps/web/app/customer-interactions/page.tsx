@@ -2,6 +2,8 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
+import type { Dayjs } from "@/lib/dayjs";
+import dayjs from "@/lib/dayjs";
 import { LineProvider } from "@/lib/line-context";
 import type {
   CreateCustomerInteractionRequest,
@@ -12,7 +14,6 @@ import type {
 import { InteractionChannel } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table } from "antd";
-import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 
 export default function CustomerInteractionsPage() {
@@ -103,7 +104,7 @@ function CustomerInteractionsContent() {
   const handleSubmit = async (values: {
     profileId: string;
     channel?: InteractionChannel;
-    date?: dayjs.Dayjs;
+    date?: Dayjs;
     notes?: string;
     nextStep?: string;
   }) => {

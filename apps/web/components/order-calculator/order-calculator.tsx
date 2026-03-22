@@ -44,10 +44,22 @@ export interface OrderCalculatorProps {
     total: number,
     customerId?: string | null,
   ) => void;
+  /** Cantidades iniciales por productId (p. ej. al editar una orden) */
+  initialQuantities?: Record<string, number>;
+  /** Cliente inicial (p. ej. orden en edición) */
+  initialCustomerId?: string | null;
+  /** Título de la pantalla */
+  title?: string;
+  /** Texto del botón de confirmar en el footer */
+  confirmButtonLabel?: string;
+  /** Si es false, no persiste tipo de precio / cliente / cantidades en localStorage */
+  persistToLocalStorage?: boolean;
+  /** Si se pasa (p. ej. inferido desde las líneas de una orden), evita caer siempre en mayorista sin localStorage */
+  initialPriceType?: PriceType;
 }
 
-function getInitialQuantities(productIds: string[]): Record<string, number> {
-  if (typeof window !== "undefined") {
+function getInitialQuantities(productIds: string[], readFromStorage: boolean): Record<string, number> {
+  if (readFromStorage && typeof window !== "undefined") {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.quantities);
       if (stored) {
@@ -69,8 +81,8 @@ function getInitialQuantities(productIds: string[]): Record<string, number> {
   );
 }
 
-function getInitialPriceType(): PriceType {
-  if (typeof window !== "undefined") {
+function getInitialPriceType(readFromStorage: boolean): PriceType {
+  if (readFromStorage && typeof window !== "undefined") {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.priceType);
       if (stored && ["mayorista", "minorista", "fabrica"].includes(stored)) {
@@ -81,8 +93,8 @@ function getInitialPriceType(): PriceType {
   return "mayorista";
 }
 
-function getInitialCustomerId(customers: { id: string }[]): string | null {
-  if (typeof window !== "undefined") {
+function getInitialCustomerId(customers: { id: string }[], readFromStorage: boolean): string | null {
+  if (readFromStorage && typeof window !== "undefined") {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.customerId);
       if (stored && customers.some((c) => c.id === stored)) return stored;
@@ -91,12 +103,33 @@ function getInitialCustomerId(customers: { id: string }[]): string | null {
   return null;
 }
 
-export function OrderCalculator({ products, pricesByProductId, customers, onConfirmOrder }: OrderCalculatorProps) {
-  const [priceType, setPriceType] = useState<PriceType>(getInitialPriceType);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(() => getInitialCustomerId(customers));
-  const [quantities, setQuantities] = useState<Record<string, number>>(() =>
-    getInitialQuantities(products.map((p) => p.id)),
+export function OrderCalculator({
+  products,
+  pricesByProductId,
+  customers,
+  onConfirmOrder,
+  initialQuantities: initialQuantitiesProp,
+  initialCustomerId: initialCustomerIdProp,
+  initialPriceType: initialPriceTypeProp,
+  title = "Nueva orden",
+  confirmButtonLabel,
+  persistToLocalStorage = true,
+}: OrderCalculatorProps) {
+  const [priceType, setPriceType] = useState<PriceType>(
+    () => initialPriceTypeProp ?? getInitialPriceType(persistToLocalStorage),
   );
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(() =>
+    initialCustomerIdProp !== undefined
+      ? initialCustomerIdProp
+      : getInitialCustomerId(customers, persistToLocalStorage),
+  );
+  const [quantities, setQuantities] = useState<Record<string, number>>(() => {
+    const ids = products.map((p) => p.id);
+    if (initialQuantitiesProp && Object.keys(initialQuantitiesProp).length > 0) {
+      return { ...getInitialQuantities(ids, persistToLocalStorage), ...initialQuantitiesProp };
+    }
+    return getInitialQuantities(ids, persistToLocalStorage);
+  });
   const [search, setSearch] = useState("");
   const [mounted, setMounted] = useState(false);
 
@@ -120,6 +153,20 @@ export function OrderCalculator({ products, pricesByProductId, customers, onConf
     });
   }, [productIds]);
 
+  useEffect(() => {
+    if (initialQuantitiesProp === undefined && initialCustomerIdProp === undefined) return;
+    setQuantities((prev) => {
+      const next = { ...prev };
+      productIds.forEach((id) => {
+        next[id] = initialQuantitiesProp?.[id] ?? next[id] ?? 0;
+      });
+      return next;
+    });
+    if (initialCustomerIdProp !== undefined) {
+      setSelectedCustomerId(initialCustomerIdProp);
+    }
+  }, [initialQuantitiesProp, initialCustomerIdProp, productIds]);
+
   const filteredProducts = useMemo(() => {
     if (!search.trim()) return products;
     const term = search.toLowerCase().trim();
@@ -127,17 +174,18 @@ export function OrderCalculator({ products, pricesByProductId, customers, onConf
   }, [products, search]);
 
   useEffect(() => {
-    if (mounted) localStorage.setItem(STORAGE_KEYS.priceType, priceType);
-  }, [priceType, mounted]);
+    if (mounted && persistToLocalStorage) localStorage.setItem(STORAGE_KEYS.priceType, priceType);
+  }, [priceType, mounted, persistToLocalStorage]);
 
   useEffect(() => {
-    if (mounted && selectedCustomerId) localStorage.setItem(STORAGE_KEYS.customerId, selectedCustomerId);
-    if (mounted && !selectedCustomerId) localStorage.removeItem(STORAGE_KEYS.customerId);
-  }, [selectedCustomerId, mounted]);
+    if (!mounted || !persistToLocalStorage) return;
+    if (selectedCustomerId) localStorage.setItem(STORAGE_KEYS.customerId, selectedCustomerId);
+    else localStorage.removeItem(STORAGE_KEYS.customerId);
+  }, [selectedCustomerId, mounted, persistToLocalStorage]);
 
   useEffect(() => {
-    if (mounted) localStorage.setItem(STORAGE_KEYS.quantities, JSON.stringify(quantities));
-  }, [quantities, mounted]);
+    if (mounted && persistToLocalStorage) localStorage.setItem(STORAGE_KEYS.quantities, JSON.stringify(quantities));
+  }, [quantities, mounted, persistToLocalStorage]);
 
   const total = useMemo(() => {
     return products.reduce((sum, p) => {
@@ -253,7 +301,7 @@ export function OrderCalculator({ products, pricesByProductId, customers, onConf
       {/* Header: título + filtros */}
       <div style={SECTION_STYLE}>
         <div style={CONTAINER_STYLE}>
-          <h1 style={{ margin: "0 0 12px 0", color: "#ffffff", fontSize: 18 }}>Nueva orden</h1>
+          <h1 style={{ margin: "0 0 12px 0", color: "#ffffff", fontSize: 18 }}>{title}</h1>
           <Row gutter={[12, 12]}>
             <Col xs={24} md={12} lg={6}>
               <Select
@@ -322,6 +370,7 @@ export function OrderCalculator({ products, pricesByProductId, customers, onConf
         onClear={handleClear}
         onNewOrder={handleNewOrder}
         onConfirmOrder={onConfirmOrder ? handleConfirmOrder : undefined}
+        confirmButtonLabel={confirmButtonLabel}
       />
     </div>
   );

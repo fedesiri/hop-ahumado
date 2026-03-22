@@ -174,6 +174,18 @@ export class OrderService {
   }
 
   async update(id: string, dto: UpdateOrderDto) {
+    const hasItems = dto.items !== undefined;
+    const hasPayments = dto.payments !== undefined;
+    const hasTotal = dto.total !== undefined;
+
+    if (hasItems !== hasPayments || hasItems !== hasTotal) {
+      throw new BadRequestException("Para editar ítems y stock deben enviarse juntos: items, payments y total");
+    }
+
+    if (hasItems && dto.items && dto.payments && dto.total !== undefined) {
+      return this.updateWithItemsAndStock(id, dto);
+    }
+
     await this.findOne(id);
     if (dto.customerId) await this.validateCustomerExists(dto.customerId);
     if (dto.userId) await this.validateUserExists(dto.userId);
@@ -192,6 +204,115 @@ export class OrderService {
         customer: { select: { id: true, name: true } },
         user: { select: { id: true, name: true, email: true } },
       },
+    });
+  }
+
+  /**
+   * Reemplaza ítems y pagos: revierte stock de los ítems anteriores (IN) y descuenta el nuevo pedido (OUT).
+   */
+  private async updateWithItemsAndStock(id: string, dto: UpdateOrderDto) {
+    const items = dto.items!;
+    const payments = dto.payments!;
+    const total = dto.total!;
+
+    if (dto.customerId) await this.validateCustomerExists(dto.customerId);
+    if (dto.userId) await this.validateUserExists(dto.userId);
+    for (const item of items) {
+      await this.validateProductExists(item.productId);
+    }
+
+    const itemsTotal = items.reduce((sum, i) => sum + i.quantity * i.price, 0);
+    if (Math.abs(itemsTotal - total) > 0.01) {
+      throw new BadRequestException(`El total (${total}) no coincide con la suma de ítems (${itemsTotal.toFixed(2)})`);
+    }
+    const paymentsTotal = payments.reduce((sum, p) => sum + p.amount, 0);
+    if (Math.abs(paymentsTotal - total) > 0.01) {
+      throw new BadRequestException(
+        `La suma de pagos (${paymentsTotal.toFixed(2)}) debe coincidir con el total (${total})`,
+      );
+    }
+
+    const orderInclude = {
+      orderItems: { include: { product: { select: { id: true, name: true, stock: true } } } },
+      payments: true,
+      customer: { select: { id: true, name: true } },
+      user: { select: { id: true, name: true, email: true } },
+    } as const;
+
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.order.findUnique({
+        where: { id },
+        include: {
+          orderItems: { include: { product: { select: { id: true, stock: true } } } },
+        },
+      });
+      if (!existing) {
+        throw new NotFoundException(`Orden con id "${id}" no encontrada`);
+      }
+
+      for (const line of existing.orderItems) {
+        const product = line.product as { id: string; stock: number };
+        await tx.stockMovement.create({
+          data: {
+            productId: product.id,
+            quantity: line.quantity,
+            type: StockMovementType.IN,
+            reason: `Reversión edición orden ${id.slice(0, 8)}`,
+          },
+        });
+        await tx.product.update({
+          where: { id: product.id },
+          data: { stock: { increment: line.quantity } },
+        });
+      }
+
+      for (const item of items) {
+        const product = await tx.product.findUnique({ where: { id: item.productId } });
+        if (!product) {
+          throw new BadRequestException(`Producto con id "${item.productId}" no encontrado`);
+        }
+        const newStock = product.stock - item.quantity;
+        await tx.stockMovement.create({
+          data: {
+            productId: item.productId,
+            quantity: item.quantity,
+            type: StockMovementType.OUT,
+            reason: `Orden ${id.slice(0, 8)}`,
+          },
+        });
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: newStock },
+        });
+      }
+
+      return tx.order.update({
+        where: { id },
+        data: {
+          total,
+          ...(dto.customerId !== undefined && { customerId: dto.customerId }),
+          ...(dto.userId !== undefined && { userId: dto.userId }),
+          ...(dto.deliveryDate !== undefined && {
+            deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
+          }),
+          orderItems: {
+            deleteMany: {},
+            create: items.map((i) => ({
+              productId: i.productId,
+              quantity: i.quantity,
+              price: i.price,
+            })),
+          },
+          payments: {
+            deleteMany: {},
+            create: payments.map((p) => ({
+              amount: p.amount,
+              method: p.method,
+            })),
+          },
+        },
+        include: orderInclude,
+      });
     });
   }
 
