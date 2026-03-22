@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
-import { PaginationQueryDto, toLimit, toPage } from "../common/pagination";
+import { toLimit, toPage } from "../common/pagination";
 import { CreateStockMovementDto } from "./dto/create-stock-movement.dto";
+import { GetStockMovementsQueryDto } from "./dto/get-stock-movements-query.dto";
 import { StockMovementService } from "./stock-movement.service";
 
 @Controller("stock-movements")
@@ -13,8 +14,8 @@ export class StockMovementController {
   }
 
   @Get()
-  findAll(@Query() query: PaginationQueryDto, @Query("productId") productId?: string) {
-    return this.stockMovementService.findAll(toPage(query), toLimit(query), productId);
+  findAll(@Query() query: GetStockMovementsQueryDto) {
+    return this.stockMovementService.findAll(toPage(query), toLimit(query), query.productId);
   }
 
   @Get(":id")

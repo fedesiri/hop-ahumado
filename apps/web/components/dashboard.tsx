@@ -1,7 +1,7 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
-import { formatCurrency } from "@/lib/format-currency";
+import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import type { Customer, Order, Product } from "@/lib/types";
 import {
   AlertOutlined,
@@ -181,7 +181,10 @@ export function Dashboard() {
       title: "Stock",
       dataIndex: "stock",
       key: "stock",
-      render: (stock: number) => <Tag color={stock < 5 ? "red" : "orange"}>{stock}</Tag>,
+      render: (stock: number) => {
+        const n = Number(stock);
+        return <Tag color={n < 5 ? "red" : "orange"}>{formatQuantity(stock)}</Tag>;
+      },
     },
     {
       title: "Categoría",
@@ -299,10 +302,7 @@ export function Dashboard() {
                     style={{ backgroundColor: "#111111" }}
                   />
                 ) : (
-                  <Empty
-                    description="No hay órdenes con entrega hoy o fecha futura"
-                    style={{ color: "#9ca3af" }}
-                  />
+                  <Empty description="No hay órdenes con entrega hoy o fecha futura" style={{ color: "#9ca3af" }} />
                 )}
               </Card>
             </Col>

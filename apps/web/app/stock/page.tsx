@@ -2,11 +2,11 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
-import { formatCurrency } from "@/lib/format-currency";
+import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { Cost, PaginationMeta, Product, StockMovement, StockMovementType } from "@/lib/types";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag } from "antd";
+import { Alert, App, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag } from "antd";
 import { useEffect, useState } from "react";
 
 function roundMoney(value: number): number {
@@ -272,6 +272,7 @@ function StockContent() {
       title: "Cantidad",
       dataIndex: "quantity",
       key: "quantity",
+      render: (q: number) => formatQuantity(q),
     },
     {
       title: "Razón",
@@ -295,6 +296,14 @@ function StockContent() {
           Registrar Movimiento
         </Button>
       </div>
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="Misma convención que en productos"
+        description="Usá decimales si el producto se mide en kg, litros, etc. (ej. entrada 2,5 kg de tomate). Mantené la misma unidad que en el producto y en recetas."
+      />
 
       {loading ? (
         <Spin />
@@ -339,6 +348,10 @@ function StockContent() {
             />
           </Form.Item>
 
+          <p style={{ margin: "0 0 12px 0", color: "#9ca3af", fontSize: 13 }}>
+            Producto y cantidad: misma unidad que definiste al cargar el producto (enteros o decimales, ej. 0,5 kg).
+          </p>
+
           <div style={{ marginBottom: 16 }}>
             {rows.map((row, index) => (
               <Space key={index} style={{ display: "flex", marginBottom: 8 }} align="baseline">
@@ -363,10 +376,12 @@ function StockContent() {
                   value={row.quantity}
                   onChange={(value) => {
                     const next = [...rows];
-                    next[index].quantity = value || 0;
+                    next[index].quantity = value ?? undefined;
                     setRows(next);
                   }}
                   min={0}
+                  step={0.01}
+                  precision={4}
                 />
                 {rows.length > 1 && (
                   <Button

@@ -1,4 +1,5 @@
-import { IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from "class-validator";
+import { Type } from "class-transformer";
+import { IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from "class-validator";
 
 export class CreateProductDto {
   @IsString()
@@ -24,7 +25,8 @@ export class CreateProductDto {
   barcode?: string;
 
   @IsOptional()
-  @IsInt()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 }, { message: "stock debe ser un número" })
   @Min(0)
   stock?: number;
 

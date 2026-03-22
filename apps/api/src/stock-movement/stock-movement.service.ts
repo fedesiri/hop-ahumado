@@ -14,8 +14,8 @@ export class StockMovementService {
 
   async create(dto: CreateStockMovementDto) {
     if (dto.type === "IN" || dto.type === "OUT") {
-      if (dto.quantity < 1) {
-        throw new BadRequestException("Para IN y OUT la cantidad debe ser al menos 1");
+      if (dto.quantity <= 0) {
+        throw new BadRequestException("Para IN y OUT la cantidad debe ser mayor que 0");
       }
     }
     if (dto.type === "ADJUSTMENT" && dto.quantity === 0) {

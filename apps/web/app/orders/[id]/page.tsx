@@ -2,7 +2,7 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
-import { formatCurrency } from "@/lib/format-currency";
+import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { Order, OrderItem, OrderPayment } from "@/lib/types";
 import { ArrowLeftOutlined } from "@ant-design/icons";
@@ -103,7 +103,12 @@ function OrderDetailContent({ id }: { id: string }) {
       <AntTable
         columns={[
           { title: "Producto", dataIndex: ["product", "name"], key: "product" },
-          { title: "Cantidad", dataIndex: "quantity", key: "quantity" },
+          {
+            title: "Cantidad",
+            dataIndex: "quantity",
+            key: "quantity",
+            render: (q: number) => formatQuantity(q),
+          },
           {
             title: "Precio",
             dataIndex: "price",

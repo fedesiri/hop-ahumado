@@ -2,10 +2,26 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
+import { formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { Category, CreateProductRequest, PaginationMeta, Product, UpdateProductRequest } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Card, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Empty,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+  Space,
+  Spin,
+  Table,
+  Tag,
+} from "antd";
 import { useEffect, useState } from "react";
 
 export default function ProductsPage() {
@@ -112,7 +128,7 @@ function ProductsContent() {
         categoryId: values.categoryId,
         sku: values.sku,
         barcode: values.barcode,
-        stock: values.stock || 0,
+        stock: values.stock != null && values.stock !== "" ? Number(values.stock) : 0,
       };
 
       if (editingId) {
@@ -151,7 +167,10 @@ function ProductsContent() {
       title: "Stock",
       dataIndex: "stock",
       key: "stock",
-      render: (stock: number) => <Tag color={stock < 5 ? "red" : stock < 10 ? "orange" : "green"}>{stock}</Tag>,
+      render: (stock: number) => {
+        const n = Number(stock);
+        return <Tag color={n < 5 ? "red" : n < 10 ? "orange" : "green"}>{formatQuantity(stock)}</Tag>;
+      },
     },
     {
       title: "Acciones",
@@ -174,6 +193,20 @@ function ProductsContent() {
           Nuevo Producto
         </Button>
       </div>
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="Unidad de stock por producto"
+        description={
+          <>
+            Podés usar <strong>decimales</strong> (ej. <strong>10,5</strong> para kg de tomate) o enteros (ej. cajas de
+            cerveza). Definí la misma unidad en mente para ese producto y usala también en{" "}
+            <strong>movimientos de stock</strong> y en <strong>recetas</strong>.
+          </>
+        }
+      />
 
       <Card style={{ marginBottom: "16px", background: "#1f2937", borderColor: "#2d3748" }}>
         <Space wrap>
@@ -262,8 +295,12 @@ function ProductsContent() {
             <Input placeholder="Código de barras" />
           </Form.Item>
 
-          <Form.Item name="stock" label="Stock">
-            <InputNumber min={0} placeholder="Stock inicial" />
+          <Form.Item
+            name="stock"
+            label="Stock inicial"
+            extra="Ej.: 24 unidades, 10,5 (kg), 2 (litros). Misma lógica que en recetas y movimientos."
+          >
+            <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 12 o 10,5" style={{ width: "100%" }} />
           </Form.Item>
         </Form>
       </Modal>

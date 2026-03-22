@@ -1,11 +1,13 @@
-import { IsInt, IsNumber, IsUUID, Min } from "class-validator";
+import { Type } from "class-transformer";
+import { IsNumber, IsUUID, Min } from "class-validator";
 
 export class CreateOrderItemDto {
   @IsUUID("4", { message: "productId debe ser un UUID válido" })
   productId: string;
 
-  @IsInt()
-  @Min(1, { message: "La cantidad debe ser al menos 1" })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 }, { message: "La cantidad debe ser un número" })
+  @Min(0.0001, { message: "La cantidad debe ser mayor que 0" })
   quantity: number;
 
   @IsNumber()

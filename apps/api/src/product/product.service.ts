@@ -132,13 +132,32 @@ export class ProductService {
         : dto.deactivationDate !== undefined
           ? new Date(dto.deactivationDate)
           : undefined;
+    if (deactivationDate !== undefined && deactivationDate !== null && Number.isNaN(deactivationDate.getTime())) {
+      throw new BadRequestException("deactivationDate no es una fecha válida");
+    }
+    const categoryId =
+      dto.categoryId === undefined
+        ? undefined
+        : dto.categoryId === null || dto.categoryId === ""
+          ? null
+          : dto.categoryId;
+    const stock =
+      dto.stock === undefined
+        ? undefined
+        : (() => {
+            const n = Number(dto.stock);
+            if (!Number.isFinite(n) || n < 0) {
+              throw new BadRequestException("stock debe ser un número mayor o igual a 0");
+            }
+            return n;
+          })();
     return {
       ...(dto.name !== undefined && { name: dto.name }),
       ...(dto.description !== undefined && { description: dto.description }),
-      ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
+      ...(dto.categoryId !== undefined && { categoryId }),
       ...(dto.sku !== undefined && { sku: dto.sku }),
       ...(dto.barcode !== undefined && { barcode: dto.barcode }),
-      ...(dto.stock !== undefined && { stock: dto.stock }),
+      ...(dto.stock !== undefined && { stock }),
       ...(dto.deactivationDate !== undefined && {
         deactivationDate,
       }),

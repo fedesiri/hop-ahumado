@@ -3,7 +3,7 @@
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import type { Dayjs } from "@/lib/dayjs";
-import { formatCurrency } from "@/lib/format-currency";
+import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { Customer, Order, OrderItem, User } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
@@ -284,7 +284,12 @@ function OrdersContent() {
             <AntTable
               columns={[
                 { title: "Producto", dataIndex: ["product", "name"], key: "product" },
-                { title: "Cantidad", dataIndex: "quantity", key: "quantity" },
+                {
+                  title: "Cantidad",
+                  dataIndex: "quantity",
+                  key: "quantity",
+                  render: (q: number) => formatQuantity(q),
+                },
                 {
                   title: "Precio",
                   dataIndex: "price",
