@@ -8,6 +8,7 @@ import { LineProvider } from "@/lib/line-context";
 import type { Customer, Order, OrderItem, User } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import {
+  Alert,
   Table as AntTable,
   App,
   Button,
@@ -171,9 +172,38 @@ function OrdersContent() {
 
   return (
     <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between" }}>
+      <div
+        style={{
+          marginBottom: "24px",
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
         <h1 style={{ margin: 0, color: "#ffffff" }}>Órdenes</h1>
+        <Link href="/orders/calculator">
+          <Button type="primary">Nueva orden (cargar productos)</Button>
+        </Link>
       </div>
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="Dónde están los productos al armar un pedido"
+        description={
+          <>
+            Los ítems salen del catálogo en <strong>Productos</strong>. Para que aparezcan con precio en la calculadora,
+            cargá al menos un <strong>Precio</strong> activo para cada producto. Luego abrí{" "}
+            <Link href="/orders/calculator">Nueva orden</Link>: elegís cliente, buscás el producto (ej. panes) y la
+            cantidad. Al confirmar, el sistema <strong>descuenta solo el stock del producto vendido</strong> (el pan),
+            no los ingredientes de la receta; las recetas hoy sirven para documentar composición, no para descontar
+            insumos automáticamente.
+          </>
+        }
+      />
 
       <Card style={{ marginBottom: "16px", background: "#1f2937", borderColor: "#2d3748" }}>
         <Space wrap>

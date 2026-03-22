@@ -4,9 +4,10 @@ import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
+import { PRICE_TYPE_LABELS, PRICE_TYPES, type PriceType } from "@/lib/order-calculator/price-types";
 import type { CreatePriceRequest, Price, Product, UpdatePriceRequest } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table } from "antd";
+import { Alert, App, AutoComplete, Button, Empty, Form, InputNumber, Modal, Select, Space, Spin, Table } from "antd";
 import { useEffect, useState } from "react";
 
 export default function PricesPage() {
@@ -129,10 +130,15 @@ function PricesContent() {
       render: (value: number | string) => formatCurrency(value),
     },
     {
-      title: "Descripción",
+      title: "Lista / descripción",
       dataIndex: "description",
       key: "description",
-      render: (text: string) => text || "-",
+      render: (text: string) => {
+        if (!text) return "-";
+        const t = text.trim().toLowerCase();
+        if (PRICE_TYPES.includes(t as PriceType)) return PRICE_TYPE_LABELS[t as PriceType];
+        return text;
+      },
     },
     {
       title: "Fecha de Creación",
@@ -161,6 +167,22 @@ function PricesContent() {
           Nuevo Precio
         </Button>
       </div>
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="Tres listas para todos los productos"
+        description={
+          <>
+            Podés cargar <strong>mayorista</strong>, <strong>minorista</strong> y <strong>fábrica</strong> para{" "}
+            <strong>cualquier</strong> producto (cerveza, pan, lo que sea): son tres registros de precio distintos con
+            la misma descripción de lista. En <strong>Nueva orden</strong> el selector usa esas etiquetas para elegir
+            qué valor aplicar. Si dejás otra descripción libre, el precio se guarda pero la calculadora puede no
+            reconocerla como lista estándar.
+          </>
+        }
+      />
 
       {loading ? (
         <Spin />
@@ -205,8 +227,22 @@ function PricesContent() {
             <InputNumber min={0} step={0.01} placeholder="Valor del producto" />
           </Form.Item>
 
-          <Form.Item name="description" label="Descripción">
-            <Input placeholder="Descripción (ej. Promoción, Mayorista)" />
+          <Form.Item
+            name="description"
+            label="Lista de precio"
+            extra="Usá mayorista, minorista o fabrica (minúsculas) para que coincida con el selector de Nueva orden. Podés repetir para cada producto."
+          >
+            <AutoComplete
+              style={{ width: "100%" }}
+              placeholder="Elegí o escribí: mayorista, minorista, fabrica"
+              options={PRICE_TYPES.map((t) => ({
+                value: t,
+                label: `${PRICE_TYPE_LABELS[t]} (${t})`,
+              }))}
+              filterOption={(input, option) =>
+                (option?.value as string)?.toLowerCase().includes(input.trim().toLowerCase()) ?? false
+              }
+            />
           </Form.Item>
         </Form>
       </Modal>

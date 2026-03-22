@@ -198,13 +198,27 @@ function ProductsContent() {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="Unidad de stock por producto"
+        message="¿Qué número va en «stock»?"
         description={
-          <>
-            Podés usar <strong>decimales</strong> (ej. <strong>10,5</strong> para kg de tomate) o enteros (ej. cajas de
-            cerveza). Definí la misma unidad en mente para ese producto y usala también en{" "}
-            <strong>movimientos de stock</strong> y en <strong>recetas</strong>.
-          </>
+          <div style={{ lineHeight: 1.6 }}>
+            <p style={{ margin: "0 0 8px 0" }}>
+              Es <strong>cuánto tenés disponible</strong> de ese producto, en la unidad que elijas para él (el sistema
+              no guarda «kg» o «unidades» aparte: vos lo interpretás).
+            </p>
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              <li>
+                <strong>Venta por unidad</strong> (ej. cerveza, pan en unidades): stock = cantidad de unidades (12,
+                50…).
+              </li>
+              <li>
+                <strong>Venta o insumo por peso/volumen</strong> (ej. tomate en kg): stock = kg o litros, podés usar
+                decimales (10,5).
+              </li>
+            </ul>
+            <p style={{ margin: "8px 0 0 0" }}>
+              Usá la <strong>misma unidad</strong> en movimientos de stock y en recetas para ese producto.
+            </p>
+          </div>
         }
       />
 
@@ -297,8 +311,8 @@ function ProductsContent() {
 
           <Form.Item
             name="stock"
-            label="Stock inicial"
-            extra="Ej.: 24 unidades, 10,5 (kg), 2 (litros). Misma lógica que en recetas y movimientos."
+            label="Stock inicial (disponible)"
+            extra="Número según la unidad que uses para este ítem: unidades enteras o kg/l con decimales. Debe coincidir con recetas y movimientos de stock."
           >
             <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 12 o 10,5" style={{ width: "100%" }} />
           </Form.Item>
