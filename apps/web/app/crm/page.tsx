@@ -27,7 +27,6 @@ function CrmContent() {
   const [creatingProfileForId, setCreatingProfileForId] = useState<string | null>(null);
   const [editingRecord, setEditingRecord] = useState<CrmCustomerListItem | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState<string | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [sourceFilter, setSourceFilter] = useState<string | undefined>(undefined);
@@ -286,64 +285,60 @@ function CrmContent() {
       </div>
 
       <div style={{ marginBottom: 16 }}>
-        <Space wrap>
-          <Input.Search
-            placeholder="Buscar por nombre, contacto, email, teléfono, estado u origen"
+        <Space wrap align="start">
+          <Input
             allowClear
-            style={{ minWidth: 260 }}
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onSearch={(value) => {
+            placeholder="Buscar: nombre, contacto, email, teléfono…"
+            style={{ minWidth: 220 }}
+            value={search ?? ""}
+            onChange={(e) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
-              const trimmed = value.trim();
-              setSearch(trimmed || undefined);
+              const v = e.target.value;
+              setSearch(v === "" ? undefined : v);
             }}
           />
-          <Select
+          <Input
             allowClear
-            placeholder="Tipo de cliente"
-            style={{ minWidth: 160 }}
-            value={customerTypeFilter}
-            options={[
-              { value: "Empresa", label: "Empresa" },
-              { value: "Particular", label: "Particular" },
-            ]}
-            onChange={(value) => {
+            placeholder="Tipo de cliente (ej: Empresa, B2B, particular)"
+            style={{ minWidth: 220 }}
+            value={customerTypeFilter ?? ""}
+            onChange={(e) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
-              setCustomerTypeFilter(value || undefined);
+              const v = e.target.value;
+              setCustomerTypeFilter(v === "" ? undefined : v);
             }}
           />
-          <Select
+          <Input
             allowClear
-            placeholder="Estado del contacto"
-            style={{ minWidth: 180 }}
-            value={statusFilter}
-            options={STATUS_OPTIONS}
-            onChange={(value) => {
+            placeholder="Estado del contacto (ej: Prospecto, Cliente)"
+            style={{ minWidth: 220 }}
+            value={statusFilter ?? ""}
+            onChange={(e) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
-              setStatusFilter(value || undefined);
+              const v = e.target.value;
+              setStatusFilter(v === "" ? undefined : v);
             }}
           />
           <Input
             allowClear
             placeholder="Origen (ej: Web, Referido)"
             style={{ minWidth: 180 }}
-            value={sourceFilter}
+            value={sourceFilter ?? ""}
             onChange={(e) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
-              const v = e.target.value.trim();
-              setSourceFilter(v || undefined);
+              const v = e.target.value;
+              setSourceFilter(v === "" ? undefined : v);
             }}
           />
-          <Select
+          <Input
             allowClear
-            placeholder="Socio responsable"
+            placeholder="Socio responsable (nombre)"
             style={{ minWidth: 200 }}
-            value={responsibleFilter}
-            options={users.map((u) => ({ value: u.id, label: u.name }))}
-            onChange={(value) => {
+            value={responsibleFilter ?? ""}
+            onChange={(e) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
-              setResponsibleFilter(value || undefined);
+              const v = e.target.value;
+              setResponsibleFilter(v === "" ? undefined : v);
             }}
           />
         </Space>

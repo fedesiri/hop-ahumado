@@ -20,5 +20,6 @@ export class GetCrmCustomersQueryDto extends PaginationQueryDto {
 
   @IsOptional()
   @IsString()
-  responsibleId?: string;
+  /** Texto libre: coincide con el nombre del usuario responsable (contiene, sin distinguir mayúsculas). */
+  responsibleSearch?: string;
 }

@@ -33,7 +33,7 @@ export class CrmController {
       query.status,
       query.source,
       query.customerType,
-      query.responsibleId,
+      query.responsibleSearch,
     );
   }
 

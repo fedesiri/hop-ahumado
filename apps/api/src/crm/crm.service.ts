@@ -82,7 +82,7 @@ export class CrmService {
     status?: string,
     source?: string,
     customerType?: string,
-    responsibleId?: string,
+    responsibleSearch?: string,
   ): Promise<PaginatedResponse<CrmCustomerListItem>> {
     const skip = (page - 1) * limit;
 
@@ -94,7 +94,7 @@ export class CrmService {
     const statusTrim = t(status);
     const sourceTrim = t(source);
     const customerTypeTrim = t(customerType);
-    const responsibleTrim = t(responsibleId);
+    const responsibleSearchTrim = t(responsibleSearch);
 
     const where: any = {};
 
@@ -121,8 +121,10 @@ export class CrmService {
     if (customerTypeTrim) {
       profileParts.push(customerTypeProfileClause(customerTypeTrim));
     }
-    if (responsibleTrim) {
-      profileParts.push({ responsibleId: responsibleTrim });
+    if (responsibleSearchTrim) {
+      profileParts.push({
+        responsible: { is: { name: { contains: responsibleSearchTrim, mode: "insensitive" } } },
+      });
     }
     if (profileParts.length > 0) {
       const profileIs = profileParts.length === 1 ? profileParts[0] : { AND: profileParts };

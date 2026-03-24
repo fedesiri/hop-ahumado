@@ -273,10 +273,18 @@ export class ApiClient {
     status?: string,
     source?: string,
     customerType?: string,
-    responsibleId?: string,
+    responsibleSearch?: string,
   ): Promise<PaginatedResponse<CrmCustomerListItem>> {
     return this.request(
-      `/crm/customers${this.buildParams({ page, limit, search, status, source, customerType, responsibleId })}`,
+      `/crm/customers${this.buildParams({
+        page,
+        limit,
+        search,
+        status,
+        source,
+        customerType,
+        responsibleSearch,
+      })}`,
     );
   }
 
