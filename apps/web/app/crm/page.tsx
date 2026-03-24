@@ -8,7 +8,7 @@ import { formatStatusLabel } from "@/lib/utils";
 import { EditOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag } from "antd";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function CrmPage() {
   return <CrmContent />;
@@ -33,6 +33,9 @@ function CrmContent() {
   const [sourceFilter, setSourceFilter] = useState<string | undefined>(undefined);
   const [customerTypeFilter, setCustomerTypeFilter] = useState<string | undefined>(undefined);
   const [responsibleFilter, setResponsibleFilter] = useState<string | undefined>(undefined);
+
+  /** false = abrir en modo crear (reset); objeto = valores al editar. Se aplica en afterOpenChange cuando el Form ya está montado. */
+  const pendingModalFormRef = useRef<Record<string, unknown> | false | null>(null);
 
   const STATUS_OPTIONS = [
     { value: "Lead", label: "Lead" },
@@ -92,7 +95,7 @@ function CrmContent() {
 
   const handleCreate = () => {
     setEditingRecord(null);
-    form.resetFields();
+    pendingModalFormRef.current = false;
     setModalOpen(true);
   };
 
@@ -102,7 +105,7 @@ function CrmContent() {
       try {
         setLoadingDetail(true);
         const detail = await apiClient.getCrmCustomerDetail(record.profileId);
-        form.setFieldsValue({
+        pendingModalFormRef.current = {
           name: detail.customer.name,
           customerType: detail.customerType,
           contactName: detail.contactName,
@@ -113,16 +116,17 @@ function CrmContent() {
           responsibleId: detail.responsibleId,
           generalNotes: detail.generalNotes,
           nextFollowUpAt: detail.nextFollowUpAt ? dayjs(detail.nextFollowUpAt) : null,
-        });
+        };
       } catch (error) {
         message.error("Error al cargar el cliente");
         setEditingRecord(null);
+        pendingModalFormRef.current = null;
         return;
       } finally {
         setLoadingDetail(false);
       }
     } else {
-      form.setFieldsValue({
+      pendingModalFormRef.current = {
         name: record.customerName,
         customerType: record.customerType,
         contactName: record.contactName,
@@ -133,7 +137,7 @@ function CrmContent() {
         responsibleId: record.responsibleId,
         generalNotes: null,
         nextFollowUpAt: null,
-      });
+      };
     }
     setModalOpen(true);
   };
@@ -372,11 +376,23 @@ function CrmContent() {
       <Modal
         title={editingRecord ? "Editar cliente" : "Nuevo cliente"}
         open={modalOpen}
-        forceRender
-        destroyOnClose={false}
+        destroyOnClose
         onCancel={() => {
           setModalOpen(false);
           setEditingRecord(null);
+          pendingModalFormRef.current = null;
+        }}
+        afterOpenChange={(open) => {
+          if (!open) return;
+          const pending = pendingModalFormRef.current;
+          if (pending === false) {
+            form.resetFields();
+            form.setFieldsValue({ customerType: "Empresa" });
+            pendingModalFormRef.current = null;
+          } else if (pending && typeof pending === "object") {
+            form.setFieldsValue(pending);
+            pendingModalFormRef.current = null;
+          }
         }}
         onOk={() => form.submit()}
         okText={editingRecord ? "Guardar" : "Crear"}

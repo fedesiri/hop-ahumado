@@ -1,5 +1,7 @@
 /**
  * Importa datos del Excel CRM (BierLife) a la DB: Customer, CustomerProfile, CustomerInteraction, CustomerOpportunity.
+ * Cliente: busca por nombre exacto (empresa o contacto); si ya existe (p. ej. creado por import-from-xlsx), lo reutiliza.
+ * Perfil: upsert por customerId (crea o sobrescribe campos del CRM con la fila del Excel).
  * Uso: node scripts/import-crm-xlsx.js "ruta/al/CRM _ BierLife.xlsx"
  * Ejecutar desde apps/api (pnpm run import:crm "ruta")
  *
@@ -108,7 +110,8 @@ async function run(filePath) {
   const profileByContactName = {};
   const profileByEmpresa = {};
 
-  let clientsCreated = 0;
+  let customersNew = 0;
+  let customersReused = 0;
   for (const row of clientsData) {
     const empresa = str(col(row, "Empresa", "empresa"));
     const contactName = str(col(row, "Nombre Completo", "Nombre completo", "Contacto", "nombre"));
@@ -119,9 +122,13 @@ async function run(filePath) {
     const idCliente = idClienteRaw != null && idClienteRaw !== "" ? String(idClienteRaw).trim() : null;
 
     const customerName = empresa || contactName;
-    const customer = await prisma.customer.create({
-      data: { name: customerName },
-    });
+    let customer = await prisma.customer.findFirst({ where: { name: customerName } });
+    if (!customer) {
+      customer = await prisma.customer.create({ data: { name: customerName } });
+      customersNew++;
+    } else {
+      customersReused++;
+    }
 
     const phone = str(col(row, "Teléfono", "Telefono", "telefono"));
     const email = str(col(row, "Email", "email"));
@@ -133,9 +140,21 @@ async function run(filePath) {
     const generalNotes = str(col(row, "Notas Generales", "Notas generales", "Notas", "notas"));
     const responsibleId = resolveResponsible(responsibleName) || null;
 
-    const profile = await prisma.customerProfile.create({
-      data: {
+    const profile = await prisma.customerProfile.upsert({
+      where: { customerId: customer.id },
+      create: {
         customerId: customer.id,
+        contactName: contactName || null,
+        phone: phone || null,
+        email: email || null,
+        customerType: customerType || null,
+        status: status || null,
+        source: source || null,
+        responsibleId,
+        generalNotes: generalNotes || null,
+        nextFollowUpAt: nextFollowUpAt || null,
+      },
+      update: {
         contactName: contactName || null,
         phone: phone || null,
         email: email || null,
@@ -151,10 +170,11 @@ async function run(filePath) {
     if (idCliente) profileByExcelId[String(idCliente)] = profile;
     if (contactName) profileByContactName[contactName.toLowerCase()] = profile;
     if (empresa) profileByEmpresa[empresa.toLowerCase()] = profile;
-    clientsCreated++;
   }
 
-  console.log("Clientes/Perfiles creados:", clientsCreated);
+  console.log(
+    "Clientes: " + customersNew + " nuevos, " + customersReused + " reutilizados (mismo nombre). Perfiles actualizados/creados con el Excel.",
+  );
 
   function findProfileByName(clienteNombre) {
     const key = str(clienteNombre).toLowerCase();

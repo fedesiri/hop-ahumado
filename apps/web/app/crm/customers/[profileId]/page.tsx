@@ -65,29 +65,6 @@ export default function CrmCustomerDetailPage() {
       setLoading(true);
       const data = await apiClient.getCrmCustomerDetail(profileId);
       setDetail(data);
-      profileForm.setFieldsValue({
-        contactName: data.contactName,
-        phone: data.phone,
-        email: data.email,
-        customerType: data.customerType,
-        status: data.status,
-        source: data.source,
-        responsibleId: data.responsibleId,
-        generalNotes: data.generalNotes,
-        nextFollowUpAt: data.nextFollowUpAt ? dayjs(data.nextFollowUpAt) : null,
-      });
-      if (data.opportunity) {
-        opportunityForm.setFieldsValue({
-          stage: data.opportunity.stage,
-          estimatedValue: data.opportunity.estimatedValue,
-          expectedClosingDate: data.opportunity.expectedClosingDate
-            ? dayjs(data.opportunity.expectedClosingDate)
-            : null,
-          notes: data.opportunity.notes,
-        });
-      } else {
-        opportunityForm.resetFields();
-      }
     } catch (error) {
       message.error("Error al cargar el cliente");
       console.error(error);
@@ -130,7 +107,13 @@ export default function CrmCustomerDetailPage() {
     try {
       const raw = values.estimatedValue;
       const estimatedValue =
-        raw !== undefined && raw !== null && raw !== "" ? (typeof raw === "number" ? raw : Number(raw)) : undefined;
+        raw === undefined || raw === null
+          ? undefined
+          : typeof raw === "number"
+            ? raw
+            : raw === ""
+              ? undefined
+              : Number(raw);
       const payload: UpdateCustomerOpportunityRequest = {
         stage: values.stage,
         notes: values.notes,
@@ -282,19 +265,7 @@ export default function CrmCustomerDetailPage() {
                     type="primary"
                     size="small"
                     icon={detail.opportunity ? <EditOutlined /> : <PlusOutlined />}
-                    onClick={() => {
-                      if (detail.opportunity) {
-                        opportunityForm.setFieldsValue({
-                          stage: detail.opportunity.stage,
-                          estimatedValue: detail.opportunity.estimatedValue,
-                          expectedClosingDate: detail.opportunity.expectedClosingDate
-                            ? dayjs(detail.opportunity.expectedClosingDate)
-                            : null,
-                          notes: detail.opportunity.notes,
-                        });
-                      } else opportunityForm.resetFields();
-                      setEditOpportunityOpen(true);
-                    }}
+                    onClick={() => setEditOpportunityOpen(true)}
                   >
                     {detail.opportunity ? "Editar" : "Crear"} oportunidad
                   </Button>
@@ -329,8 +300,21 @@ export default function CrmCustomerDetailPage() {
         onOk={() => profileForm.submit()}
         okText="Guardar"
         width={500}
-        forceRender
-        destroyOnClose={false}
+        destroyOnClose
+        afterOpenChange={(open) => {
+          if (!open || !detail) return;
+          profileForm.setFieldsValue({
+            contactName: detail.contactName,
+            phone: detail.phone,
+            email: detail.email,
+            customerType: detail.customerType,
+            status: detail.status,
+            source: detail.source,
+            responsibleId: detail.responsibleId,
+            generalNotes: detail.generalNotes,
+            nextFollowUpAt: detail.nextFollowUpAt ? dayjs(detail.nextFollowUpAt) : null,
+          });
+        }}
       >
         <Form form={profileForm} layout="vertical" onFinish={handleUpdateProfile}>
           <Form.Item name="contactName" label="Persona de contacto (opcional)">
@@ -380,8 +364,22 @@ export default function CrmCustomerDetailPage() {
         onOk={() => opportunityForm.submit()}
         okText="Guardar"
         width={500}
-        forceRender
-        destroyOnClose={false}
+        destroyOnClose
+        afterOpenChange={(open) => {
+          if (!open || !detail) return;
+          if (detail.opportunity) {
+            opportunityForm.setFieldsValue({
+              stage: detail.opportunity.stage,
+              estimatedValue: detail.opportunity.estimatedValue,
+              expectedClosingDate: detail.opportunity.expectedClosingDate
+                ? dayjs(detail.opportunity.expectedClosingDate)
+                : null,
+              notes: detail.opportunity.notes,
+            });
+          } else {
+            opportunityForm.resetFields();
+          }
+        }}
       >
         <Form form={opportunityForm} layout="vertical" onFinish={handleUpsertOpportunity}>
           <Form.Item name="stage" label="Etapa">
@@ -406,15 +404,14 @@ export default function CrmCustomerDetailPage() {
         onOk={() => interactionForm.submit()}
         okText="Agregar"
         width={500}
-        forceRender
-        destroyOnClose={false}
+        destroyOnClose
+        afterOpenChange={(open) => {
+          if (!open) return;
+          interactionForm.resetFields();
+          interactionForm.setFieldsValue({ date: dayjs() });
+        }}
       >
-        <Form
-          form={interactionForm}
-          layout="vertical"
-          onFinish={handleAddInteraction}
-          initialValues={{ date: dayjs() }}
-        >
+        <Form form={interactionForm} layout="vertical" onFinish={handleAddInteraction}>
           <Form.Item name="channel" label="Medio de contacto">
             <Select options={CHANNEL_OPTIONS} allowClear />
           </Form.Item>
