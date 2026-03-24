@@ -7,6 +7,46 @@ import { CustomerService } from "../customer/customer.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCrmCustomerDto } from "./dto/create-crm-customer.dto";
 
+/** Coincidencias para el filtro del listado (UI solo ofrece Empresa / Particular; en DB suele haber texto libre del Excel). */
+function customerTypeProfileClause(filter: string): Record<string, unknown> {
+  const key = filter.trim().toLowerCase();
+  const has = (substring: string) => ({ customerType: { contains: substring, mode: "insensitive" as const } });
+
+  if (key === "empresa") {
+    return {
+      OR: [
+        has("empresa"),
+        has("b2b"),
+        has("distribuidor"),
+        has("mayorista"),
+        has("comercial"),
+        has("sociedad"),
+        has("srl"),
+        has("s.r.l"),
+        has("s.a."),
+        has("s.a"),
+        has("compañía"),
+        has("compania"),
+      ],
+    };
+  }
+  if (key === "particular") {
+    return {
+      OR: [
+        has("minorista"),
+        has("particular"),
+        has("b2c"),
+        has("consumidor"),
+        has("hogar"),
+        has("física"),
+        has("fisica"),
+        has("individual"),
+      ],
+    };
+  }
+  return has(filter);
+}
+
 export interface CrmCustomerListItem {
   /** ID del perfil CRM (null si el cliente aún no tiene perfil) */
   profileId: string | null;
@@ -46,39 +86,47 @@ export class CrmService {
   ): Promise<PaginatedResponse<CrmCustomerListItem>> {
     const skip = (page - 1) * limit;
 
+    const t = (s?: string) => {
+      const x = s?.trim();
+      return x ? x : undefined;
+    };
+    const searchTrim = t(search);
+    const statusTrim = t(status);
+    const sourceTrim = t(source);
+    const customerTypeTrim = t(customerType);
+    const responsibleTrim = t(responsibleId);
+
     const where: any = {};
 
     const or: any[] = [];
-    if (search) {
-      const trimmed = search.trim();
-      if (trimmed) {
-        or.push({ name: { contains: trimmed, mode: "insensitive" } });
-        or.push({ profile: { is: { contactName: { contains: trimmed, mode: "insensitive" } } } });
-        or.push({ profile: { is: { email: { contains: trimmed, mode: "insensitive" } } } });
-        or.push({ profile: { is: { phone: { contains: trimmed, mode: "insensitive" } } } });
-        or.push({ profile: { is: { source: { contains: trimmed, mode: "insensitive" } } } });
-        or.push({ profile: { is: { status: { contains: trimmed, mode: "insensitive" } } } });
-      }
+    if (searchTrim) {
+      or.push({ name: { contains: searchTrim, mode: "insensitive" } });
+      or.push({ profile: { is: { contactName: { contains: searchTrim, mode: "insensitive" } } } });
+      or.push({ profile: { is: { email: { contains: searchTrim, mode: "insensitive" } } } });
+      or.push({ profile: { is: { phone: { contains: searchTrim, mode: "insensitive" } } } });
+      or.push({ profile: { is: { source: { contains: searchTrim, mode: "insensitive" } } } });
+      or.push({ profile: { is: { status: { contains: searchTrim, mode: "insensitive" } } } });
     }
     if (or.length) {
-      where.OR = or;
+      where.AND = [...(where.AND ?? []), { OR: or }];
     }
 
-    const profileWhere: any = {};
-    if (status) {
-      profileWhere.status = { equals: status, mode: "insensitive" };
+    const profileParts: Record<string, unknown>[] = [];
+    if (statusTrim) {
+      profileParts.push({ status: { contains: statusTrim, mode: "insensitive" } });
     }
-    if (source) {
-      profileWhere.source = { equals: source, mode: "insensitive" };
+    if (sourceTrim) {
+      profileParts.push({ source: { contains: sourceTrim, mode: "insensitive" } });
     }
-    if (customerType) {
-      profileWhere.customerType = { equals: customerType, mode: "insensitive" };
+    if (customerTypeTrim) {
+      profileParts.push(customerTypeProfileClause(customerTypeTrim));
     }
-    if (responsibleId) {
-      profileWhere.responsibleId = responsibleId;
+    if (responsibleTrim) {
+      profileParts.push({ responsibleId: responsibleTrim });
     }
-    if (Object.keys(profileWhere).length > 0) {
-      where.profile = { is: profileWhere };
+    if (profileParts.length > 0) {
+      const profileIs = profileParts.length === 1 ? profileParts[0] : { AND: profileParts };
+      where.AND = [...(where.AND ?? []), { profile: { is: profileIs } }];
     }
 
     const [customers, total] = await Promise.all([
