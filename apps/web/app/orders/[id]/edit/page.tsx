@@ -331,7 +331,7 @@ function OrderEditPageContent({ id }: { id: string }) {
               style={{ width: "100%" }}
               options={[
                 { label: "Efectivo", value: PaymentMethod.CASH },
-                { label: "Tarjeta/Transferencia", value: PaymentMethod.CARD },
+                { label: "Transferencia", value: PaymentMethod.CARD },
               ]}
             />
           </div>

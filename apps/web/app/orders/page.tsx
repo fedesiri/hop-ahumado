@@ -344,7 +344,7 @@ function OrdersContent() {
                   title: "Método",
                   dataIndex: "method",
                   key: "method",
-                  render: (v) => (v === "CASH" ? "Efectivo" : "Tarjeta"),
+                  render: (v) => (v === "CASH" ? "Efectivo" : "Transferencia"),
                 },
                 {
                   title: "Monto",

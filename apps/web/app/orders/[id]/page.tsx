@@ -134,7 +134,7 @@ function OrderDetailContent({ id }: { id: string }) {
             title: "Método",
             dataIndex: "method",
             key: "method",
-            render: (v: string) => (v === "CASH" ? "Efectivo" : "Tarjeta"),
+            render: (v: string) => (v === "CASH" ? "Efectivo" : "Transferencia"),
           },
           {
             title: "Monto",

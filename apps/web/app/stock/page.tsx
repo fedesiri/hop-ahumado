@@ -164,7 +164,7 @@ function StockContent() {
         const productsTotalPaid = productsCashAmount + productsCardAmount;
 
         if (productsTotalPaid <= 0) {
-          message.error("Para una entrada de stock, informá el pago de los productos (efectivo y/o tarjeta).");
+          message.error("Para una entrada de stock, informá el pago de los productos (efectivo y/o transferencia).");
           return;
         }
 
@@ -421,17 +421,17 @@ function StockContent() {
                     style={{ width: "100%" }}
                   />
                 </Form.Item>
-                <Form.Item name="productsCardAmount" label="Productos - Tarjeta" rules={[{ required: false }]}>
+                <Form.Item name="productsCardAmount" label="Productos - Transferencia" rules={[{ required: false }]}>
                   <InputNumber
                     min={0}
                     step={0.01}
                     precision={2}
-                    placeholder="Ingresá monto en tarjeta"
+                    placeholder="Ingresá monto por transferencia"
                     style={{ width: "100%" }}
                   />
                 </Form.Item>
                 <p style={{ margin: "8px 0 0 0", color: "#9ca3af" }}>
-                  El total de efectivo + tarjeta debe coincidir con el costo calculado.
+                  El total de efectivo + transferencia debe coincidir con el costo calculado.
                 </p>
               </div>
 
@@ -451,7 +451,7 @@ function StockContent() {
                 >
                   <span>Concepto</span>
                   <span>Efectivo</span>
-                  <span>Tarjeta</span>
+                  <span>Transferencia</span>
                   <span />
                 </div>
                 {extraExpenseRows.map((row, index) => (
@@ -487,7 +487,7 @@ function StockContent() {
                       }}
                     />
                     <InputNumber
-                      placeholder="Tarjeta"
+                      placeholder="Transferencia"
                       min={0}
                       step={0.01}
                       precision={2}

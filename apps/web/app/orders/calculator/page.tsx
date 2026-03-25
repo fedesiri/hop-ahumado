@@ -4,11 +4,11 @@ import { AppLayout } from "@/components/app-layout";
 import { OrderCalculator } from "@/components/order-calculator/order-calculator";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import dayjs, { type Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { CreateOrderRequest, Customer, Price, Product } from "@/lib/types";
 import { PaymentMethod } from "@/lib/types";
-import dayjs, { type Dayjs } from "@/lib/dayjs";
 import { Alert, App, Button, DatePicker, Modal, Select, Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -270,7 +270,7 @@ function OrderCalculatorPageContent() {
               style={{ width: "100%" }}
               options={[
                 { label: "Efectivo", value: PaymentMethod.CASH },
-                { label: "Tarjeta/Transferencia", value: PaymentMethod.CARD },
+                { label: "Transferencia", value: PaymentMethod.CARD },
               ]}
             />
           </div>

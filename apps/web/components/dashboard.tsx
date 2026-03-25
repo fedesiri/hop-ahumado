@@ -71,7 +71,7 @@ export function Dashboard() {
         return sum + payments.filter((p) => p.method === "CARD").reduce((ps, p) => ps + Number(p.amount ?? 0), 0);
       }, 0);
 
-      // Egresos (payments CASH/CARD desde expenses)
+      // Egresos (efectivo / transferencia desde expenses; CARD = transferencia)
       page = 1;
       let expensesRes = await apiClient.getExpenses(page, limit);
       let allExpenses = [...expensesRes.data];
@@ -359,7 +359,7 @@ export function Dashboard() {
             </p>
           </div>
           <div>
-            <p style={{ color: "#ffffff", margin: 0, fontWeight: 600 }}>Tarjeta</p>
+            <p style={{ color: "#ffffff", margin: 0, fontWeight: 600 }}>Transferencia</p>
             <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
               Ingresos: <span style={{ color: "#22c55e" }}>{formatCurrency(stats.incomeCard)}</span>
             </p>

@@ -127,7 +127,7 @@ function ExpensesContent() {
   const handleDeleteGroup = (groupId: string) => {
     modal.confirm({
       title: "Confirmar eliminación",
-      content: "¿Eliminar este egreso? (se borrarán también sus splits CASH/CARD)",
+      content: "¿Eliminar este egreso? (se borrarán también sus splits en efectivo y transferencia)",
       okText: "Eliminar",
       cancelText: "Cancelar",
       onOk: async () => {
@@ -163,7 +163,7 @@ function ExpensesContent() {
       render: (v: number) => formatCurrency(v),
     },
     {
-      title: "Tarjeta",
+      title: "Transferencia",
       dataIndex: "cardAmount",
       key: "cardAmount",
       render: (v: number) => formatCurrency(v),
@@ -220,7 +220,7 @@ function ExpensesContent() {
             <InputNumber min={0} step={0.01} placeholder="0" />
           </Form.Item>
 
-          <Form.Item name="cardAmount" label="Tarjeta" rules={[{ required: false }]}>
+          <Form.Item name="cardAmount" label="Transferencia" rules={[{ required: false }]}>
             <InputNumber min={0} step={0.01} placeholder="0" />
           </Form.Item>
         </Form>
