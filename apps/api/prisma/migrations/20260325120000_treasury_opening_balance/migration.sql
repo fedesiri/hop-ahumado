@@ -1,0 +1,2 @@
+-- Placeholder migration file to restore local migration history integrity.
+-- This migration directory existed without migration.sql.

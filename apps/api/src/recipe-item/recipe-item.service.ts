@@ -1,13 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { RecipeItem } from "@prisma/client";
+import { ProductUnit, RecipeItem } from "@prisma/client";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateRecipeItemDto } from "./dto/create-recipe-item.dto";
 import { UpdateRecipeItemDto } from "./dto/update-recipe-item.dto";
 
 type RecipeItemWithRelations = RecipeItem & {
-  product: { id: string; name: string };
-  ingredient: { id: string; name: string };
+  product: { id: string; name: string; unit: ProductUnit };
+  ingredient: { id: string; name: string; unit: ProductUnit };
 };
 
 @Injectable()
@@ -29,8 +29,8 @@ export class RecipeItemService {
         quantity: dto.quantity,
       },
       include: {
-        product: { select: { id: true, name: true } },
-        ingredient: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true, unit: true } },
+        ingredient: { select: { id: true, name: true, unit: true } },
       },
     });
   }
@@ -47,8 +47,8 @@ export class RecipeItemService {
         where,
         orderBy: [{ productId: "asc" }, { ingredientId: "asc" }],
         include: {
-          product: { select: { id: true, name: true } },
-          ingredient: { select: { id: true, name: true } },
+          product: { select: { id: true, name: true, unit: true } },
+          ingredient: { select: { id: true, name: true, unit: true } },
         },
         skip,
         take: limit,
@@ -78,8 +78,8 @@ export class RecipeItemService {
       where: { id },
       data: { ...(dto.quantity !== undefined && { quantity: dto.quantity }) },
       include: {
-        product: { select: { id: true, name: true } },
-        ingredient: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true, unit: true } },
+        ingredient: { select: { id: true, name: true, unit: true } },
       },
     });
   }
@@ -89,8 +89,8 @@ export class RecipeItemService {
     return this.prisma.recipeItem.delete({
       where: { id },
       include: {
-        product: { select: { id: true, name: true } },
-        ingredient: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true, unit: true } },
+        ingredient: { select: { id: true, name: true, unit: true } },
       },
     });
   }

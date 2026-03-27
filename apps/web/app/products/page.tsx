@@ -4,18 +4,29 @@ import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
-import type { Category, CreateProductRequest, PaginationMeta, Product, UpdateProductRequest } from "@/lib/types";
+import {
+  ProductUnit,
+  type Category,
+  type CreateCostRequest,
+  type CreatePriceRequest,
+  type CreateProductRequest,
+  type PaginationMeta,
+  type Product,
+  type UpdateProductRequest,
+} from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   Alert,
   App,
   Button,
   Card,
+  Col,
   Empty,
   Form,
   Input,
   InputNumber,
   Modal,
+  Row,
   Select,
   Space,
   Spin,
@@ -23,6 +34,22 @@ import {
   Tag,
 } from "antd";
 import { useEffect, useState } from "react";
+
+const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
+  { label: "Unidad", value: ProductUnit.UNIT },
+  { label: "Kg", value: ProductUnit.KG },
+  { label: "Gr", value: ProductUnit.G },
+  { label: "Litro", value: ProductUnit.L },
+  { label: "Ml", value: ProductUnit.ML },
+];
+
+const UNIT_SHORT_LABEL: Record<ProductUnit, string> = {
+  [ProductUnit.UNIT]: "un",
+  [ProductUnit.KG]: "kg",
+  [ProductUnit.G]: "gr",
+  [ProductUnit.L]: "l",
+  [ProductUnit.ML]: "ml",
+};
 
 export default function ProductsPage() {
   return (
@@ -93,6 +120,7 @@ function ProductsContent() {
     setEditingId(record.id);
     form.setFieldsValue({
       name: record.name,
+      unit: record.unit,
       description: record.description,
       categoryId: record.categoryId,
       sku: record.sku,
@@ -124,6 +152,7 @@ function ProductsContent() {
     try {
       const data: CreateProductRequest = {
         name: values.name,
+        unit: values.unit,
         description: values.description,
         categoryId: values.categoryId,
         sku: values.sku,
@@ -135,7 +164,29 @@ function ProductsContent() {
         await apiClient.updateProduct(editingId, data as UpdateProductRequest);
         message.success("Producto actualizado");
       } else {
-        await apiClient.createProduct(data);
+        const created = await apiClient.createProduct(data);
+
+        // Costo: para que el producto sea utilizable en cálculos/costos asociados.
+        const costValue = values.costValue as number | undefined;
+        if (typeof costValue === "number" && Number.isFinite(costValue)) {
+          const costData: CreateCostRequest = { productId: created.id, value: costValue };
+          await apiClient.createCost(costData);
+        }
+
+        // Precios: opcionales (mayorista/minorista/fabrica).
+        const priceFields: { field: string; description: "mayorista" | "minorista" | "fabrica" }[] = [
+          { field: "priceMayorista", description: "mayorista" },
+          { field: "priceMinorista", description: "minorista" },
+          { field: "priceFabrica", description: "fabrica" },
+        ];
+
+        for (const pf of priceFields) {
+          const raw = values[pf.field] as number | undefined;
+          if (typeof raw !== "number" || !Number.isFinite(raw)) continue;
+          const priceData: CreatePriceRequest = { productId: created.id, value: raw, description: pf.description };
+          await apiClient.createPrice(priceData);
+        }
+
         message.success("Producto creado");
       }
       setModalOpen(false);
@@ -167,9 +218,13 @@ function ProductsContent() {
       title: "Stock",
       dataIndex: "stock",
       key: "stock",
-      render: (stock: number) => {
+      render: (stock: number, record: Product) => {
         const n = Number(stock);
-        return <Tag color={n < 5 ? "red" : n < 10 ? "orange" : "green"}>{formatQuantity(stock)}</Tag>;
+        return (
+          <Tag color={n < 5 ? "red" : n < 10 ? "orange" : "green"}>
+            {formatQuantity(stock)} {UNIT_SHORT_LABEL[record.unit] ?? ""}
+          </Tag>
+        );
       },
     },
     {
@@ -290,6 +345,10 @@ function ProductsContent() {
             <Input placeholder="Nombre del producto" />
           </Form.Item>
 
+          <Form.Item name="unit" label="Unidad de medida" initialValue={ProductUnit.UNIT}>
+            <Select placeholder="Seleccioná unidad" options={PRODUCT_UNIT_OPTIONS} />
+          </Form.Item>
+
           <Form.Item name="description" label="Descripción">
             <Input.TextArea placeholder="Descripción" rows={3} />
           </Form.Item>
@@ -316,6 +375,41 @@ function ProductsContent() {
           >
             <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 12 o 10,5" style={{ width: "100%" }} />
           </Form.Item>
+
+          {!editingId && (
+            <div style={{ marginTop: 16, padding: 12, borderRadius: 8, border: "1px solid #2d3748" }}>
+              <div style={{ marginBottom: 12, color: "#ffffff", fontWeight: 700 }}>Costo y precios</div>
+
+              <Form.Item
+                name="costValue"
+                label="Costo del producto (por unidad)"
+                rules={[{ required: true, message: "El costo es requerido" }]}
+              >
+                <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1200" style={{ width: "100%" }} />
+              </Form.Item>
+
+              <Row gutter={12}>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="priceMayorista" label="Precio mayorista (opcional)">
+                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1500" style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="priceMinorista" label="Precio minorista (opcional)">
+                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1800" style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item name="priceFabrica" label="Precio fábrica (opcional)">
+                <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1300" style={{ width: "100%" }} />
+              </Form.Item>
+
+              <div style={{ color: "#9ca3af", lineHeight: 1.5 }}>
+                Si dejás algún precio vacío, podés cargarlo después en la pantalla de <strong>Precios</strong>.
+              </div>
+            </div>
+          )}
         </Form>
       </Modal>
     </div>

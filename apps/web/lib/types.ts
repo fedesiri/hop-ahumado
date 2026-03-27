@@ -33,6 +33,14 @@ export enum StockMovementType {
   ADJUSTMENT = "ADJUSTMENT",
 }
 
+export enum ProductUnit {
+  UNIT = "UNIT",
+  KG = "KG",
+  G = "G",
+  L = "L",
+  ML = "ML",
+}
+
 // Entities
 export interface Category {
   id: string;
@@ -42,6 +50,7 @@ export interface Category {
 export interface Product {
   id: string;
   name: string;
+  unit: ProductUnit;
   description?: string | null;
   categoryId?: string | null;
   sku?: string | null;
@@ -230,6 +239,7 @@ export interface UpdateCategoryRequest {
 
 export interface CreateProductRequest {
   name: string;
+  unit?: ProductUnit;
   description?: string;
   categoryId?: string;
   sku?: string;
@@ -240,6 +250,7 @@ export interface CreateProductRequest {
 
 export interface UpdateProductRequest {
   name?: string;
+  unit?: ProductUnit;
   description?: string;
   categoryId?: string;
   sku?: string;

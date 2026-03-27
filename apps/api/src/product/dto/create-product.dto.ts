@@ -1,5 +1,7 @@
 import { Type } from "class-transformer";
-import { IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from "class-validator";
+import { IsIn, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from "class-validator";
+
+const PRODUCT_UNITS = ["UNIT", "KG", "G", "L", "ML"] as const;
 
 export class CreateProductDto {
   @IsString()
@@ -29,6 +31,10 @@ export class CreateProductDto {
   @IsNumber({ maxDecimalPlaces: 4 }, { message: "stock debe ser un número" })
   @Min(0)
   stock?: number;
+
+  @IsOptional()
+  @IsIn(PRODUCT_UNITS, { message: `unit debe ser uno de: ${PRODUCT_UNITS.join(", ")}` })
+  unit?: (typeof PRODUCT_UNITS)[number];
 
   @IsOptional()
   @IsString()

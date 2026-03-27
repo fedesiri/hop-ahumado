@@ -18,6 +18,14 @@ enum StockMovementType {
   ADJUSTMENT
 }
 
+enum ProductUnit {
+  UNIT
+  KG
+  G
+  L
+  ML
+}
+
 enum InteractionChannel {
   CALL
   EMAIL
@@ -102,15 +110,16 @@ model Category {
 }
 
 model Product {
-  id               String    @id @default(uuid())
+  id               String      @id @default(uuid())
   name             String
+  unit             ProductUnit @default(UNIT)
   description      String?
   categoryId       String?
-  sku              String?   @unique
+  sku              String?     @unique
   barcode          String?
-  stock            Float     @default(0)
+  stock            Float       @default(0)
   deactivationDate DateTime?
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime    @default(now())
 
   category       Category?       @relation(fields: [categoryId], references: [id])
   prices         Price[]
