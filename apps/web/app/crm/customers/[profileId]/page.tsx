@@ -85,8 +85,10 @@ export default function CrmCustomerDetailPage() {
 
   const handleUpdateProfile = async (values: UpdateCustomerProfileRequest & { nextFollowUpAt?: Dayjs | null }) => {
     try {
+      const normalizedEmail = values.email?.trim();
       await apiClient.updateCrmCustomerProfile(profileId, {
         ...values,
+        email: normalizedEmail || undefined,
         nextFollowUpAt: values.nextFollowUpAt ? values.nextFollowUpAt.toISOString() : undefined,
       });
       message.success("Perfil actualizado");

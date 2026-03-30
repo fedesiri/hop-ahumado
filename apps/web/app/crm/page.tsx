@@ -162,10 +162,11 @@ function CrmContent() {
 
   const handleSubmit = async (values: CreateCrmCustomerRequest & { nextFollowUpAt?: Dayjs | null }) => {
     try {
+      const normalizedEmail = values.email?.trim();
       const profilePayload = {
         contactName: values.contactName,
         phone: values.phone,
-        email: values.email,
+        email: normalizedEmail || undefined,
         customerType: values.customerType,
         status: values.status,
         source: values.source,

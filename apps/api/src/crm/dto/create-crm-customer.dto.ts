@@ -1,3 +1,4 @@
+import { Transform } from "class-transformer";
 import { IsDateString, IsEmail, IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
 
 export class CreateCrmCustomerDto {
@@ -16,6 +17,13 @@ export class CreateCrmCustomerDto {
   phone?: string;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed === "" ? undefined : trimmed;
+    }
+    return value;
+  })
   @IsEmail()
   @MaxLength(255)
   email?: string;
