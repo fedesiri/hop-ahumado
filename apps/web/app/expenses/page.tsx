@@ -179,7 +179,14 @@ function ExpensesContent() {
       width: 120,
       render: (_: unknown, record: ExpenseGroup) => (
         <Space>
-          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDeleteGroup(record.groupId)} />
+          <Button
+            danger
+            size="small"
+            icon={<DeleteOutlined />}
+            title="Eliminar"
+            aria-label="Eliminar"
+            onClick={() => handleDeleteGroup(record.groupId)}
+          />
         </Space>
       ),
     },

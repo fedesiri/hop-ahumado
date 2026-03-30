@@ -155,16 +155,43 @@ function OrdersContent() {
         record.deliveryDate ? new Date(record.deliveryDate).toLocaleDateString("es-AR") : "—",
     },
     {
+      title: "Stock desde",
+      key: "fulfillmentLocation",
+      width: 140,
+      ellipsis: true,
+      render: (_: unknown, record: Order) => record.fulfillmentLocation?.name ?? "—",
+    },
+    {
       title: "Acciones",
       key: "actions",
-      width: 200,
+      width: 168,
       render: (_: any, record: Order) => (
         <Space>
-          <Button type="primary" size="small" icon={<EyeOutlined />} onClick={() => handleViewOrder(record)} />
+          <Button
+            type="default"
+            size="small"
+            icon={<EyeOutlined />}
+            title="Ver detalle"
+            aria-label="Ver detalle"
+            onClick={() => handleViewOrder(record)}
+          />
           <Link href={`/orders/${record.id}/edit`}>
-            <Button type="default" size="small" icon={<EditOutlined />} title="Editar ítems y stock" />
+            <Button
+              type="primary"
+              size="small"
+              icon={<EditOutlined />}
+              title="Editar ítems y stock"
+              aria-label="Editar ítems y stock"
+            />
           </Link>
-          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
+          <Button
+            danger
+            size="small"
+            icon={<DeleteOutlined />}
+            title="Eliminar"
+            aria-label="Eliminar"
+            onClick={() => handleDelete(record.id)}
+          />
         </Space>
       ),
     },
@@ -306,6 +333,9 @@ function OrdersContent() {
                 <Col span={12}>
                   <strong>Entrega:</strong>{" "}
                   {selectedOrder.deliveryDate ? new Date(selectedOrder.deliveryDate).toLocaleDateString("es-AR") : "—"}
+                </Col>
+                <Col span={12}>
+                  <strong>Ubicación de stock:</strong> {selectedOrder.fulfillmentLocation?.name ?? "—"}
                 </Col>
               </Row>
             </Card>

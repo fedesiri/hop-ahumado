@@ -5,7 +5,7 @@ import type { Dayjs } from "@/lib/dayjs";
 import dayjs from "@/lib/dayjs";
 import type { CreateCrmCustomerRequest, CrmCustomerListItem, PaginationMeta, User } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
-import { EditOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
+import { EditOutlined, EyeOutlined, FormOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag } from "antd";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -248,28 +248,29 @@ function CrmContent() {
       render: (v: string | null) => (v ? new Date(v).toLocaleDateString("es-AR") : "—"),
     },
     {
-      title: "",
+      title: "Acciones",
       key: "actions",
+      width: 120,
       render: (_: unknown, record: CrmCustomerListItem) => (
-        <Space size="small">
+        <Space>
           <Button
-            type="link"
+            type="primary"
             size="small"
             icon={<EditOutlined />}
+            title="Editar"
+            aria-label="Editar"
             onClick={() => handleEdit(record)}
             loading={loadingDetail && editingRecord?.customerId === record.customerId}
-          >
-            Editar
-          </Button>
+          />
           <Button
-            type="link"
+            type="default"
             size="small"
-            icon={<EyeOutlined />}
+            icon={record.profileId ? <EyeOutlined /> : <FormOutlined />}
+            title={record.profileId ? "Ver cliente" : "Completar perfil"}
+            aria-label={record.profileId ? "Ver cliente" : "Completar perfil"}
             onClick={() => goToCustomer(record)}
             loading={creatingProfileForId === record.customerId}
-          >
-            {record.profileId ? "Ver" : "Completar perfil"}
-          </Button>
+          />
         </Space>
       ),
     },

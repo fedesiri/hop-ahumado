@@ -22,7 +22,6 @@ import {
   Spin,
   Table,
   Tag,
-  Tooltip,
 } from "antd";
 import { useCallback, useEffect, useState } from "react";
 
@@ -240,51 +239,44 @@ function StockLocationsContent() {
             {
               title: "Acciones",
               key: "actions",
-              width: 146,
+              width: 200,
               render: (_: unknown, record: StockLocation) => (
-                <Space size={4}>
-                  <Tooltip title="Ver stock">
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<EyeOutlined />}
-                      onClick={() => openView(record)}
-                      aria-label="Ver stock"
-                    />
-                  </Tooltip>
-                  <Tooltip title="Editar">
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<EditOutlined />}
-                      onClick={() => openEdit(record)}
-                      aria-label="Editar"
-                    />
-                  </Tooltip>
-                  <Tooltip title="Traspasar todo el stock">
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<SwapOutlined />}
-                      onClick={() => openTransferAll(record)}
-                      disabled={locations.length < 2}
-                      aria-label="Traspasar todo el stock"
-                    />
-                  </Tooltip>
-                  <Tooltip title="Eliminar">
-                    <span>
-                      <Popconfirm
-                        title="¿Eliminar esta ubicación?"
-                        description="Solo se puede si no hay stock. Los movimientos y pedidos viejos quedarán sin ubicación asociada."
-                        onConfirm={() => handleDelete(record)}
-                        okText="Sí, eliminar"
-                        cancelText="Cancelar"
-                        okButtonProps={{ danger: true }}
-                      >
-                        <Button type="text" size="small" danger icon={<DeleteOutlined />} aria-label="Eliminar" />
-                      </Popconfirm>
-                    </span>
-                  </Tooltip>
+                <Space>
+                  <Button
+                    type="default"
+                    size="small"
+                    icon={<EyeOutlined />}
+                    title="Ver stock"
+                    aria-label="Ver stock"
+                    onClick={() => openView(record)}
+                  />
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<EditOutlined />}
+                    title="Editar"
+                    aria-label="Editar"
+                    onClick={() => openEdit(record)}
+                  />
+                  <Button
+                    type="default"
+                    size="small"
+                    icon={<SwapOutlined />}
+                    title="Traspasar todo el stock"
+                    aria-label="Traspasar todo el stock"
+                    disabled={locations.length < 2}
+                    onClick={() => openTransferAll(record)}
+                  />
+                  <Popconfirm
+                    title="¿Eliminar esta ubicación?"
+                    description="Solo se puede si no hay stock. Los movimientos y pedidos viejos quedarán sin ubicación asociada."
+                    onConfirm={() => handleDelete(record)}
+                    okText="Sí, eliminar"
+                    cancelText="Cancelar"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button danger size="small" icon={<DeleteOutlined />} title="Eliminar" aria-label="Eliminar" />
+                  </Popconfirm>
                 </Space>
               ),
             },

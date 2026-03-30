@@ -7,10 +7,11 @@ import {
   AlertOutlined,
   ApiOutlined,
   ArrowRightOutlined,
+  EyeOutlined,
   ReloadOutlined,
   ShoppingCartOutlined,
 } from "@ant-design/icons";
-import { Button, Card, Col, Empty, Modal, Result, Row, Spin, Statistic, Table, Tag } from "antd";
+import { Button, Card, Col, Empty, Modal, Result, Row, Space, Spin, Statistic, Table, Tag } from "antd";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -161,12 +162,19 @@ export function Dashboard() {
     {
       title: "Acciones",
       key: "actions",
+      width: 88,
       render: (_: any, record: Order) => (
-        <Link href={`/orders/${record.id}`}>
-          <Button type="link" size="small">
-            Ver
-          </Button>
-        </Link>
+        <Space>
+          <Link href={`/orders/${record.id}`}>
+            <Button
+              type="default"
+              size="small"
+              icon={<EyeOutlined />}
+              title="Ver orden"
+              aria-label="Ver orden"
+            />
+          </Link>
+        </Space>
       ),
     },
   ];
