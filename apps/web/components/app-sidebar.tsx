@@ -54,7 +54,15 @@ const menuItems: MenuProps["items"] = [
   { key: "/costs", icon: <DollarOutlined />, label: "Costos" },
   { key: "/expenses", icon: <DollarOutlined />, label: "Egresos" },
   { key: "divider-3", type: "divider" },
-  { key: "/stock", icon: <DatabaseOutlined />, label: "Stock" },
+  {
+    key: "stock",
+    icon: <DatabaseOutlined />,
+    label: "Stock",
+    children: [
+      { key: "/stock", label: "Movimientos" },
+      { key: "/stock/locations", label: "Ubicaciones" },
+    ],
+  },
   { key: "/recipes", icon: <BgColorsOutlined />, label: "Recetas" },
   { key: "/users", icon: <UserOutlined />, label: "Usuarios" },
 ];
@@ -67,7 +75,11 @@ export function AppSidebar({ collapsed = false, onCollapsedChange, isMobile = fa
 
   const pathBasedOpenKeys = useMemo(
     () =>
-      [pathname?.startsWith("/crm") && "crm", pathname?.startsWith("/orders") && "orders"].filter(Boolean) as string[],
+      [
+        pathname?.startsWith("/crm") && "crm",
+        pathname?.startsWith("/orders") && "orders",
+        pathname?.startsWith("/stock") && "stock",
+      ].filter(Boolean) as string[],
     [pathname],
   );
 

@@ -8,7 +8,7 @@ import dayjs, { type Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import { inferPriceTypeFromOrderLines } from "@/lib/order-calculator/price-types";
-import type { Customer, Order, Price, Product } from "@/lib/types";
+import type { Customer, Order, Price, Product, StockLocation } from "@/lib/types";
 import { PaymentMethod } from "@/lib/types";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { Alert, App, Button, DatePicker, Modal, Select, Spin } from "antd";
@@ -47,6 +47,9 @@ function OrderEditPageContent({ id }: { id: string }) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [deliveryDate, setDeliveryDate] = useState<Dayjs | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
+  const [fulfillmentLocationId, setFulfillmentLocationId] = useState<string | null>(null);
+  const [balanceByProductId, setBalanceByProductId] = useState<Record<string, number>>({});
 
   const pricesByProductId = useMemo(() => {
     const map: Record<string, Price[]> = {};
@@ -82,14 +85,15 @@ function OrderEditPageContent({ id }: { id: string }) {
   }, [order, prices.length, pricesByProductId]);
 
   const productsGoingNegative = useMemo(() => {
-    if (!pendingOrder) return [];
+    if (!pendingOrder || !fulfillmentLocationId) return [];
     const productById = Object.fromEntries(products.map((p) => [p.id, p]));
     const result: { name: string; current: number; requested: number; after: number }[] = [];
     for (const item of pendingOrder.items) {
       const product = productById[item.productId];
       if (!product) continue;
       const released = oldQtyByProduct[item.productId] ?? 0;
-      const effective = product.stock + released;
+      const atLocation = balanceByProductId[item.productId] ?? 0;
+      const effective = atLocation + released;
       const after = effective - item.quantity;
       if (after < 0) {
         result.push({
@@ -101,7 +105,7 @@ function OrderEditPageContent({ id }: { id: string }) {
       }
     }
     return result;
-  }, [pendingOrder, products, oldQtyByProduct]);
+  }, [pendingOrder, products, oldQtyByProduct, fulfillmentLocationId, balanceByProductId]);
 
   const limit = 100;
 
@@ -153,6 +157,17 @@ function OrderEditPageContent({ id }: { id: string }) {
           allCustomers.push(...customersRes.data);
         }
         setCustomers(allCustomers);
+
+        try {
+          const locs = await apiClient.getStockLocations();
+          setStockLocations(locs);
+          const fromOrder = orderData.fulfillmentLocationId;
+          const def = fromOrder ?? locs.find((l) => l.isDefault)?.id ?? locs[0]?.id ?? null;
+          setFulfillmentLocationId(def);
+        } catch {
+          setStockLocations([]);
+          setFulfillmentLocationId(orderData.fulfillmentLocationId ?? null);
+        }
       } catch (e) {
         console.error(e);
         message.error("Error al cargar la orden o los datos");
@@ -165,10 +180,19 @@ function OrderEditPageContent({ id }: { id: string }) {
   }, [id, message, fetchProducts]);
 
   useEffect(() => {
-    if (confirmModalOpen && pendingOrder) {
-      fetchProducts();
-    }
-  }, [confirmModalOpen, pendingOrder, fetchProducts]);
+    if (!confirmModalOpen || !pendingOrder || !fulfillmentLocationId) return;
+    fetchProducts();
+    (async () => {
+      try {
+        const rows = await apiClient.getStockBalancesAtLocation(fulfillmentLocationId);
+        const map: Record<string, number> = {};
+        for (const r of rows) map[r.productId] = Number(r.quantity);
+        setBalanceByProductId(map);
+      } catch {
+        setBalanceByProductId({});
+      }
+    })();
+  }, [confirmModalOpen, pendingOrder, fulfillmentLocationId, fetchProducts]);
 
   const handleConfirmOrder = (
     items: { productId: string; quantity: number; price: number }[],
@@ -181,6 +205,10 @@ function OrderEditPageContent({ id }: { id: string }) {
 
   const handleSaveOrder = async () => {
     if (!pendingOrder || !order) return;
+    if (stockLocations.length > 0 && !fulfillmentLocationId) {
+      message.error("Elegí la ubicación de stock desde la cual descontar el pedido.");
+      return;
+    }
     const { items, total, customerId } = pendingOrder;
     setSubmitting(true);
     try {
@@ -189,6 +217,7 @@ function OrderEditPageContent({ id }: { id: string }) {
         userId: order.userId ?? user?.id ?? undefined,
         deliveryDate:
           deliveryDate?.toISOString() ?? (order.deliveryDate ? new Date(order.deliveryDate).toISOString() : undefined),
+        fulfillmentLocationId: fulfillmentLocationId ?? undefined,
         total,
         items: items.map((item) => ({
           productId: item.productId,
@@ -291,6 +320,20 @@ function OrderEditPageContent({ id }: { id: string }) {
                 Cliente: {customers.find((c) => c.id === pendingOrder.customerId)?.name ?? pendingOrder.customerId}
               </p>
             )}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
+                Ubicación de stock (desde dónde se descuenta)
+              </label>
+              <Select
+                style={{ width: "100%" }}
+                value={fulfillmentLocationId ?? undefined}
+                onChange={(v) => setFulfillmentLocationId(v)}
+                options={stockLocations.map((l) => ({
+                  label: l.isDefault ? `${l.name} (predeterminada)` : l.name,
+                  value: l.id,
+                }))}
+              />
+            </div>
             <div style={{ marginBottom: 12 }}>
               <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Fecha de entrega</label>
               <DatePicker

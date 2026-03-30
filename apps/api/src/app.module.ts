@@ -12,17 +12,20 @@ import { CustomerOpportunityModule } from "./customer-opportunity/customer-oppor
 import { CustomerProfileModule } from "./customer-profile/customer-profile.module";
 import { CustomerModule } from "./customer/customer.module";
 import { ExpenseModule } from "./expense/expense.module";
+import { InventoryModule } from "./inventory/inventory.module";
 import { OrderModule } from "./order/order.module";
 import { PriceModule } from "./price/price.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductModule } from "./product/product.module";
 import { RecipeItemModule } from "./recipe-item/recipe-item.module";
+import { StockLocationModule } from "./stock-location/stock-location.module";
 import { StockMovementModule } from "./stock-movement/stock-movement.module";
 import { UserModule } from "./user/user.module";
 
 @Module({
   imports: [
     PrismaModule,
+    InventoryModule,
     AuthModule,
     CategoryModule,
     ProductModule,
@@ -37,6 +40,7 @@ import { UserModule } from "./user/user.module";
     CostModule,
     ExpenseModule,
     StockMovementModule,
+    StockLocationModule,
     RecipeItemModule,
   ],
   controllers: [AppController],

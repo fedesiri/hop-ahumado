@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { Order, StockMovementType } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
+import { InventoryService } from "../inventory/inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
@@ -22,11 +23,15 @@ type OrderWithRelations = Order & {
   }>;
   customer: { id: string; name: string } | null;
   user: { id: string; name: string; email: string } | null;
+  fulfillmentLocation: { id: string; name: string } | null;
 };
 
 @Injectable()
 export class OrderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inventory: InventoryService,
+  ) {}
 
   async create(dto: CreateOrderDto) {
     if (dto.customerId) await this.validateCustomerExists(dto.customerId);
@@ -48,12 +53,15 @@ export class OrderService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const fulfillmentLocationId = dto.fulfillmentLocationId ?? (await this.inventory.getDefaultLocationId(tx));
+
       const order = await tx.order.create({
         data: {
           customerId: dto.customerId ?? undefined,
           userId: dto.userId ?? undefined,
           deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
           total: dto.total,
+          fulfillmentLocationId,
           orderItems: {
             create: dto.items.map((i) => ({
               productId: i.productId,
@@ -73,28 +81,35 @@ export class OrderService {
           payments: true,
           customer: { select: { id: true, name: true } },
           user: { select: { id: true, name: true, email: true } },
+          fulfillmentLocation: { select: { id: true, name: true } },
         },
       });
 
       // Descontar stock por cada ítem (se permite stock negativo: entregas parciales, se regulariza al cargar nuevo stock)
       for (const item of order.orderItems) {
         const product = item.product as { id: string; name: string; stock: number };
-        const newStock = product.stock - item.quantity;
+        await this.inventory.applyBalanceDelta(tx, product.id, fulfillmentLocationId, -item.quantity);
         await tx.stockMovement.create({
           data: {
             productId: product.id,
             quantity: item.quantity,
             type: StockMovementType.OUT,
             reason: `Orden ${order.id.slice(0, 8)}`,
+            locationId: fulfillmentLocationId,
           },
-        });
-        await tx.product.update({
-          where: { id: product.id },
-          data: { stock: newStock },
         });
       }
 
-      return order;
+      return tx.order.findUnique({
+        where: { id: order.id },
+        include: {
+          orderItems: { include: { product: { select: { id: true, name: true, stock: true } } } },
+          payments: true,
+          customer: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true, email: true } },
+          fulfillmentLocation: { select: { id: true, name: true } },
+        },
+      }) as Promise<OrderWithRelations>;
     });
   }
 
@@ -148,6 +163,7 @@ export class OrderService {
           payments: true,
           customer: { select: { id: true, name: true } },
           user: { select: { id: true, name: true, email: true } },
+          fulfillmentLocation: { select: { id: true, name: true } },
         },
         skip,
         take: limit,
@@ -165,6 +181,7 @@ export class OrderService {
         payments: true,
         customer: true,
         user: { select: { id: true, name: true, email: true } },
+        fulfillmentLocation: { select: { id: true, name: true } },
       },
     });
     if (!order) {
@@ -203,6 +220,7 @@ export class OrderService {
         payments: true,
         customer: { select: { id: true, name: true } },
         user: { select: { id: true, name: true, email: true } },
+        fulfillmentLocation: { select: { id: true, name: true } },
       },
     });
   }
@@ -237,6 +255,7 @@ export class OrderService {
       payments: true,
       customer: { select: { id: true, name: true } },
       user: { select: { id: true, name: true, email: true } },
+      fulfillmentLocation: { select: { id: true, name: true } },
     } as const;
 
     return this.prisma.$transaction(async (tx) => {
@@ -250,39 +269,39 @@ export class OrderService {
         throw new NotFoundException(`Orden con id "${id}" no encontrada`);
       }
 
+      const revertLocation = existing.fulfillmentLocationId ?? (await this.inventory.getDefaultLocationId(tx));
+
       for (const line of existing.orderItems) {
         const product = line.product as { id: string; stock: number };
+        await this.inventory.applyBalanceDelta(tx, product.id, revertLocation, line.quantity);
         await tx.stockMovement.create({
           data: {
             productId: product.id,
             quantity: line.quantity,
             type: StockMovementType.IN,
             reason: `Reversión edición orden ${id.slice(0, 8)}`,
+            locationId: revertLocation,
           },
         });
-        await tx.product.update({
-          where: { id: product.id },
-          data: { stock: { increment: line.quantity } },
-        });
       }
+
+      const newFulfillmentLocationId =
+        dto.fulfillmentLocationId ?? existing.fulfillmentLocationId ?? (await this.inventory.getDefaultLocationId(tx));
 
       for (const item of items) {
         const product = await tx.product.findUnique({ where: { id: item.productId } });
         if (!product) {
           throw new BadRequestException(`Producto con id "${item.productId}" no encontrado`);
         }
-        const newStock = product.stock - item.quantity;
+        await this.inventory.applyBalanceDelta(tx, item.productId, newFulfillmentLocationId, -item.quantity);
         await tx.stockMovement.create({
           data: {
             productId: item.productId,
             quantity: item.quantity,
             type: StockMovementType.OUT,
             reason: `Orden ${id.slice(0, 8)}`,
+            locationId: newFulfillmentLocationId,
           },
-        });
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: newStock },
         });
       }
 
@@ -290,6 +309,7 @@ export class OrderService {
         where: { id },
         data: {
           total,
+          fulfillmentLocationId: newFulfillmentLocationId,
           ...(dto.customerId !== undefined && { customerId: dto.customerId }),
           ...(dto.userId !== undefined && { userId: dto.userId }),
           ...(dto.deliveryDate !== undefined && {

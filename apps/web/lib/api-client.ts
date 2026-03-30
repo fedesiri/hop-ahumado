@@ -12,6 +12,7 @@ import type {
   CreatePriceRequest,
   CreateProductRequest,
   CreateRecipeItemRequest,
+  CreateStockLocationRequest,
   CreateStockMovementRequest,
   CreateUserRequest,
   CrmCustomerListItem,
@@ -27,7 +28,11 @@ import type {
   Price,
   Product,
   RecipeItem,
+  StockBalanceRow,
+  StockLocation,
   StockMovement,
+  TransferAllStockRequest,
+  TransferAllStockResult,
   UpdateCategoryRequest,
   UpdateCostRequest,
   UpdateCustomerInteractionRequest,
@@ -38,6 +43,7 @@ import type {
   UpdatePriceRequest,
   UpdateProductRequest,
   UpdateRecipeItemRequest,
+  UpdateStockLocationRequest,
   UpdateUserRequest,
   User,
 } from "./types";
@@ -436,6 +442,43 @@ export class ApiClient {
 
   async deleteExpenseGroup(groupId: string): Promise<void> {
     return this.request(`/expenses/group/${groupId}`, { method: "DELETE" });
+  }
+
+  // Stock locations (ubicaciones de inventario)
+  async getStockLocations(): Promise<StockLocation[]> {
+    return this.request("/stock-locations");
+  }
+
+  async createStockLocation(data: CreateStockLocationRequest): Promise<StockLocation> {
+    return this.request("/stock-locations", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getStockBalancesAtLocation(locationId: string): Promise<StockBalanceRow[]> {
+    return this.request(`/stock-locations/${locationId}/balances`);
+  }
+
+  async updateStockLocation(id: string, data: UpdateStockLocationRequest): Promise<StockLocation> {
+    return this.request(`/stock-locations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteStockLocation(id: string): Promise<{ deleted: boolean; id: string }> {
+    return this.request(`/stock-locations/${id}`, { method: "DELETE" });
+  }
+
+  async transferAllStockBetweenLocations(
+    fromLocationId: string,
+    data: TransferAllStockRequest,
+  ): Promise<TransferAllStockResult> {
+    return this.request(`/stock-locations/${fromLocationId}/transfer-all`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
   // Stock Movements

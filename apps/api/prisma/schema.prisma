@@ -16,6 +16,7 @@ enum StockMovementType {
   IN
   OUT
   ADJUSTMENT
+  TRANSFER
 }
 
 enum ProductUnit {
@@ -109,6 +110,31 @@ model Category {
   products Product[]
 }
 
+model StockLocation {
+  id        String   @id @default(uuid())
+  name      String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  balances        StockBalance[]
+  movementsHere   StockMovement[] @relation("MovementAtLocation")
+  movementsFrom   StockMovement[] @relation("MovementFromLocation")
+  movementsTo     StockMovement[] @relation("MovementToLocation")
+  ordersFulfilled Order[]         @relation("OrderFulfillmentLocation")
+}
+
+model StockBalance {
+  id         String @id @default(uuid())
+  productId  String
+  locationId String
+  quantity   Float  @default(0)
+
+  product  Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  location StockLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, locationId])
+}
+
 model Product {
   id               String      @id @default(uuid())
   name             String
@@ -128,6 +154,7 @@ model Product {
   recipeItems    RecipeItem[]    @relation("recipe_product")
   usedInRecipes  RecipeItem[]    @relation("recipe_ingredient")
   stockMovements StockMovement[]
+  stockBalances  StockBalance[]
 }
 
 model Price {
@@ -164,17 +191,19 @@ model RecipeItem {
 }
 
 model Order {
-  id           String   @id @default(uuid())
-  customerId   String?
-  userId       String?
-  deliveryDate DateTime @default(now())
-  total        Decimal
-  createdAt    DateTime @default(now())
+  id                    String   @id @default(uuid())
+  customerId            String?
+  userId                String?
+  deliveryDate          DateTime @default(now())
+  total                 Decimal
+  createdAt             DateTime @default(now())
+  fulfillmentLocationId String?
 
-  orderItems OrderItem[]
-  payments   Payment[]
-  user       User?       @relation(fields: [userId], references: [id])
-  customer   Customer?   @relation(fields: [customerId], references: [id])
+  orderItems          OrderItem[]
+  payments            Payment[]
+  user                User?          @relation(fields: [userId], references: [id])
+  customer            Customer?      @relation(fields: [customerId], references: [id])
+  fulfillmentLocation StockLocation? @relation("OrderFulfillmentLocation", fields: [fulfillmentLocationId], references: [id])
 }
 
 model OrderItem {
@@ -210,12 +239,18 @@ model Expense {
 }
 
 model StockMovement {
-  id        String            @id @default(uuid())
-  productId String
-  quantity  Float
-  reason    String?
-  type      StockMovementType
-  createdAt DateTime          @default(now())
+  id             String            @id @default(uuid())
+  productId      String
+  quantity       Float
+  reason         String?
+  type           StockMovementType
+  createdAt      DateTime          @default(now())
+  locationId     String?
+  fromLocationId String?
+  toLocationId   String?
 
-  product Product @relation(fields: [productId], references: [id])
+  product      Product        @relation(fields: [productId], references: [id])
+  location     StockLocation? @relation("MovementAtLocation", fields: [locationId], references: [id])
+  fromLocation StockLocation? @relation("MovementFromLocation", fields: [fromLocationId], references: [id])
+  toLocation   StockLocation? @relation("MovementToLocation", fields: [toLocationId], references: [id])
 }

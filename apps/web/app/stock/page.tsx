@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
-import type { Cost, PaginationMeta, Product, StockMovement, StockMovementType } from "@/lib/types";
+import type { Cost, PaginationMeta, Product, StockLocation, StockMovement, StockMovementType } from "@/lib/types";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag } from "antd";
 import { useEffect, useState } from "react";
@@ -27,6 +27,7 @@ function StockContent() {
   const { message } = App.useApp();
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [locations, setLocations] = useState<StockLocation[]>([]);
   const [costsByProductId, setCostsByProductId] = useState<Record<string, Cost>>({});
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -44,6 +45,13 @@ function StockContent() {
   useEffect(() => {
     fetchMovements();
     fetchProducts();
+    (async () => {
+      try {
+        setLocations(await apiClient.getStockLocations());
+      } catch {
+        setLocations([]);
+      }
+    })();
   }, [pagination.page, pagination.limit]);
 
   useEffect(() => {
@@ -129,8 +137,15 @@ function StockContent() {
       .map((r) => products.find((p) => p.id === r.productId)?.name || r.productId);
   })();
 
+  const defaultLocationId = locations.find((l) => l.isDefault)?.id ?? locations[0]?.id;
+
   const handleCreate = () => {
     form.resetFields();
+    form.setFieldsValue({
+      locationId: defaultLocationId,
+      fromLocationId: defaultLocationId,
+      toLocationId: undefined,
+    });
     setRows([{ productId: undefined, quantity: undefined }]);
     setExtraExpenseRows([{ description: "", cash: 0, card: 0 }]);
     setModalOpen(true);
@@ -191,6 +206,24 @@ function StockContent() {
         productsDescription = reason ? `Productos (costo) - ${reason}` : "Productos (costo)";
       }
 
+      const movementLocationId = values.locationId as string | undefined;
+      const fromLocationId = values.fromLocationId as string | undefined;
+      const toLocationId = values.toLocationId as string | undefined;
+
+      if (type === "TRANSFER") {
+        if (!fromLocationId || !toLocationId) {
+          message.error("En traslado elegí ubicación de origen y destino.");
+          return;
+        }
+        if (fromLocationId === toLocationId) {
+          message.error("Origen y destino deben ser distintos.");
+          return;
+        }
+      } else if (locations.length > 0 && !movementLocationId) {
+        message.error("Elegí la ubicación del movimiento.");
+        return;
+      }
+
       await Promise.all(
         validRows.map((r) =>
           apiClient.createStockMovement({
@@ -198,6 +231,7 @@ function StockContent() {
             quantity: r.quantity!,
             type,
             reason,
+            ...(type === "TRANSFER" ? { fromLocationId, toLocationId } : { locationId: movementLocationId }),
           }),
         ),
       );
@@ -237,6 +271,8 @@ function StockContent() {
         return "red";
       case "ADJUSTMENT":
         return "orange";
+      case "TRANSFER":
+        return "blue";
       default:
         return "default";
     }
@@ -250,6 +286,8 @@ function StockContent() {
         return "Salida";
       case "ADJUSTMENT":
         return "Ajuste";
+      case "TRANSFER":
+        return "Traslado";
       default:
         return type;
     }
@@ -261,6 +299,18 @@ function StockContent() {
       dataIndex: ["product", "name"],
       key: "product",
       render: (text: string) => text || "-",
+    },
+    {
+      title: "Ubicación / traslado",
+      key: "where",
+      render: (_: unknown, row: StockMovement) => {
+        if (row.type === "TRANSFER") {
+          const a = row.fromLocation?.name ?? "—";
+          const b = row.toLocation?.name ?? "—";
+          return `${a} → ${b}`;
+        }
+        return row.location?.name ?? "—";
+      },
     },
     {
       title: "Tipo",
@@ -301,7 +351,7 @@ function StockContent() {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="Misma convención que en productos"
+        message=""
         description="Usá decimales si el producto se mide en kg, litros, etc. (ej. entrada 2,5 kg de tomate). Mantené la misma unidad que en el producto y en recetas."
       />
 
@@ -344,9 +394,52 @@ function StockContent() {
                 { label: "Entrada", value: "IN" },
                 { label: "Salida", value: "OUT" },
                 { label: "Ajuste", value: "ADJUSTMENT" },
+                { label: "Traslado entre ubicaciones", value: "TRANSFER" },
               ]}
             />
           </Form.Item>
+
+          {selectedMovementType === "TRANSFER" ? (
+            <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+              <Form.Item
+                name="fromLocationId"
+                label="Origen"
+                rules={[{ required: true, message: "Elegí origen" }]}
+                style={{ minWidth: 200, flex: 1 }}
+              >
+                <Select
+                  placeholder="Ubicación origen"
+                  options={locations.map((l) => ({ label: l.name, value: l.id }))}
+                />
+              </Form.Item>
+              <Form.Item
+                name="toLocationId"
+                label="Destino"
+                rules={[{ required: true, message: "Elegí destino" }]}
+                style={{ minWidth: 200, flex: 1 }}
+              >
+                <Select
+                  placeholder="Ubicación destino"
+                  options={locations.map((l) => ({ label: l.name, value: l.id }))}
+                />
+              </Form.Item>
+            </div>
+          ) : (
+            <Form.Item
+              name="locationId"
+              label="Ubicación"
+              rules={locations.length > 0 ? [{ required: true, message: "Elegí ubicación" }] : []}
+            >
+              <Select
+                placeholder="Ubicación del movimiento"
+                allowClear={locations.length === 0}
+                options={locations.map((l) => ({
+                  label: l.isDefault ? `${l.name} (predeterminada)` : l.name,
+                  value: l.id,
+                }))}
+              />
+            </Form.Item>
+          )}
 
           <p style={{ margin: "0 0 12px 0", color: "#9ca3af", fontSize: 13 }}>
             Producto y cantidad: misma unidad que definiste al cargar el producto (enteros o decimales, ej. 0,5 kg).

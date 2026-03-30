@@ -31,6 +31,7 @@ export enum StockMovementType {
   IN = "IN",
   OUT = "OUT",
   ADJUSTMENT = "ADJUSTMENT",
+  TRANSFER = "TRANSFER",
 }
 
 export enum ProductUnit {
@@ -47,6 +48,13 @@ export interface Category {
   name: string;
 }
 
+export interface StockLocation {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  createdAt: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -60,6 +68,14 @@ export interface Product {
   createdAt: string;
   updatedAt: string;
   category?: Category | null;
+}
+
+export interface StockBalanceRow {
+  id: string;
+  productId: string;
+  locationId: string;
+  quantity: number;
+  product?: Pick<Product, "id" | "name" | "unit">;
 }
 
 export interface User {
@@ -180,7 +196,13 @@ export interface StockMovement {
   reason?: string | null;
   createdAt: string;
   updatedAt: string;
+  locationId?: string | null;
+  fromLocationId?: string | null;
+  toLocationId?: string | null;
   product?: Product;
+  location?: { id: string; name: string } | null;
+  fromLocation?: { id: string; name: string } | null;
+  toLocation?: { id: string; name: string } | null;
 }
 
 export interface RecipeItem {
@@ -222,8 +244,10 @@ export interface Order {
   total: number;
   createdAt: string;
   updatedAt: string;
+  fulfillmentLocationId?: string | null;
   customer?: Customer | null;
   user?: User | null;
+  fulfillmentLocation?: { id: string; name: string } | null;
   orderItems?: OrderItem[];
   payments?: OrderPayment[];
 }
@@ -377,6 +401,30 @@ export interface CreateStockMovementRequest {
   quantity: number;
   type: StockMovementType;
   reason?: string;
+  locationId?: string;
+  fromLocationId?: string;
+  toLocationId?: string;
+}
+
+export interface CreateStockLocationRequest {
+  name: string;
+  isDefault?: boolean;
+}
+
+export interface UpdateStockLocationRequest {
+  name?: string;
+  isDefault?: boolean;
+}
+
+export interface TransferAllStockRequest {
+  toLocationId: string;
+}
+
+export interface TransferAllStockResult {
+  fromLocationId: string;
+  toLocationId: string;
+  movementsCreated: number;
+  message?: string;
 }
 
 export interface CreateRecipeItemRequest {
@@ -404,6 +452,7 @@ export interface CreateOrderRequest {
   customerId?: string;
   userId?: string;
   deliveryDate?: string;
+  fulfillmentLocationId?: string;
   total: number;
   items: CreateOrderItemRequest[];
   payments: CreateOrderPaymentRequest[];
@@ -413,6 +462,7 @@ export interface UpdateOrderRequest {
   customerId?: string | null;
   userId?: string | null;
   deliveryDate?: string;
+  fulfillmentLocationId?: string;
   /** Si se envían, deben ir juntos con payments y total; reemplaza líneas y pagos y ajusta stock. */
   total?: number;
   items?: CreateOrderItemRequest[];

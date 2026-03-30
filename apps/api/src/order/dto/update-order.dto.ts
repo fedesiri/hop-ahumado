@@ -28,6 +28,11 @@ export class UpdateOrderDto {
   @IsDateString()
   deliveryDate?: string;
 
+  /** Al reemplazar ítems, opcionalmente cambia la ubicación de cumplimiento del pedido. */
+  @IsOptional()
+  @IsUUID("4", { message: "fulfillmentLocationId debe ser un UUID válido" })
+  fulfillmentLocationId?: string;
+
   /** Si se envían ítems, deben ir junto con pagos y total (reemplazo completo de líneas + ajuste de stock). */
   @IsOptional()
   @ValidateIf((o: UpdateOrderDto) => o.items != null)

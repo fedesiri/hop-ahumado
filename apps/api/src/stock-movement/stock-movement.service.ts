@@ -1,25 +1,46 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { StockMovement } from "@prisma/client";
+import { StockMovement, StockMovementType } from "@prisma/client";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
+import { InventoryService } from "../inventory/inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateStockMovementDto } from "./dto/create-stock-movement.dto";
 
+const locationSelect = { id: true, name: true } as const;
+
 type StockMovementWithProduct = StockMovement & {
   product: { id: string; name: string; stock: number };
+  location?: { id: string; name: string } | null;
+  fromLocation?: { id: string; name: string } | null;
+  toLocation?: { id: string; name: string } | null;
 };
 
 @Injectable()
 export class StockMovementService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inventory: InventoryService,
+  ) {}
 
   async create(dto: CreateStockMovementDto) {
-    if (dto.type === "IN" || dto.type === "OUT") {
+    if (dto.type === StockMovementType.TRANSFER) {
       if (dto.quantity <= 0) {
-        throw new BadRequestException("Para IN y OUT la cantidad debe ser mayor que 0");
+        throw new BadRequestException("Para TRANSFER la cantidad debe ser mayor que 0");
       }
-    }
-    if (dto.type === "ADJUSTMENT" && dto.quantity === 0) {
-      throw new BadRequestException("Para ADJUSTMENT la cantidad no puede ser 0");
+      if (!dto.fromLocationId || !dto.toLocationId) {
+        throw new BadRequestException("TRANSFER requiere fromLocationId y toLocationId");
+      }
+      if (dto.fromLocationId === dto.toLocationId) {
+        throw new BadRequestException("El origen y destino del traslado deben ser distintos");
+      }
+    } else {
+      if (dto.type === StockMovementType.IN || dto.type === StockMovementType.OUT) {
+        if (dto.quantity <= 0) {
+          throw new BadRequestException("Para IN y OUT la cantidad debe ser mayor que 0");
+        }
+      }
+      if (dto.type === StockMovementType.ADJUSTMENT && dto.quantity === 0) {
+        throw new BadRequestException("Para ADJUSTMENT la cantidad no puede ser 0");
+      }
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -31,13 +52,53 @@ export class StockMovementService {
         throw new BadRequestException(`Producto con id "${dto.productId}" no encontrado`);
       }
 
-      const delta = dto.type === "IN" ? dto.quantity : dto.type === "OUT" ? -dto.quantity : dto.quantity;
-      const newStock = product.stock + delta;
-      if (newStock < 0) {
+      if (dto.type === StockMovementType.TRANSFER) {
+        const fromId = dto.fromLocationId!;
+        const toId = dto.toLocationId!;
+        await this.inventory.applyBalanceDelta(tx, dto.productId, fromId, -dto.quantity);
+        await this.inventory.applyBalanceDelta(tx, dto.productId, toId, dto.quantity);
+        const movement = await tx.stockMovement.create({
+          data: {
+            productId: dto.productId,
+            quantity: dto.quantity,
+            type: StockMovementType.TRANSFER,
+            reason: dto.reason ?? undefined,
+            fromLocationId: fromId,
+            toLocationId: toId,
+          },
+          include: {
+            product: { select: { id: true, name: true, stock: true } },
+            fromLocation: { select: locationSelect },
+            toLocation: { select: locationSelect },
+          },
+        });
+        const p = await tx.product.findUnique({
+          where: { id: dto.productId },
+          select: { stock: true },
+        });
+        return {
+          ...movement,
+          product: { ...movement.product, stock: p!.stock },
+        };
+      }
+
+      const defaultId = await this.inventory.getDefaultLocationId(tx);
+      const locationId = dto.locationId ?? defaultId;
+
+      const delta =
+        dto.type === StockMovementType.IN
+          ? dto.quantity
+          : dto.type === StockMovementType.OUT
+            ? -dto.quantity
+            : dto.quantity;
+      const newTotal = product.stock + delta;
+      if (newTotal < 0) {
         throw new BadRequestException(
-          `Stock insuficiente. Actual: ${product.stock}, movimiento: ${delta}. Resultado sería ${newStock}`,
+          `Stock insuficiente. Actual: ${product.stock}, movimiento: ${delta}. Resultado sería ${newTotal}`,
         );
       }
+
+      await this.inventory.applyBalanceDelta(tx, dto.productId, locationId, delta);
 
       const movement = await tx.stockMovement.create({
         data: {
@@ -45,18 +106,21 @@ export class StockMovementService {
           quantity: dto.quantity,
           type: dto.type,
           reason: dto.reason ?? undefined,
+          locationId,
         },
-        include: { product: { select: { id: true, name: true, stock: true } } },
+        include: {
+          product: { select: { id: true, name: true, stock: true } },
+          location: { select: locationSelect },
+        },
       });
 
-      await tx.product.update({
+      const p = await tx.product.findUnique({
         where: { id: dto.productId },
-        data: { stock: newStock },
+        select: { stock: true },
       });
-
       return {
         ...movement,
-        product: { ...movement.product, stock: newStock },
+        product: { ...movement.product, stock: p!.stock },
       };
     });
   }
@@ -68,11 +132,17 @@ export class StockMovementService {
   ): Promise<PaginatedResponse<StockMovementWithProduct>> {
     const where = productId ? { productId } : undefined;
     const skip = (page - 1) * limit;
+    const include = {
+      product: { select: { id: true, name: true, stock: true } },
+      location: { select: locationSelect },
+      fromLocation: { select: locationSelect },
+      toLocation: { select: locationSelect },
+    };
     const [data, total] = await Promise.all([
       this.prisma.stockMovement.findMany({
         where,
         orderBy: { createdAt: "desc" },
-        include: { product: { select: { id: true, name: true, stock: true } } },
+        include,
         skip,
         take: limit,
       }),
@@ -84,7 +154,12 @@ export class StockMovementService {
   async findOne(id: string) {
     const movement = await this.prisma.stockMovement.findUnique({
       where: { id },
-      include: { product: true },
+      include: {
+        product: true,
+        location: { select: locationSelect },
+        fromLocation: { select: locationSelect },
+        toLocation: { select: locationSelect },
+      },
     });
     if (!movement) {
       throw new NotFoundException(`Movimiento de stock con id "${id}" no encontrado`);

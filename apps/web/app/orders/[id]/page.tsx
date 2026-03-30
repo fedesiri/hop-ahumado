@@ -96,6 +96,9 @@ function OrderDetailContent({ id }: { id: string }) {
             <strong>Fecha de entrega:</strong>{" "}
             {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString("es-AR") : "-"}
           </Col>
+          <Col span={12}>
+            <strong>Ubicación de stock:</strong> {order.fulfillmentLocation?.name ?? "—"}
+          </Col>
         </Row>
       </Card>
 

@@ -25,6 +25,11 @@ export class CreateOrderDto {
   @IsDateString()
   deliveryDate?: string;
 
+  /** De dónde se descuenta el stock (si no se envía, ubicación por defecto). */
+  @IsOptional()
+  @IsUUID("4", { message: "fulfillmentLocationId debe ser un UUID válido" })
+  fulfillmentLocationId?: string;
+
   @IsNumber()
   @Min(0, { message: "El total debe ser mayor o igual a 0" })
   total: number;

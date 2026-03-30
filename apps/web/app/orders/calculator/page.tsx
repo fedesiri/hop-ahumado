@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import dayjs, { type Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
-import type { CreateOrderRequest, Customer, Price, Product } from "@/lib/types";
+import type { CreateOrderRequest, Customer, Price, Product, StockLocation } from "@/lib/types";
 import { PaymentMethod } from "@/lib/types";
 import { Alert, App, Button, DatePicker, Modal, Select, Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -39,6 +39,9 @@ function OrderCalculatorPageContent() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [deliveryDate, setDeliveryDate] = useState<Dayjs | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
+  const [fulfillmentLocationId, setFulfillmentLocationId] = useState<string | null>(null);
+  const [balanceByProductId, setBalanceByProductId] = useState<Record<string, number>>({});
 
   const pricesByProductId = useMemo(() => {
     const map: Record<string, Price[]> = {};
@@ -49,26 +52,27 @@ function OrderCalculatorPageContent() {
     return map;
   }, [prices]);
 
-  /** Productos que quedarían con stock negativo (según stock actual en DB; se refresca al abrir el modal) */
+  /** Stock disponible en la ubicación elegida (por producto). */
   const productsGoingNegative = useMemo(() => {
-    if (!pendingOrder) return [];
+    if (!pendingOrder || !fulfillmentLocationId) return [];
     const productById = Object.fromEntries(products.map((p) => [p.id, p]));
     const result: { name: string; current: number; requested: number; after: number }[] = [];
     for (const item of pendingOrder.items) {
       const product = productById[item.productId];
       if (!product) continue;
-      const after = product.stock - item.quantity;
+      const atLocation = balanceByProductId[item.productId] ?? 0;
+      const after = atLocation - item.quantity;
       if (after < 0) {
         result.push({
           name: product.name,
-          current: product.stock,
+          current: atLocation,
           requested: item.quantity,
           after,
         });
       }
     }
     return result;
-  }, [pendingOrder, products]);
+  }, [pendingOrder, products, fulfillmentLocationId, balanceByProductId]);
 
   const limit = 100; // máximo que permite la API
 
@@ -114,6 +118,16 @@ function OrderCalculatorPageContent() {
 
         setPrices(allPrices);
         setCustomers(allCustomers);
+
+        try {
+          const locs = await apiClient.getStockLocations();
+          setStockLocations(locs);
+          const def = locs.find((l) => l.isDefault)?.id ?? locs[0]?.id ?? null;
+          setFulfillmentLocationId(def);
+        } catch {
+          setStockLocations([]);
+          setFulfillmentLocationId(null);
+        }
       } catch (e) {
         console.error(e);
         message.error("Error al cargar productos y precios");
@@ -124,12 +138,21 @@ function OrderCalculatorPageContent() {
     load();
   }, [message, fetchProducts]);
 
-  // Al abrir el modal de confirmar pedido, refrescar productos desde la DB para que el aviso de stock negativo use datos actuales
+  // Al abrir el modal: refrescar productos y saldos en la ubicación de cumplimiento
   useEffect(() => {
-    if (confirmModalOpen && pendingOrder) {
-      fetchProducts();
-    }
-  }, [confirmModalOpen, pendingOrder, fetchProducts]);
+    if (!confirmModalOpen || !pendingOrder || !fulfillmentLocationId) return;
+    fetchProducts();
+    (async () => {
+      try {
+        const rows = await apiClient.getStockBalancesAtLocation(fulfillmentLocationId);
+        const map: Record<string, number> = {};
+        for (const r of rows) map[r.productId] = Number(r.quantity);
+        setBalanceByProductId(map);
+      } catch {
+        setBalanceByProductId({});
+      }
+    })();
+  }, [confirmModalOpen, pendingOrder, fulfillmentLocationId, fetchProducts]);
 
   const handleConfirmOrder = (
     items: { productId: string; quantity: number; price: number }[],
@@ -143,6 +166,10 @@ function OrderCalculatorPageContent() {
 
   const handleCreateOrder = async () => {
     if (!pendingOrder) return;
+    if (stockLocations.length > 0 && !fulfillmentLocationId) {
+      message.error("Elegí la ubicación de stock desde la cual descontar el pedido.");
+      return;
+    }
     const { items, total, customerId } = pendingOrder;
     setSubmitting(true);
     try {
@@ -150,6 +177,7 @@ function OrderCalculatorPageContent() {
         customerId: customerId ?? undefined,
         userId: user?.id,
         deliveryDate: (deliveryDate ?? dayjs().startOf("day")).toISOString(),
+        fulfillmentLocationId: fulfillmentLocationId ?? undefined,
         total,
         items: items.map((item) => ({
           productId: item.productId,
@@ -230,6 +258,26 @@ function OrderCalculatorPageContent() {
                 Cliente: {customers.find((c) => c.id === pendingOrder.customerId)?.name ?? pendingOrder.customerId}
               </p>
             )}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
+                Ubicación de stock (desde dónde se descuenta)
+              </label>
+              <Select
+                style={{ width: "100%" }}
+                placeholder="Elegí ubicación"
+                value={fulfillmentLocationId ?? undefined}
+                onChange={(v) => setFulfillmentLocationId(v)}
+                options={stockLocations.map((l) => ({
+                  label: l.isDefault ? `${l.name} (predeterminada)` : l.name,
+                  value: l.id,
+                }))}
+              />
+              {stockLocations.length === 0 && (
+                <p style={{ marginTop: 8, color: "#f87171", fontSize: 13 }}>
+                  No hay ubicaciones cargadas. Ejecutá la migración de base y/o creá ubicaciones en Stock → Ubicaciones.
+                </p>
+              )}
+            </div>
             {productsGoingNegative.length > 0 && (
               <Alert
                 type="warning"
@@ -239,9 +287,8 @@ function OrderCalculatorPageContent() {
                 description={
                   <>
                     <p style={{ marginBottom: 8 }}>
-                      Los siguientes productos no tienen stock suficiente. Se descontará igual y quedarán en número
-                      negativo. Cuando cargues nuevo stock (entrada), ese número negativo se descontará de lo que
-                      ingreses.
+                      En la ubicación elegida no alcanza el stock. Se descontará igual (puede quedar negativo en esa
+                      ubicación). El total del producto en todas las ubicaciones sigue en la ficha del producto.
                     </p>
                     <ul style={{ margin: 0, paddingLeft: 20 }}>
                       {productsGoingNegative.map((p) => (

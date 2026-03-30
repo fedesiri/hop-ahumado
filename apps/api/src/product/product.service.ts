@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Product } from "@prisma/client";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
+import { InventoryService } from "../inventory/inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
@@ -9,14 +10,30 @@ type ProductWithCategory = Product & { category: { id: string; name: string } | 
 
 @Injectable()
 export class ProductService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inventory: InventoryService,
+  ) {}
 
   async create(dto: CreateProductDto) {
     if (dto.categoryId) {
       await this.validateCategoryExists(dto.categoryId);
     }
     const data = this.mapCreateDtoToPrisma(dto);
-    return this.prisma.product.create({ data });
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.create({ data });
+      const defaultLocId = await this.inventory.getDefaultLocationId(tx);
+      const qty = dto.stock ?? 0;
+      await tx.stockBalance.upsert({
+        where: { productId_locationId: { productId: product.id, locationId: defaultLocId } },
+        create: { productId: product.id, locationId: defaultLocId, quantity: qty },
+        update: { quantity: qty },
+      });
+      return tx.product.findUnique({
+        where: { id: product.id },
+        include: { category: true },
+      }) as Promise<ProductWithCategory>;
+    });
   }
 
   async findAll(
@@ -82,16 +99,45 @@ export class ProductService {
   }
 
   async update(id: string, dto: UpdateProductDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
     if (dto.categoryId !== undefined) {
       if (dto.categoryId) {
         await this.validateCategoryExists(dto.categoryId);
       }
     }
+    if (dto.stock !== undefined) {
+      const newStock = (() => {
+        const n = Number(dto.stock);
+        if (!Number.isFinite(n) || n < 0) {
+          throw new BadRequestException("stock debe ser un número mayor o igual a 0");
+        }
+        return n;
+      })();
+      const delta = newStock - existing.stock;
+      if (delta === 0) {
+        const data = this.mapUpdateDtoToPrisma({ ...dto, stock: undefined });
+        return this.prisma.product.update({
+          where: { id },
+          data,
+          include: { category: true },
+        });
+      }
+      return this.prisma.$transaction(async (tx) => {
+        const data = this.mapUpdateDtoToPrisma({ ...dto, stock: undefined });
+        await tx.product.update({ where: { id }, data });
+        const defaultLocId = await this.inventory.getDefaultLocationId(tx);
+        await this.inventory.applyBalanceDelta(tx, id, defaultLocId, delta);
+        return tx.product.findUnique({
+          where: { id },
+          include: { category: true },
+        }) as Promise<ProductWithCategory>;
+      });
+    }
     const data = this.mapUpdateDtoToPrisma(dto);
     return this.prisma.product.update({
       where: { id },
       data,
+      include: { category: true },
     });
   }
 
