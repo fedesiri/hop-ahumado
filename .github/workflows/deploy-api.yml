@@ -46,8 +46,10 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+      # configure-docker a veces no enlaza bien WIF; login explícito con access token es el patrón recomendado en CI.
+      - name: Docker login (Artifact Registry)
+        run: |
+          gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin "https://${{ env.GCP_REGION }}-docker.pkg.dev"
 
       - name: Build and push image
         run: |
