@@ -1,0 +1,104 @@
+# Deploy frontend (Next.js) to Cloud Run. NEXT_PUBLIC_* van como build-args (se fijan en build time).
+# Variables en GitHub Actions (Settings → Variables); no van valores reales en este repo.
+
+name: Deploy Web
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/web/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch: {}
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REGISTRY_REPO: ${{ vars.ARTIFACT_REGISTRY_REPO }}
+  CLOUD_RUN_SERVICE_API: ${{ vars.CLOUD_RUN_SERVICE_API }}
+  CLOUD_RUN_SERVICE_WEB: ${{ vars.CLOUD_RUN_SERVICE_WEB }}
+  WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+  WIF_SERVICE_ACCOUNT: ${{ vars.WIF_SERVICE_ACCOUNT }}
+  NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+  CLOUD_RUN_RUNTIME_SA_WEB: ${{ vars.CLOUD_RUN_RUNTIME_SA_WEB }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Docker login (Artifact Registry)
+        run: |
+          gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin "https://${{ env.GCP_REGION }}-docker.pkg.dev"
+
+      - name: Build and push image
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
+        run: |
+          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/web:${{ github.sha }}"
+          docker build -f apps/web/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL="${{ env.NEXT_PUBLIC_API_URL }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_API_KEY \
+            --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN \
+            --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID \
+            --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET \
+            --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID \
+            --build-arg NEXT_PUBLIC_FIREBASE_APP_ID \
+            -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy to Cloud Run
+        run: |
+          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/web:${{ github.sha }}"
+          SA_ARGS=()
+          if [ -n "${{ env.CLOUD_RUN_RUNTIME_SA_WEB }}" ]; then
+            SA_ARGS+=(--service-account="${{ env.CLOUD_RUN_RUNTIME_SA_WEB }}")
+          fi
+          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE_WEB }} \
+            --image "$IMAGE" \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ env.GCP_PROJECT_ID }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars "NODE_ENV=production" \
+            "${SA_ARGS[@]}"
+
+      # Cierra el círculo API↔web: la URL de Cloud Run del web solo existe después del deploy.
+      # Con vars.AUTO_UPDATE_API_CORS=true, la API recibe CORS_ORIGIN = URL pública de este servicio web.
+      # (Si necesitás varios orígenes en CORS, dejá esta variable en false y gestioná CORS_ORIGIN a mano.)
+      - name: Update API CORS to web service URL
+        if: ${{ vars.AUTO_UPDATE_API_CORS == 'true' }}
+        run: |
+          WEB_URL=$(gcloud run services describe "${{ env.CLOUD_RUN_SERVICE_WEB }}" \
+            --region "${{ env.GCP_REGION }}" \
+            --project "${{ env.GCP_PROJECT_ID }}" \
+            --format='value(status.url)')
+          echo "Setting API CORS_ORIGIN to: $WEB_URL"
+          gcloud run services update "${{ env.CLOUD_RUN_SERVICE_API }}" \
+            --region "${{ env.GCP_REGION }}" \
+            --project "${{ env.GCP_PROJECT_ID }}" \
+            --platform managed \
+            --update-env-vars "CORS_ORIGIN=${WEB_URL}"
