@@ -1,6 +1,7 @@
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
+import "./load-env";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -11,12 +12,12 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  const port = process.env.PORT ?? 3001;
+  const port = Number.parseInt(process.env.PORT ?? "3001", 10);
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(",") ?? ["http://localhost:3000"],
     credentials: true,
   });
-  await app.listen(port);
-  console.log(`API running at http://localhost:${port}`);
+  await app.listen(port, "0.0.0.0");
+  console.log(`API listening on 0.0.0.0:${port}`);
 }
 bootstrap();

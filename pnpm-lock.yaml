@@ -37,6 +37,9 @@ importers:
       class-validator:
         specifier: ^0.14.1
         version: 0.14.1
+      dotenv:
+        specifier: ^17.4.0
+        version: 17.4.0
       firebase-admin:
         specifier: ^13.7.0
         version: 13.7.0
@@ -5801,6 +5804,12 @@ packages:
     dependencies:
       "@babel/runtime": 7.28.6
       csstype: 3.2.3
+    dev: false
+
+  /dotenv@17.4.0:
+    resolution:
+      { integrity: sha512-kCKF62fwtzwYm0IGBNjRUjtJgMfGapII+FslMHIjMR5KTnwEmBmWLDRSnc3XSNP8bNy34tekgQyDT0hr7pERRQ== }
+    engines: { node: ">=12" }
     dev: false
 
   /dunder-proto@1.0.1:

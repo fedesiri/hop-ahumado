@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+.git
+.github
+.turbo
+**/.next
+**/dist
+.env
+.env.*
+**/.env
+**/.env.*
+*.md
+.cursor
+**/*.log
+apps/web/.next
+apps/api/dist

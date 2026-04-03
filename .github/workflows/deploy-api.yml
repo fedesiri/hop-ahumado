@@ -1,0 +1,95 @@
+# Deploy API (NestJS) to Cloud Run.
+# Configuración: GitHub → Settings → Secrets and variables → Actions → Variables (repositorio u organización).
+# Este archivo solo referencia nombres; los valores no se commitean. Cada run (push o manual) resuelve vars ahí.
+
+name: Deploy API
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/api/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch: {}
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REGISTRY_REPO: ${{ vars.ARTIFACT_REGISTRY_REPO }}
+  CLOUD_RUN_SERVICE_API: ${{ vars.CLOUD_RUN_SERVICE_API }}
+  CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+  WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+  WIF_SERVICE_ACCOUNT: ${{ vars.WIF_SERVICE_ACCOUNT }}
+  # Opcional: email de hop-api-runtime@... (script scripts/gcp-iam-bootstrap.sh). Si está vacío, Cloud Run usa la default.
+  CLOUD_RUN_RUNTIME_SA_API: ${{ vars.CLOUD_RUN_RUNTIME_SA_API }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/api:${{ github.sha }}"
+          docker build -f apps/api/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      # Opcional: migraciones. Secret DATABASE_URL en GitHub + acceso a Cloud SQL desde el runner.
+      # - uses: pnpm/action-setup@v4
+      #   with:
+      #     version: 9
+      # - uses: actions/setup-node@v4
+      #   with:
+      #     node-version: 20
+      #     cache: pnpm
+      # - run: pnpm install --frozen-lockfile
+      # - run: pnpm --filter api exec prisma migrate deploy
+      #   env:
+      #     DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/api:${{ github.sha }}"
+          SA_ARGS=()
+          if [ -n "${{ env.CLOUD_RUN_RUNTIME_SA_API }}" ]; then
+            SA_ARGS+=(--service-account="${{ env.CLOUD_RUN_RUNTIME_SA_API }}")
+          fi
+          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE_API }} \
+            --image "$IMAGE" \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ env.GCP_PROJECT_ID }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-secrets "DATABASE_URL=DATABASE_URL:latest" \
+            --set-env-vars "NODE_ENV=production,CORS_ORIGIN=${{ env.CORS_ORIGIN }}" \
+            "${SA_ARGS[@]}"
+
+      - name: API service URL (for NEXT_PUBLIC_API_URL)
+        run: |
+          API_URL=$(gcloud run services describe "${{ env.CLOUD_RUN_SERVICE_API }}" \
+            --region "${{ env.GCP_REGION }}" \
+            --project "${{ env.GCP_PROJECT_ID }}" \
+            --format='value(status.url)')
+          echo "Poné esta URL en la variable NEXT_PUBLIC_API_URL (deploy web):"
+          echo "$API_URL"

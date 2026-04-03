@@ -1,0 +1,3 @@
+# Los builds usan el contexto en la raíz del monorepo:
+#   docker build -f apps/web/Dockerfile .
+# Las exclusiones efectivas están en /.dockerignore

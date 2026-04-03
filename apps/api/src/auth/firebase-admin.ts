@@ -1,36 +1,20 @@
 import * as admin from "firebase-admin";
-import * as fs from "node:fs";
 
-function getServiceAccount() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  const path = process.env.FIREBASE_SERVICE_ACCOUNT_PATH ?? process.env.FIREBASE_SERVICE_ACCOUNT_JSON_PATH;
-  if (path) {
-    const content = fs.readFileSync(path, "utf8");
-    return JSON.parse(content);
-  }
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch (e) {
-    // Usualmente ocurre por JSON multilínea en .env (dotenv lo recorta).
-    console.error(
-      "FIREBASE_SERVICE_ACCOUNT_JSON no es JSON válido. Usá FIREBASE_SERVICE_ACCOUNT_PATH en lugar de pegar el JSON en .env.",
-    );
-    throw e;
-  }
-}
-
-// Inicializa Firebase Admin una sola vez (import singleton).
-const serviceAccount = getServiceAccount();
-
+// Siempre Application Default Credentials (ADC): en local suele venir del JSON indicado por
+// GOOGLE_APPLICATION_CREDENTIALS (o FIREBASE_SERVICE_ACCOUNT_PATH en .env, ver load-env.ts).
+// En Cloud Run: cuenta de servicio del servicio (sin archivo en disco).
 if (!admin.apps.length) {
-  if (!serviceAccount) {
-    // No tiramos error en import para no romper tooling; el guard/controlador fallarán al verificar.
-    console.warn("FIREBASE_SERVICE_ACCOUNT_JSON no configurado");
-  } else {
+  try {
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+      credential: admin.credential.applicationDefault(),
     });
+  } catch (e) {
+    console.warn(
+      "Firebase Admin: no se pudo inicializar con ADC. En apps/api/.env definí " +
+        "FIREBASE_SERVICE_ACCOUNT_PATH (ruta al JSON de la cuenta de servicio, fuera del repo) " +
+        "o GOOGLE_APPLICATION_CREDENTIALS. En Cloud Run, revisá la cuenta de servicio del servicio.",
+      e,
+    );
   }
 }
 
