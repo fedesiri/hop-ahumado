@@ -26,6 +26,8 @@ env:
   WIF_SERVICE_ACCOUNT: ${{ vars.WIF_SERVICE_ACCOUNT }}
   # Opcional: email de hop-api-runtime@... (script scripts/gcp-iam-bootstrap.sh). Si está vacío, Cloud Run usa la default.
   CLOUD_RUN_RUNTIME_SA_API: ${{ vars.CLOUD_RUN_RUNTIME_SA_API }}
+  # Obligatorio si DATABASE_URL usa ?host=/cloudsql/PROYECTO:REGION:INSTANCIA — mismo valor que el nombre de conexión.
+  CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
 
 jobs:
   deploy:
@@ -77,6 +79,10 @@ jobs:
           if [ -n "${{ env.CLOUD_RUN_RUNTIME_SA_API }}" ]; then
             SA_ARGS+=(--service-account="${{ env.CLOUD_RUN_RUNTIME_SA_API }}")
           fi
+          SQL_ARGS=()
+          if [ -n "${{ env.CLOUD_SQL_INSTANCE }}" ]; then
+            SQL_ARGS+=(--add-cloudsql-instances="${{ env.CLOUD_SQL_INSTANCE }}")
+          fi
           gcloud run deploy ${{ env.CLOUD_RUN_SERVICE_API }} \
             --image "$IMAGE" \
             --region ${{ env.GCP_REGION }} \
@@ -85,7 +91,8 @@ jobs:
             --allow-unauthenticated \
             --set-secrets "DATABASE_URL=DATABASE_URL:latest" \
             --set-env-vars "NODE_ENV=production,CORS_ORIGIN=${{ env.CORS_ORIGIN }}" \
-            "${SA_ARGS[@]}"
+            "${SA_ARGS[@]}" \
+            "${SQL_ARGS[@]}"
 
       - name: API service URL (for NEXT_PUBLIC_API_URL)
         run: |

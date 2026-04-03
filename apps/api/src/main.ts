@@ -12,7 +12,13 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  const port = Number.parseInt(process.env.PORT ?? "3001", 10);
+  // Cloud Run inyecta PORT (8080). Si viene vacío o NaN, en producción usamos 8080; en local 3001.
+  const rawPort = process.env.PORT?.trim();
+  const fallback = process.env.NODE_ENV === "production" ? "8080" : "3001";
+  const port = Number.parseInt(rawPort && rawPort.length > 0 ? rawPort : fallback, 10);
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error(`PORT inválido: ${JSON.stringify(process.env.PORT)}`);
+  }
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(",") ?? ["http://localhost:3000"],
     credentials: true,
