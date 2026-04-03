@@ -22,11 +22,11 @@ ENV DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/dummy"
 RUN pnpm exec prisma generate
 RUN pnpm run build
 
-# Ruta estable para el runner (pnpm puede dejar .prisma en la raíz del workspace o en apps/api)
+# pnpm deja .prisma dentro de .pnpm/@prisma+client@.../node_modules/.prisma (no en /app/node_modules/.prisma)
 RUN mkdir -p /tmp/prisma-for-runner && \
-    if [ -d /app/node_modules/.prisma ]; then cp -a /app/node_modules/.prisma /tmp/prisma-for-runner/; \
-    elif [ -d /app/apps/api/node_modules/.prisma ]; then cp -a /app/apps/api/node_modules/.prisma /tmp/prisma-for-runner/; \
-    else echo "No se encontró node_modules/.prisma tras generate" && find /app -name ".prisma" -type d 2>/dev/null && exit 1; fi
+    PRISMA_SRC=$(find /app/node_modules/.pnpm -type d -path "*/node_modules/.prisma" 2>/dev/null | head -1) && \
+    if [ -z "$PRISMA_SRC" ]; then echo "No se encontró .prisma tras generate" && find /app -name ".prisma" -type d 2>/dev/null && exit 1; fi && \
+    cp -aL "$PRISMA_SRC" /tmp/prisma-for-runner/
 
 FROM node:20-bookworm-slim AS runner
 
@@ -46,8 +46,11 @@ RUN pnpm install --frozen-lockfile --filter api... --prod
 
 WORKDIR /app/apps/api
 
-# prisma CLI no está en --prod; copiamos el cliente generado en builder.
-COPY --from=builder /tmp/prisma-for-runner/.prisma /app/node_modules/.prisma
+# Mismo layout pnpm que en builder: el cliente debe vivir junto a @prisma/client
+COPY --from=builder /tmp/prisma-for-runner/.prisma /tmp/prisma-generated/
+RUN PRISMA_PARENT="$(ls -d /app/node_modules/.pnpm/@prisma+client@*/node_modules 2>/dev/null | head -1)" && \
+    if [ -z "$PRISMA_PARENT" ]; then echo "No hay @prisma+client en node_modules" && ls /app/node_modules/.pnpm && exit 1; fi && \
+    rm -rf "$PRISMA_PARENT/.prisma" && mv /tmp/prisma-generated "$PRISMA_PARENT/.prisma"
 
 COPY --from=builder /app/apps/api/dist ./dist
 
