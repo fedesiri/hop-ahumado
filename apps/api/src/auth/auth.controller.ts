@@ -8,6 +8,17 @@ const COOKIE_NAME = process.env.FIREBASE_SESSION_COOKIE_NAME || "hop_auth_sessio
 const DEFAULT_EXPIRES_IN_MS = 5 * 24 * 60 * 60 * 1000; // 5 días
 const EXPIRES_IN_MS = Number(process.env.FIREBASE_SESSION_COOKIE_MAX_AGE_MS || DEFAULT_EXPIRES_IN_MS);
 
+/** Front y API en dominios distintos (p. ej. dos *.run.app): el navegador necesita SameSite=None + Secure para enviar la cookie en fetch con credentials. */
+function sessionCookieBaseOptions() {
+  const isProd = process.env.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? ("none" as const) : ("lax" as const),
+    path: "/",
+  };
+}
+
 function getCookieValue(cookieHeader: string | undefined, name: string) {
   if (!cookieHeader) return undefined;
   const parts = cookieHeader.split(";").map((p) => p.trim());
@@ -36,12 +47,8 @@ export class AuthController {
 
     const sessionCookie = await firebaseAdmin.auth().createSessionCookie(dto.idToken, { expiresIn: EXPIRES_IN_MS });
 
-    const isProd = process.env.NODE_ENV === "production";
     res.cookie(COOKIE_NAME, sessionCookie, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: "lax",
-      path: "/",
+      ...sessionCookieBaseOptions(),
       maxAge: EXPIRES_IN_MS,
     });
 
@@ -93,11 +100,7 @@ export class AuthController {
 
   @Post("logout")
   async logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie(COOKIE_NAME, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-    });
+    res.clearCookie(COOKIE_NAME, sessionCookieBaseOptions());
     return { ok: true };
   }
 }
