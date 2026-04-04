@@ -1,4 +1,5 @@
 import { AntdProvider } from "@/components/antd-provider";
+import { RequireAuth } from "@/components/require-auth";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth-context";
 import "@/lib/dayjs";
@@ -47,7 +48,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`} style={{ backgroundColor: "#0a0a0a" }}>
         <AntdProvider>
           <AuthProvider>
-            {children}
+            <RequireAuth>{children}</RequireAuth>
             <Toaster richColors position="top-center" />
             <Analytics />
           </AuthProvider>
