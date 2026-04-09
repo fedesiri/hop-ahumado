@@ -20,6 +20,7 @@ import { ProductModule } from "./product/product.module";
 import { RecipeItemModule } from "./recipe-item/recipe-item.module";
 import { StockLocationModule } from "./stock-location/stock-location.module";
 import { StockMovementModule } from "./stock-movement/stock-movement.module";
+import { TreasuryModule } from "./treasury/treasury.module";
 import { UserModule } from "./user/user.module";
 
 @Module({
@@ -42,6 +43,7 @@ import { UserModule } from "./user/user.module";
     StockMovementModule,
     StockLocationModule,
     RecipeItemModule,
+    TreasuryModule,
   ],
   controllers: [AppController],
   providers: [

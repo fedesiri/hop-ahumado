@@ -1,8 +1,9 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
+import dayjs from "@/lib/dayjs";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
-import type { Customer, Order, Product } from "@/lib/types";
+import type { Expense, Order, Product, TreasuryBaseline } from "@/lib/types";
 import {
   AlertOutlined,
   ApiOutlined,
@@ -11,9 +12,26 @@ import {
   ReloadOutlined,
   ShoppingCartOutlined,
 } from "@ant-design/icons";
-import { Button, Card, Col, Empty, Modal, Result, Row, Space, Spin, Statistic, Table, Tag } from "antd";
+import {
+  App,
+  Button,
+  Card,
+  Col,
+  DatePicker,
+  Empty,
+  Form,
+  InputNumber,
+  Modal,
+  Result,
+  Row,
+  Space,
+  Spin,
+  Statistic,
+  Table,
+  Tag,
+} from "antd";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function startOfLocalDay(d: Date): Date {
   const x = new Date(d);
@@ -21,38 +39,90 @@ function startOfLocalDay(d: Date): Date {
   return x;
 }
 
+function isOnOrAfterCutoff(isoDate: string, cutoffIso: string): boolean {
+  return new Date(isoDate).getTime() >= new Date(cutoffIso).getTime();
+}
+
+function sumPaymentsSince(orders: Order[], method: "CASH" | "CARD", sinceIso: string): number {
+  return orders.reduce((sum, order) => {
+    if (!isOnOrAfterCutoff(order.createdAt, sinceIso)) return sum;
+    const payments = order.payments ?? [];
+    return sum + payments.filter((p) => p.method === method).reduce((ps, p) => ps + Number(p.amount ?? 0), 0);
+  }, 0);
+}
+
+function sumExpensesSince(expenses: Expense[], method: "CASH" | "CARD", sinceIso: string): number {
+  return expenses
+    .filter((e) => e.method === method && isOnOrAfterCutoff(e.createdAt, sinceIso))
+    .reduce((s, e) => s + Number(e.amount ?? 0), 0);
+}
+
 export function Dashboard() {
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
+  const [baseline, setBaseline] = useState<TreasuryBaseline | null>(null);
+  const [rawOrders, setRawOrders] = useState<Order[]>([]);
+  const [rawExpenses, setRawExpenses] = useState<Expense[]>([]);
   const [stats, setStats] = useState({
     totalOrders: 0,
-    totalRevenue: 0,
-    incomeCash: 0,
-    incomeCard: 0,
-    expenseCash: 0,
-    expenseCard: 0,
     lowStockProducts: [] as Product[],
     recentOrders: [] as Order[],
     totalCustomers: 0,
-    netCash: 0,
-    netCard: 0,
   });
   const [cashFlowModalOpen, setCashFlowModalOpen] = useState(false);
+  const [savingBaseline, setSavingBaseline] = useState(false);
+  const [form] = Form.useForm<{
+    openingCash: number;
+    openingCard: number;
+    deltaSince: ReturnType<typeof dayjs>;
+  }>();
+
+  const cash = useMemo(() => {
+    if (!baseline) {
+      return {
+        deltaCashIn: 0,
+        deltaCashOut: 0,
+        deltaCardIn: 0,
+        deltaCardOut: 0,
+        balanceCash: 0,
+        balanceCard: 0,
+        total: 0,
+      };
+    }
+    const since = baseline.deltaSince;
+    const deltaCashIn = sumPaymentsSince(rawOrders, "CASH", since);
+    const deltaCardIn = sumPaymentsSince(rawOrders, "CARD", since);
+    const deltaCashOut = sumExpensesSince(rawExpenses, "CASH", since);
+    const deltaCardOut = sumExpensesSince(rawExpenses, "CARD", since);
+    const balanceCash = baseline.openingCash + deltaCashIn - deltaCashOut;
+    const balanceCard = baseline.openingCard + deltaCardIn - deltaCardOut;
+    return {
+      deltaCashIn,
+      deltaCashOut,
+      deltaCardIn,
+      deltaCardOut,
+      balanceCash,
+      balanceCard,
+      total: balanceCash + balanceCard,
+    };
+  }, [baseline, rawOrders, rawExpenses]);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       setApiConnected(null);
 
-      const limit = 100; // máximo que permite la API
-      const [productsRes, customersRes] = await Promise.all([
+      const limit = 100;
+      const [productsRes, customersRes, baselineRes] = await Promise.all([
         apiClient.getProducts(1, 100),
         apiClient.getCustomers(1, 50),
+        apiClient.getTreasuryBaseline().catch(() => null),
       ]);
 
       setApiConnected(true);
+      if (baselineRes) setBaseline(baselineRes);
 
-      // Órdenes: paginar para calcular ingresos reales desde el inicio
       let page = 1;
       let ordersRes = await apiClient.getOrders(page, limit);
       let allOrders = [...ordersRes.data];
@@ -62,17 +132,6 @@ export function Dashboard() {
         allOrders = [...allOrders, ...ordersRes.data];
       }
 
-      // Ingresos (pagos por método)
-      const incomeCash = allOrders.reduce((sum, order) => {
-        const payments = order.payments ?? [];
-        return sum + payments.filter((p) => p.method === "CASH").reduce((ps, p) => ps + Number(p.amount ?? 0), 0);
-      }, 0);
-      const incomeCard = allOrders.reduce((sum, order) => {
-        const payments = order.payments ?? [];
-        return sum + payments.filter((p) => p.method === "CARD").reduce((ps, p) => ps + Number(p.amount ?? 0), 0);
-      }, 0);
-
-      // Egresos (efectivo / transferencia desde expenses; CARD = transferencia)
       page = 1;
       let expensesRes = await apiClient.getExpenses(page, limit);
       let allExpenses = [...expensesRes.data];
@@ -82,19 +141,10 @@ export function Dashboard() {
         allExpenses = [...allExpenses, ...expensesRes.data];
       }
 
-      const expenseCash = allExpenses
-        .filter((e) => e.method === "CASH")
-        .reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
-      const expenseCard = allExpenses
-        .filter((e) => e.method === "CARD")
-        .reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
-
-      const netCash = incomeCash - expenseCash;
-      const netCard = incomeCard - expenseCard;
-      const totalRevenue = netCash + netCard;
+      setRawOrders(allOrders);
+      setRawExpenses(allExpenses);
 
       const lowStock = productsRes.data.filter((p) => p.stock < 10);
-
       const todayStart = startOfLocalDay(new Date());
       const recentOrders = allOrders
         .filter((order) => {
@@ -104,27 +154,14 @@ export function Dashboard() {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 5);
 
-      const sortedCustomers = [...customersRes.data].sort(
-        (a: Customer, b: Customer) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
-      const lastCustomer = sortedCustomers[0];
-
       setStats({
         totalOrders: ordersRes.meta.total,
-        totalRevenue,
-        incomeCash,
-        incomeCard,
-        expenseCash,
-        expenseCard,
         lowStockProducts: lowStock,
         recentOrders,
         totalCustomers: customersRes.meta.total,
-        netCash,
-        netCard,
       });
-    } catch (error) {
+    } catch {
       setApiConnected(false);
-      // Keep previous stats or defaults
     } finally {
       setLoading(false);
     }
@@ -133,6 +170,35 @@ export function Dashboard() {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    if (cashFlowModalOpen && baseline) {
+      form.setFieldsValue({
+        openingCash: baseline.openingCash,
+        openingCard: baseline.openingCard,
+        deltaSince: dayjs(baseline.deltaSince),
+      });
+    }
+  }, [cashFlowModalOpen, baseline, form]);
+
+  const saveBaseline = async () => {
+    try {
+      const v = await form.validateFields();
+      setSavingBaseline(true);
+      const updated = await apiClient.updateTreasuryBaseline({
+        openingCash: Number(v.openingCash ?? 0),
+        openingCard: Number(v.openingCard ?? 0),
+        deltaSince: v.deltaSince.toDate().toISOString(),
+      });
+      setBaseline(updated);
+      message.success("Saldos guardados");
+    } catch (e: unknown) {
+      if (e && typeof e === "object" && "errorFields" in e) return;
+      message.error("No se pudo guardar");
+    } finally {
+      setSavingBaseline(false);
+    }
+  };
 
   const orderColumns = [
     {
@@ -163,16 +229,10 @@ export function Dashboard() {
       title: "Acciones",
       key: "actions",
       width: 88,
-      render: (_: any, record: Order) => (
+      render: (_: unknown, record: Order) => (
         <Space>
           <Link href={`/orders/${record.id}`}>
-            <Button
-              type="default"
-              size="small"
-              icon={<EyeOutlined />}
-              title="Ver orden"
-              aria-label="Ver orden"
-            />
+            <Button type="default" size="small" icon={<EyeOutlined />} title="Ver orden" aria-label="Ver orden" />
           </Link>
         </Space>
       ),
@@ -180,11 +240,7 @@ export function Dashboard() {
   ];
 
   const lowStockColumns = [
-    {
-      title: "Producto",
-      dataIndex: "name",
-      key: "name",
-    },
+    { title: "Producto", dataIndex: "name", key: "name" },
     {
       title: "Stock",
       dataIndex: "stock",
@@ -236,7 +292,6 @@ export function Dashboard() {
         />
       ) : (
         <>
-          {/* Statistics Cards */}
           <Row gutter={[16, 16]} style={{ marginBottom: "24px" }}>
             <Col xs={24} sm={12} lg={6}>
               <Card style={{ background: "#1f2937", borderColor: "#2d3748" }} variant="outlined">
@@ -256,8 +311,8 @@ export function Dashboard() {
                 onClick={() => setCashFlowModalOpen(true)}
               >
                 <Statistic
-                  title="Flujo de Caja Actual"
-                  value={Number(stats.totalRevenue)}
+                  title="Caja (efectivo + transferencia)"
+                  value={Number(cash.total)}
                   formatter={(value) => formatCurrency(value)}
                   valueStyle={{ color: "#22c55e" }}
                 />
@@ -287,7 +342,6 @@ export function Dashboard() {
             </Col>
           </Row>
 
-          {/* Recent Orders */}
           <Row gutter={[16, 16]} style={{ marginBottom: "24px" }}>
             <Col span={24}>
               <Card
@@ -316,7 +370,6 @@ export function Dashboard() {
             </Col>
           </Row>
 
-          {/* Low Stock Products */}
           <Row gutter={[16, 16]}>
             <Col span={24}>
               <Card
@@ -348,37 +401,94 @@ export function Dashboard() {
       )}
 
       <Modal
-        title="Detalle de Flujo de Caja"
+        title="Caja: saldos y movimiento"
         open={cashFlowModalOpen}
         onCancel={() => setCashFlowModalOpen(false)}
         footer={null}
+        width={520}
+        destroyOnClose
       >
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <div>
-            <p style={{ color: "#ffffff", margin: 0, fontWeight: 600 }}>Efectivo</p>
-            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
-              Ingresos: <span style={{ color: "#22c55e" }}>{formatCurrency(stats.incomeCash)}</span>
+        <p style={{ color: "#9ca3af", marginTop: 0, fontSize: 13, marginBottom: 16 }}>
+          Definí cuánto tenés hoy en efectivo y en transferencia, y desde qué fecha deben sumarse las{" "}
+          <strong style={{ color: "#e5e7eb" }}>órdenes y gastos nuevos</strong> (por ejemplo justo después de importar
+          el Excel, para no duplicar lo histórico).
+        </p>
+        <Form form={form} layout="vertical" style={{ marginBottom: 16 }}>
+          <Form.Item
+            name="openingCash"
+            label="Efectivo inicial (hoy)"
+            rules={[{ required: true, message: "Requerido" }]}
+          >
+            <InputNumber min={0} style={{ width: "100%" }} step={1} />
+          </Form.Item>
+          <Form.Item
+            name="openingCard"
+            label="Transferencia inicial (hoy)"
+            rules={[{ required: true, message: "Requerido" }]}
+          >
+            <InputNumber min={0} style={{ width: "100%" }} step={1} />
+          </Form.Item>
+          <Form.Item
+            name="deltaSince"
+            label="Contar órdenes y gastos desde"
+            rules={[{ required: true, message: "Requerido" }]}
+          >
+            <DatePicker showTime format="DD/MM/YYYY HH:mm" style={{ width: "100%" }} />
+          </Form.Item>
+          <Button
+            type="primary"
+            onClick={saveBaseline}
+            loading={savingBaseline}
+            style={{ background: "#22c55e", borderColor: "#22c55e" }}
+          >
+            Guardar saldos
+          </Button>
+        </Form>
+
+        {baseline ? (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 8 }}>
+              <div>
+                <p style={{ color: "#ffffff", margin: 0, fontWeight: 600 }}>Efectivo</p>
+                <p style={{ color: "#9ca3af", margin: "8px 0 0 0", fontSize: 13 }}>
+                  Inicial: {formatCurrency(baseline.openingCash)}
+                </p>
+                <p style={{ color: "#9ca3af", margin: "4px 0 0 0", fontSize: 13 }}>
+                  + Ventas (desde corte): <span style={{ color: "#22c55e" }}>{formatCurrency(cash.deltaCashIn)}</span>
+                </p>
+                <p style={{ color: "#9ca3af", margin: "4px 0 0 0", fontSize: 13 }}>
+                  − Gastos (desde corte): <span style={{ color: "#f97316" }}>{formatCurrency(cash.deltaCashOut)}</span>
+                </p>
+                <p style={{ color: "#e5e7eb", margin: "8px 0 0 0", fontWeight: 600 }}>
+                  = {formatCurrency(cash.balanceCash)}
+                </p>
+              </div>
+              <div>
+                <p style={{ color: "#ffffff", margin: 0, fontWeight: 600 }}>Transferencia</p>
+                <p style={{ color: "#9ca3af", margin: "8px 0 0 0", fontSize: 13 }}>
+                  Inicial: {formatCurrency(baseline.openingCard)}
+                </p>
+                <p style={{ color: "#9ca3af", margin: "4px 0 0 0", fontSize: 13 }}>
+                  + Ventas: <span style={{ color: "#22c55e" }}>{formatCurrency(cash.deltaCardIn)}</span>
+                </p>
+                <p style={{ color: "#9ca3af", margin: "4px 0 0 0", fontSize: 13 }}>
+                  − Gastos: <span style={{ color: "#f97316" }}>{formatCurrency(cash.deltaCardOut)}</span>
+                </p>
+                <p style={{ color: "#e5e7eb", margin: "8px 0 0 0", fontWeight: 600 }}>
+                  = {formatCurrency(cash.balanceCard)}
+                </p>
+              </div>
+            </div>
+            <p style={{ color: "#ffffff", margin: "16px 0 0 0", fontWeight: 600 }}>
+              Total caja: {formatCurrency(cash.total)}
             </p>
-            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
-              Egresos: <span style={{ color: "#f97316" }}>{formatCurrency(stats.expenseCash)}</span>
+            <p style={{ color: "#6b7280", fontSize: 12, marginTop: 8 }}>
+              Corte: {new Date(baseline.deltaSince).toLocaleString("es-AR")}
             </p>
-            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
-              Neto: <span style={{ color: "#22c55e" }}>{formatCurrency(stats.netCash)}</span>
-            </p>
-          </div>
-          <div>
-            <p style={{ color: "#ffffff", margin: 0, fontWeight: 600 }}>Transferencia</p>
-            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
-              Ingresos: <span style={{ color: "#22c55e" }}>{formatCurrency(stats.incomeCard)}</span>
-            </p>
-            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
-              Egresos: <span style={{ color: "#f97316" }}>{formatCurrency(stats.expenseCard)}</span>
-            </p>
-            <p style={{ color: "#9ca3af", margin: "8px 0 0 0" }}>
-              Neto: <span style={{ color: "#22c55e" }}>{formatCurrency(stats.netCard)}</span>
-            </p>
-          </div>
-        </div>
+          </>
+        ) : (
+          <p style={{ color: "#f97316" }}>No se pudo cargar la configuración de caja. Reintentá o revisá la API.</p>
+        )}
       </Modal>
     </div>
   );

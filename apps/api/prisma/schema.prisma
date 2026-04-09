@@ -238,6 +238,15 @@ model Expense {
   groupId String @default(uuid())
 }
 
+// Una sola fila: saldos iniciales de caja y desde cuándo sumar órdenes/gastos al movimiento del dashboard.
+model TreasuryBaseline {
+  id           String   @id @default("singleton")
+  openingCash  Decimal  @default(0)
+  openingCard  Decimal  @default(0)
+  deltaSince   DateTime
+  updatedAt    DateTime @updatedAt
+}
+
 model StockMovement {
   id             String            @id @default(uuid())
   productId      String

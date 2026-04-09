@@ -15,7 +15,8 @@
     "prisma:studio": "prisma studio",
     "import:xlsx": "node scripts/import-from-xlsx.js",
     "import:crm": "node scripts/import-crm-xlsx.js",
-    "inspect:crm": "node scripts/inspect-crm-xlsx.js"
+    "inspect:crm": "node scripts/inspect-crm-xlsx.js",
+    "inspect:xlsx": "node scripts/inspect-xlsx.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

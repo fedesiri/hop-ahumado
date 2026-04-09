@@ -188,6 +188,19 @@ export interface Expense {
   groupId: string;
 }
 
+export interface TreasuryBaseline {
+  openingCash: number;
+  openingCard: number;
+  deltaSince: string;
+  updatedAt: string;
+}
+
+export interface UpdateTreasuryBaselineRequest {
+  openingCash: number;
+  openingCard: number;
+  deltaSince: string;
+}
+
 export interface StockMovement {
   id: string;
   productId: string;

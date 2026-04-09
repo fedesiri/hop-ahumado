@@ -31,6 +31,7 @@ import type {
   StockBalanceRow,
   StockLocation,
   StockMovement,
+  TreasuryBaseline,
   TransferAllStockRequest,
   TransferAllStockResult,
   UpdateCategoryRequest,
@@ -44,6 +45,7 @@ import type {
   UpdateProductRequest,
   UpdateRecipeItemRequest,
   UpdateStockLocationRequest,
+  UpdateTreasuryBaselineRequest,
   UpdateUserRequest,
   User,
 } from "./types";
@@ -442,6 +444,17 @@ export class ApiClient {
 
   async deleteExpenseGroup(groupId: string): Promise<void> {
     return this.request(`/expenses/group/${groupId}`, { method: "DELETE" });
+  }
+
+  async getTreasuryBaseline(): Promise<TreasuryBaseline> {
+    return this.request<TreasuryBaseline>("/treasury/baseline");
+  }
+
+  async updateTreasuryBaseline(data: UpdateTreasuryBaselineRequest): Promise<TreasuryBaseline> {
+    return this.request<TreasuryBaseline>("/treasury/baseline", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
   }
 
   // Stock locations (ubicaciones de inventario)
