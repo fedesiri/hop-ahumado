@@ -1,23 +1,30 @@
 /**
- * Importa desde el Excel: categorías, productos, clientes, precios (Mayorista/Minorista/Fábrica), costos, stock y movimientos.
- * El stock del Excel se consolida en la ubicación predeterminada "San Luis" (StockBalance + campo product.stock).
+ * Importa desde el Excel: productos, clientes, precios (Mayorista/Minorista/Fábrica), costos, stock, movimientos
+ * y órdenes históricas desde Salidas (ventas reales). No importa Caja Diaria ni crea Expense desde el Excel.
+ * Las órdenes son solo registro para métricas: no descuentan stock (el stock sigue viniendo de Stock General + sync).
  * Uso: node scripts/import-from-xlsx.js "ruta/al/archivo.xlsx"
  * Ejecutar desde apps/api (pnpm run import:xlsx "ruta")
  */
 const XLSX = require("xlsx");
-const { PrismaClient, StockMovementType } = require("@prisma/client");
+const { PrismaClient, PaymentMethod, StockMovementType } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
-function excelDateToJs(serial) {
-  if (serial == null || serial === "" || typeof serial !== "number") return null;
-  const utc = (serial - 25569) * 86400 * 1000;
-  return new Date(utc);
+function excelDateToJs(val) {
+  if (val == null || val === "") return null;
+  if (val instanceof Date) return val;
+  const n = Number(val);
+  if (Number.isFinite(n) && n > 0) {
+    const utc = (n - 25569) * 86400 * 1000;
+    return new Date(utc);
+  }
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function num(val) {
   if (val === "" || val == null) return 0;
-  const n = Number(val);
+  const n = Number(String(val).replace(",", "."));
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -32,6 +39,26 @@ function isValidProductCode(codigo) {
   if (/ a /i.test(codigo)) return false;
   if (/^de\s*\d/i.test(codigo)) return false;
   return /^[A-Za-z0-9]+-\d+$/.test(codigo);
+}
+
+/** Texto en columna Cliente de Salidas: no es venta a cliente (órdenes / clientes normales lo ignoran). */
+function isGastoAjusteCliente(name) {
+  const u = str(name).toUpperCase();
+  return u.includes("GASTO") || u.includes("AJUSTE");
+}
+
+/** Order/Payment solo admiten CASH | CARD en Prisma. */
+function mapPaymentMethod(raw) {
+  const v = str(raw).toLowerCase();
+  if (!v) return PaymentMethod.CASH;
+  if (/efectivo|^ef\.?$|cash/i.test(v)) return PaymentMethod.CASH;
+  if (/tarjeta|card|cr[eé]dito|d[eé]bito|visa|master/i.test(v)) return PaymentMethod.CARD;
+  return PaymentMethod.CARD;
+}
+
+function dateKey(d) {
+  if (!d) return "";
+  return d.toISOString().slice(0, 10);
 }
 
 const DEFAULT_LOCATION_NAME = "San Luis";
@@ -136,18 +163,31 @@ async function run(filePath) {
     entradasRows.push({ fecha, codigo, ingresos, costo });
   }
 
-  // --- Salidas: fila 3 = headers, 4+ = datos. 0=Fecha, 1=Cliente, 2=Código, 4=Salidas
-  const salidasRows = [];
-  const clientesSet = new Set();
+  // --- Salidas: fila 3 = headers, 4+ = datos.
+  // 0=Fecha, 1=Cliente, 2=Código, 3=Descripción, 4=Salidas, 5=Condición, 6=Método de Pago, 7=Precio Unitario, 8=Venta total
+  const salidasParsed = [];
   for (let i = 4; i < salidasData.length; i++) {
     const r = salidasData[i];
     const fecha = excelDateToJs(num(r[0]) || r[0]);
     const cliente = str(r[1]);
     const codigo = str(r[2]);
+    const descripcion = str(r[3]);
     const salidas = Math.floor(num(r[4]));
-    if (cliente) clientesSet.add(cliente);
-    if (!codigo || !fecha || !isValidProductCode(codigo)) continue;
-    salidasRows.push({ fecha, cliente, codigo, salidas });
+    const metodo = str(r[6]);
+    const precioUnit = num(r[7]);
+    const ventaTotal = num(r[8]);
+    if (!fecha && !cliente && !codigo) continue;
+    salidasParsed.push({ fecha, cliente, codigo, descripcion, salidas, metodo, precioUnit, ventaTotal });
+  }
+
+  const salidasRows = salidasParsed.filter(
+    (row) => row.codigo && row.fecha && isValidProductCode(row.codigo) && row.salidas > 0,
+  );
+
+  const clientesSet = new Set();
+  for (const row of salidasParsed) {
+    if (!row.cliente || isGastoAjusteCliente(row.cliente)) continue;
+    clientesSet.add(row.cliente);
   }
 
   // 1) Categorías: no se cargan; las creás vos (ej. Carne, Cerveza).
@@ -242,7 +282,127 @@ async function run(filePath) {
   }
   console.log("Costos:", Object.keys(costByProduct).length);
 
-  // 6) Stock en ubicación predeterminada (paso 2). 7) Movimientos: Entradas → IN, Salidas → OUT
+  // 6) Órdenes históricas — agrupar ventas por fecha + cliente (sin GASTO/AJUSTE). Solo persistencia; no toca stock.
+  const ventasByGroup = new Map();
+  for (const row of salidasParsed) {
+    if (isGastoAjusteCliente(row.cliente) || !row.cliente || !row.fecha) continue;
+    if (!row.codigo || !isValidProductCode(row.codigo) || row.salidas <= 0) continue;
+    const productId = productByCode[row.codigo];
+    if (!productId) continue;
+    const gk = `${dateKey(row.fecha)}\t${row.cliente}`;
+    if (!ventasByGroup.has(gk)) ventasByGroup.set(gk, []);
+    ventasByGroup.get(gk).push(row);
+  }
+
+  let ordersCreated = 0;
+  let ordersSkipped = 0;
+  for (const [, lines] of ventasByGroup) {
+    const first = lines[0];
+    const deliveryDate = first.fecha;
+    const customerId = customerByName[first.cliente] || null;
+
+    const items = [];
+    for (const line of lines) {
+      const productId = productByCode[line.codigo];
+      if (!productId) continue;
+      const price =
+        line.precioUnit > 0 ? line.precioUnit : line.salidas > 0 ? line.ventaTotal / line.salidas : 0;
+      items.push({
+        productId,
+        quantity: line.salidas,
+        price,
+      });
+    }
+    if (items.length === 0) continue;
+
+    const itemsTotal = items.reduce((s, it) => s + it.quantity * it.price, 0);
+    const ventaSum = lines.reduce(
+      (s, line) => s + (line.ventaTotal > 0 ? line.ventaTotal : line.salidas * line.precioUnit),
+      0,
+    );
+    const total = itemsTotal;
+    if (Math.abs(itemsTotal - ventaSum) > 0.05) {
+      console.warn(
+        `Aviso orden ${dateKey(deliveryDate)} / ${first.cliente}: total ítems ${itemsTotal} vs venta total Excel ${ventaSum}; se usa suma de ítems.`,
+      );
+    }
+
+    const buckets = { [PaymentMethod.CASH]: 0, [PaymentMethod.CARD]: 0 };
+    for (const line of lines) {
+      const m = mapPaymentMethod(line.metodo);
+      const lt = line.ventaTotal > 0 ? line.ventaTotal : line.salidas * line.precioUnit;
+      buckets[m] += lt;
+    }
+    let payments;
+    const bucketSum = buckets[PaymentMethod.CASH] + buckets[PaymentMethod.CARD];
+    if (bucketSum > 0 && Math.abs(bucketSum - total) < 0.05) {
+      payments = [];
+      if (buckets[PaymentMethod.CASH] > 0.01) {
+        payments.push({ amount: buckets[PaymentMethod.CASH], method: PaymentMethod.CASH });
+      }
+      if (buckets[PaymentMethod.CARD] > 0.01) {
+        payments.push({ amount: buckets[PaymentMethod.CARD], method: PaymentMethod.CARD });
+      }
+    }
+    if (!payments || payments.length === 0) {
+      payments = [{ amount: total, method: mapPaymentMethod(first.metodo) }];
+    }
+
+    const payTotal = payments.reduce((s, p) => s + p.amount, 0);
+    if (Math.abs(payTotal - total) > 0.05) {
+      payments = [{ amount: total, method: mapPaymentMethod(first.metodo) }];
+    }
+
+    const existing = await prisma.order.findFirst({
+      where: {
+        ...(customerId ? { customerId } : { customerId: null }),
+        total,
+        deliveryDate: {
+          gte: new Date(dateKey(deliveryDate) + "T00:00:00.000Z"),
+          lte: new Date(dateKey(deliveryDate) + "T23:59:59.999Z"),
+        },
+      },
+      include: { orderItems: true },
+    });
+    if (existing && existing.orderItems.length === items.length) {
+      const sig = (arr) =>
+        [...arr]
+          .map((x) => `${x.productId}:${x.quantity}:${Number(x.price)}`)
+          .sort()
+          .join("|");
+      if (sig(existing.orderItems) === sig(items)) {
+        ordersSkipped++;
+        continue;
+      }
+    }
+
+    await prisma.order.create({
+      data: {
+        customerId,
+        deliveryDate,
+        createdAt: deliveryDate,
+        total,
+        fulfillmentLocationId: defaultLocationId,
+        orderItems: {
+          create: items.map((i) => ({
+            productId: i.productId,
+            quantity: i.quantity,
+            price: i.price,
+          })),
+        },
+        payments: {
+          create: payments.map((p) => ({
+            amount: p.amount,
+            method: p.method,
+          })),
+        },
+      },
+    });
+    ordersCreated++;
+  }
+  console.log("Órdenes (Salidas ventas): " + ordersCreated + " nuevas, " + ordersSkipped + " omitidas (duplicado).");
+
+  // 7) Stock en ubicación predeterminada (paso 2). 8) Movimientos: Entradas → IN, Salidas → OUT
   let entradasCreados = 0;
   let entradasOmitidos = 0;
   for (const r of entradasRows) {
@@ -275,7 +435,8 @@ async function run(filePath) {
     const productId = productByCode[r.codigo];
     if (!productId || r.salidas <= 0) continue;
     const fechaStr = r.fecha ? r.fecha.toISOString().slice(0, 10) : "";
-    const reason = `Importación Excel - Salida|${fechaStr}|${r.codigo}|${r.salidas}`;
+    const clientePart = r.cliente ? str(r.cliente).replace(/\|/g, " ") : "";
+    const reason = `Importación Excel - Salida|${fechaStr}|${clientePart}|${r.codigo}|${r.salidas}`;
     const existente = await prisma.stockMovement.findFirst({
       where: { reason, type: StockMovementType.OUT },
     });

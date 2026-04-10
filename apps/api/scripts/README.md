@@ -2,7 +2,7 @@
 
 ## Importar desde Excel (inventario)
 
-Carga categorías, productos, clientes, precios (Mayorista, Minorista, Fábrica), costos, stock y movimientos desde la plantilla de control de inventario.
+Carga productos, clientes, precios (Mayorista, Minorista, Fábrica), costos, stock, movimientos y **órdenes históricas** (agrupadas por fecha y cliente desde la hoja Salidas, con ítems y pagos). No importa la hoja Caja Diaria ni crea gastos desde el Excel; el stock sigue definiéndose con Stock General y la ubicación San Luis, no con las órdenes importadas.
 
 **Uso** (desde `apps/api`):
 
