@@ -17,17 +17,47 @@ export const PRICE_TYPE_LABELS: Record<PriceType, string> = {
 export interface PriceLike {
   value: number | string;
   description?: string | null;
+  createdAt?: string;
+}
+
+/**
+ * Clave comparable para lista de precios: minúsculas, sin acentos (ej. BD "Fábrica" === selector "fabrica"),
+ * sin espacios raros ni zero-width.
+ */
+export function normalizePriceListKey(raw: string | null | undefined): string {
+  if (raw == null) return "";
+  let s = String(raw)
+    .replace(/\u00A0/g, " ")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .toLowerCase();
+  try {
+    s = s.normalize("NFD").replace(/\p{M}/gu, "");
+  } catch {
+    s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+  return s;
+}
+
+function sortPricesNewestFirst(prices: PriceLike[]): PriceLike[] {
+  return [...prices].sort((a, b) => {
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return tb - ta;
+  });
 }
 
 /**
  * Devuelve el valor de precio para el tipo seleccionado (siempre como number).
- * Busca un precio cuya description coincida con el tipo (ej. "mayorista");
- * si no hay, usa el primer precio del producto como fallback.
+ * Busca un precio cuya description coincida con el tipo (mayorista / minorista / fabrica), con
+ * comparación flexible (acentos, mayúsculas). Si no hay coincidencia, usa el precio activo más reciente.
  */
 export function getPriceForType(prices: PriceLike[], priceType: PriceType): number {
   if (!prices.length) return 0;
-  const match = prices.find((p) => p.description?.trim().toLowerCase() === priceType.trim().toLowerCase());
-  const raw = match ? match.value : prices[0].value;
+  const ordered = sortPricesNewestFirst(prices);
+  const typeKey = normalizePriceListKey(priceType);
+  const match = ordered.find((p) => normalizePriceListKey(p.description) === typeKey);
+  const raw = match ? match.value : ordered[0].value;
   return Number(raw);
 }
 

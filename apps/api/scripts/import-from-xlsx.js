@@ -234,7 +234,8 @@ async function run(filePath) {
     const t = (c || "").toLowerCase();
     if (t.includes("mayorista")) return "Mayorista";
     if (t.includes("minorista")) return "Minorista";
-    if (t.includes("fabrica") || t.includes("fábrica")) return "Fábrica";
+    // Sin tilde: coincide con el tipo "fabrica" del frontend tras normalización; evita mismatch histórico.
+    if (t.includes("fabrica") || t.includes("fábrica")) return "Fabrica";
     return c || "Minorista";
   };
   const priceKeys = new Set();
