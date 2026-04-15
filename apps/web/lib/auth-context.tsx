@@ -1,6 +1,9 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
+import { getFirebaseAuth, waitForFirebaseAuthReady } from "@/lib/firebase";
 import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -30,10 +33,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/auth/me`, {
+      await waitForFirebaseAuthReady();
+
+      const res = await authFetch(`${API_URL}/auth/me`, {
         method: "GET",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
       });
 
       if (!res.ok) {
@@ -65,11 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh, pathname]);
 
   const logout = useCallback(async () => {
-    await fetch(`${API_URL}/auth/logout`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-    }).catch(() => undefined);
+    await signOut(getFirebaseAuth()).catch(() => undefined);
 
     setUser(null);
     router.push("/login");

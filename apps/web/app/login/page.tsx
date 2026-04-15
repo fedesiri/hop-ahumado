@@ -1,5 +1,6 @@
 "use client";
 
+import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { useMediaQuery } from "@/lib/use-media-query";
@@ -10,7 +11,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-const COOKIE_LOGIN_ENDPOINT = "/auth/session-cookie";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,12 +32,8 @@ export default function LoginPage() {
 
     async function checkSession() {
       try {
-        const res = await fetch(`${API_URL}/auth/me`, {
+        const res = await authFetch(`${API_URL}/auth/me`, {
           method: "GET",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
         });
         if (mounted && res.ok) {
           router.replace(getFromPath());
@@ -63,21 +59,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       const auth = getFirebaseAuth();
-      const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
-      const firebaseUser = userCredential.user;
-      const idToken = await firebaseUser.getIdToken();
-
-      const res = await fetch(`${API_URL}${COOKIE_LOGIN_ENDPOINT}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.message || "No se pudo iniciar sesión");
-      }
+      await signInWithEmailAndPassword(auth, values.email, values.password);
 
       message.success("Sesión iniciada");
       await refresh();

@@ -1,3 +1,4 @@
+import { getAuthHeaders } from "@/lib/auth-fetch";
 import type {
   Category,
   Cost,
@@ -61,12 +62,9 @@ export class ApiClient {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    const headers = {
-      "Content-Type": "application/json",
-      ...options.headers,
-    };
+    const headers = await getAuthHeaders(options.headers);
 
-    const response = await fetch(url, { ...options, credentials: "include", headers });
+    const response = await fetch(url, { ...options, headers });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));

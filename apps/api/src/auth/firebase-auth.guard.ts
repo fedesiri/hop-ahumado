@@ -2,16 +2,11 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import type { Request } from "express";
 import { firebaseAdmin } from "./firebase-admin";
 
-const COOKIE_NAME = process.env.FIREBASE_SESSION_COOKIE_NAME || "hop_auth_session";
-
-function getCookieValue(cookieHeader: string | undefined, name: string) {
-  if (!cookieHeader) return undefined;
-  const parts = cookieHeader.split(";").map((p) => p.trim());
-  const prefix = `${name}=`;
-  for (const p of parts) {
-    if (p.startsWith(prefix)) return decodeURIComponent(p.substring(prefix.length));
-  }
-  return undefined;
+function getBearerToken(header: string | undefined) {
+  if (!header) return undefined;
+  const [scheme, token] = header.split(" ");
+  if (scheme !== "Bearer" || !token) return undefined;
+  return token;
 }
 
 @Injectable()
@@ -30,11 +25,11 @@ export class FirebaseAuthGuard implements CanActivate {
       throw new UnauthorizedException("Firebase Admin no configurado");
     }
 
-    const cookieHeader = request.headers.cookie as string | undefined;
-    const sessionCookie = getCookieValue(cookieHeader, COOKIE_NAME);
-    if (!sessionCookie) throw new UnauthorizedException("No hay sesión");
+    const idToken = getBearerToken(request.headers.authorization);
+    if (!idToken) throw new UnauthorizedException("Missing bearer token");
 
-    await firebaseAdmin.auth().verifySessionCookie(sessionCookie, true);
+    const decoded = await firebaseAdmin.auth().verifyIdToken(idToken, true);
+    (request as Request & { firebaseUser?: unknown }).firebaseUser = decoded;
     return true;
   }
 }

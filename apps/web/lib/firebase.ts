@@ -1,7 +1,8 @@
 import { getApps, initializeApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import { getAuth, onAuthStateChanged, type Auth } from "firebase/auth";
 
 let authSingleton: Auth | null = null;
+let authReadyPromise: Promise<Auth> | null = null;
 
 function getFirebaseConfig() {
   return {
@@ -25,4 +26,34 @@ export function getFirebaseAuth() {
   const app = getApps().length ? getApps()[0] : initializeApp(cfg);
   authSingleton = getAuth(app);
   return authSingleton;
+}
+
+export async function waitForFirebaseAuthReady() {
+  const auth = getFirebaseAuth();
+  if (typeof window === "undefined") return auth;
+
+  const authWithReady = auth as Auth & { authStateReady?: () => Promise<void> };
+  if (typeof authWithReady.authStateReady === "function") {
+    await authWithReady.authStateReady();
+    return auth;
+  }
+
+  if (!authReadyPromise) {
+    authReadyPromise = new Promise<Auth>((resolve) => {
+      const unsubscribe = onAuthStateChanged(
+        auth,
+        () => {
+          unsubscribe();
+          resolve(auth);
+        },
+        () => {
+          unsubscribe();
+          resolve(auth);
+        },
+      );
+    });
+  }
+
+  await authReadyPromise;
+  return auth;
 }
