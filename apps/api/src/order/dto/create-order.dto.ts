@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsIn,
   IsNumber,
   IsOptional,
   IsUUID,
@@ -33,6 +34,14 @@ export class CreateOrderDto {
   @IsNumber()
   @Min(0, { message: "El total debe ser mayor o igual a 0" })
   total: number;
+
+  /**
+   * Lista de precios usada al armar el pedido. Si se envía, el servidor valida total y líneas
+   * (incl. promo en combos regalo cuando el subtotal umbral supera el configurado en código).
+   */
+  @IsOptional()
+  @IsIn(["mayorista", "minorista", "fabrica"], { message: "priceListType debe ser mayorista, minorista o fabrica" })
+  priceListType?: "mayorista" | "minorista" | "fabrica";
 
   @IsArray()
   @ArrayMinSize(1, { message: "La orden debe tener al menos un ítem" })

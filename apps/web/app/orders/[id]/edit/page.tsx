@@ -7,7 +7,12 @@ import { useAuth } from "@/lib/auth-context";
 import dayjs, { type Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
-import { inferPriceTypeFromOrderLines } from "@/lib/order-calculator/price-types";
+import { inferPriceTypeFromOrderLines, type PriceType } from "@/lib/order-calculator/price-types";
+import {
+  expandOrderLineDemands,
+  fetchRecipesByProductIds,
+  type RecipeIngredientRow,
+} from "@/lib/order-calculator/stock-preview";
 import type { Customer, Order, Price, Product, StockLocation } from "@/lib/types";
 import { PaymentMethod } from "@/lib/types";
 import { ArrowLeftOutlined } from "@ant-design/icons";
@@ -43,6 +48,7 @@ function OrderEditPageContent({ id }: { id: string }) {
     items: { productId: string; quantity: number; price: number }[];
     total: number;
     customerId: string | null;
+    priceListType: PriceType;
   } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [deliveryDate, setDeliveryDate] = useState<Dayjs | null>(null);
@@ -50,6 +56,8 @@ function OrderEditPageContent({ id }: { id: string }) {
   const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
   const [fulfillmentLocationId, setFulfillmentLocationId] = useState<string | null>(null);
   const [balanceByProductId, setBalanceByProductId] = useState<Record<string, number>>({});
+  const [recipesByProductId, setRecipesByProductId] = useState<Record<string, RecipeIngredientRow[]>>({});
+  const [stockPreviewReady, setStockPreviewReady] = useState(false);
 
   const pricesByProductId = useMemo(() => {
     const map: Record<string, Price[]> = {};
@@ -69,15 +77,6 @@ function OrderEditPageContent({ id }: { id: string }) {
     return m;
   }, [order]);
 
-  const oldQtyByProduct = useMemo(() => {
-    if (!order?.orderItems?.length) return {} as Record<string, number>;
-    const m: Record<string, number> = {};
-    for (const oi of order.orderItems) {
-      m[oi.productId] = (m[oi.productId] ?? 0) + oi.quantity;
-    }
-    return m;
-  }, [order]);
-
   /** Misma lista de precios que al crear el pedido (mayorista/minorista/fábrica), inferida de las líneas guardadas */
   const inferredPriceType = useMemo(() => {
     if (!order?.orderItems?.length || !prices.length) return undefined;
@@ -85,27 +84,39 @@ function OrderEditPageContent({ id }: { id: string }) {
   }, [order, prices.length, pricesByProductId]);
 
   const productsGoingNegative = useMemo(() => {
-    if (!pendingOrder || !fulfillmentLocationId) return [];
+    if (!pendingOrder || !fulfillmentLocationId || !stockPreviewReady || !order?.orderItems) return [];
     const productById = Object.fromEntries(products.map((p) => [p.id, p]));
+    const oldItems = order.orderItems.map((oi) => ({ productId: oi.productId, quantity: oi.quantity }));
+    const newDemand = expandOrderLineDemands(pendingOrder.items, recipesByProductId);
+    const oldDemand = expandOrderLineDemands(oldItems, recipesByProductId);
+    const allIds = new Set([...Object.keys(newDemand), ...Object.keys(oldDemand)]);
     const result: { name: string; current: number; requested: number; after: number }[] = [];
-    for (const item of pendingOrder.items) {
-      const product = productById[item.productId];
-      if (!product) continue;
-      const released = oldQtyByProduct[item.productId] ?? 0;
-      const atLocation = balanceByProductId[item.productId] ?? 0;
+    for (const productId of allIds) {
+      const need = newDemand[productId] ?? 0;
+      const released = oldDemand[productId] ?? 0;
+      const atLocation = balanceByProductId[productId] ?? 0;
       const effective = atLocation + released;
-      const after = effective - item.quantity;
+      const after = effective - need;
       if (after < 0) {
+        const product = productById[productId];
         result.push({
-          name: product.name,
+          name: product?.name ?? productId,
           current: effective,
-          requested: item.quantity,
+          requested: need,
           after,
         });
       }
     }
     return result;
-  }, [pendingOrder, products, oldQtyByProduct, fulfillmentLocationId, balanceByProductId]);
+  }, [
+    pendingOrder,
+    products,
+    order,
+    fulfillmentLocationId,
+    balanceByProductId,
+    recipesByProductId,
+    stockPreviewReady,
+  ]);
 
   const limit = 100;
 
@@ -180,26 +191,55 @@ function OrderEditPageContent({ id }: { id: string }) {
   }, [id, message, fetchProducts]);
 
   useEffect(() => {
-    if (!confirmModalOpen || !pendingOrder || !fulfillmentLocationId) return;
+    if (!confirmModalOpen) {
+      setStockPreviewReady(false);
+      setRecipesByProductId({});
+      return;
+    }
+    if (!pendingOrder || !fulfillmentLocationId || !order?.orderItems) return;
+    let cancelled = false;
+    setStockPreviewReady(false);
     fetchProducts();
     (async () => {
       try {
-        const rows = await apiClient.getStockBalancesAtLocation(fulfillmentLocationId);
+        const ids = new Set<string>();
+        pendingOrder.items.forEach((i) => ids.add(i.productId));
+        order.orderItems!.forEach((oi) => ids.add(oi.productId));
+        const [rows, recipes] = await Promise.all([
+          apiClient.getStockBalancesAtLocation(fulfillmentLocationId),
+          fetchRecipesByProductIds((p, l, id) => apiClient.getRecipeItems(p, l, id), [...ids]),
+        ]);
+        if (cancelled) return;
         const map: Record<string, number> = {};
         for (const r of rows) map[r.productId] = Number(r.quantity);
         setBalanceByProductId(map);
+        setRecipesByProductId(recipes);
+        setStockPreviewReady(true);
       } catch {
-        setBalanceByProductId({});
+        if (!cancelled) {
+          setBalanceByProductId({});
+          setRecipesByProductId({});
+          setStockPreviewReady(true);
+        }
       }
     })();
-  }, [confirmModalOpen, pendingOrder, fulfillmentLocationId, fetchProducts]);
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmModalOpen, pendingOrder, fulfillmentLocationId, fetchProducts, order?.orderItems]);
 
   const handleConfirmOrder = (
     items: { productId: string; quantity: number; price: number }[],
     total: number,
     customerId?: string | null,
+    priceListType?: PriceType,
   ) => {
-    setPendingOrder({ items, total, customerId: customerId ?? null });
+    setPendingOrder({
+      items,
+      total,
+      customerId: customerId ?? null,
+      priceListType: priceListType ?? inferredPriceType ?? "mayorista",
+    });
     setConfirmModalOpen(true);
   };
 
@@ -209,7 +249,7 @@ function OrderEditPageContent({ id }: { id: string }) {
       message.error("Elegí la ubicación de stock desde la cual descontar el pedido.");
       return;
     }
-    const { items, total, customerId } = pendingOrder;
+    const { items, total, customerId, priceListType } = pendingOrder;
     setSubmitting(true);
     try {
       await apiClient.updateOrder(id, {
@@ -219,6 +259,7 @@ function OrderEditPageContent({ id }: { id: string }) {
           deliveryDate?.toISOString() ?? (order.deliveryDate ? new Date(order.deliveryDate).toISOString() : undefined),
         fulfillmentLocationId: fulfillmentLocationId ?? undefined,
         total,
+        priceListType,
         items: items.map((item) => ({
           productId: item.productId,
           quantity: Number(item.quantity),

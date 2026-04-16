@@ -7,6 +7,12 @@ import { useAuth } from "@/lib/auth-context";
 import dayjs, { type Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
+import {
+  expandOrderLineDemands,
+  fetchRecipesByProductIds,
+  type RecipeIngredientRow,
+} from "@/lib/order-calculator/stock-preview";
+import type { PriceType } from "@/lib/order-calculator/price-types";
 import type { CreateOrderRequest, Customer, Price, Product, StockLocation } from "@/lib/types";
 import { PaymentMethod } from "@/lib/types";
 import { Alert, App, Button, DatePicker, Modal, Select, Spin } from "antd";
@@ -35,6 +41,7 @@ function OrderCalculatorPageContent() {
     items: { productId: string; quantity: number; price: number }[];
     total: number;
     customerId: string | null;
+    priceListType: PriceType;
   } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [deliveryDate, setDeliveryDate] = useState<Dayjs | null>(null);
@@ -42,6 +49,8 @@ function OrderCalculatorPageContent() {
   const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
   const [fulfillmentLocationId, setFulfillmentLocationId] = useState<string | null>(null);
   const [balanceByProductId, setBalanceByProductId] = useState<Record<string, number>>({});
+  const [recipesByProductId, setRecipesByProductId] = useState<Record<string, RecipeIngredientRow[]>>({});
+  const [stockPreviewReady, setStockPreviewReady] = useState(false);
 
   const pricesByProductId = useMemo(() => {
     const map: Record<string, Price[]> = {};
@@ -52,27 +61,28 @@ function OrderCalculatorPageContent() {
     return map;
   }, [prices]);
 
-  /** Stock disponible en la ubicación elegida (por producto). */
+  /** Stock en la ubicación elegida: para combos usa ingredientes (misma lógica que el backend al descontar). */
   const productsGoingNegative = useMemo(() => {
-    if (!pendingOrder || !fulfillmentLocationId) return [];
+    if (!pendingOrder || !fulfillmentLocationId || !stockPreviewReady) return [];
     const productById = Object.fromEntries(products.map((p) => [p.id, p]));
+    const demand = expandOrderLineDemands(pendingOrder.items, recipesByProductId);
     const result: { name: string; current: number; requested: number; after: number }[] = [];
-    for (const item of pendingOrder.items) {
-      const product = productById[item.productId];
-      if (!product) continue;
-      const atLocation = balanceByProductId[item.productId] ?? 0;
-      const after = atLocation - item.quantity;
+    for (const [productId, need] of Object.entries(demand)) {
+      if (need <= 0) continue;
+      const product = productById[productId];
+      const atLocation = balanceByProductId[productId] ?? 0;
+      const after = atLocation - need;
       if (after < 0) {
         result.push({
-          name: product.name,
+          name: product?.name ?? productId,
           current: atLocation,
-          requested: item.quantity,
+          requested: need,
           after,
         });
       }
     }
     return result;
-  }, [pendingOrder, products, fulfillmentLocationId, balanceByProductId]);
+  }, [pendingOrder, products, fulfillmentLocationId, balanceByProductId, recipesByProductId, stockPreviewReady]);
 
   const limit = 100; // máximo que permite la API
 
@@ -138,29 +148,56 @@ function OrderCalculatorPageContent() {
     load();
   }, [message, fetchProducts]);
 
-  // Al abrir el modal: refrescar productos y saldos en la ubicación de cumplimiento
+  // Al abrir el modal: productos, saldos en ubicación y recetas (para avisar stock en combos por insumo)
   useEffect(() => {
-    if (!confirmModalOpen || !pendingOrder || !fulfillmentLocationId) return;
+    if (!confirmModalOpen) {
+      setStockPreviewReady(false);
+      setRecipesByProductId({});
+      return;
+    }
+    if (!pendingOrder || !fulfillmentLocationId) return;
+    let cancelled = false;
+    setStockPreviewReady(false);
     fetchProducts();
     (async () => {
       try {
-        const rows = await apiClient.getStockBalancesAtLocation(fulfillmentLocationId);
+        const ids = [...new Set(pendingOrder.items.map((i) => i.productId))];
+        const [rows, recipes] = await Promise.all([
+          apiClient.getStockBalancesAtLocation(fulfillmentLocationId),
+          fetchRecipesByProductIds((p, l, id) => apiClient.getRecipeItems(p, l, id), ids),
+        ]);
+        if (cancelled) return;
         const map: Record<string, number> = {};
         for (const r of rows) map[r.productId] = Number(r.quantity);
         setBalanceByProductId(map);
+        setRecipesByProductId(recipes);
+        setStockPreviewReady(true);
       } catch {
-        setBalanceByProductId({});
+        if (!cancelled) {
+          setBalanceByProductId({});
+          setRecipesByProductId({});
+          setStockPreviewReady(true);
+        }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [confirmModalOpen, pendingOrder, fulfillmentLocationId, fetchProducts]);
 
   const handleConfirmOrder = (
     items: { productId: string; quantity: number; price: number }[],
     total: number,
     customerId?: string | null,
+    priceListType?: PriceType,
   ) => {
     setDeliveryDate(dayjs().startOf("day"));
-    setPendingOrder({ items, total, customerId: customerId ?? null });
+    setPendingOrder({
+      items,
+      total,
+      customerId: customerId ?? null,
+      priceListType: priceListType ?? "mayorista",
+    });
     setConfirmModalOpen(true);
   };
 
@@ -170,7 +207,7 @@ function OrderCalculatorPageContent() {
       message.error("Elegí la ubicación de stock desde la cual descontar el pedido.");
       return;
     }
-    const { items, total, customerId } = pendingOrder;
+    const { items, total, customerId, priceListType } = pendingOrder;
     setSubmitting(true);
     try {
       const data: CreateOrderRequest = {
@@ -179,6 +216,7 @@ function OrderCalculatorPageContent() {
         deliveryDate: (deliveryDate ?? dayjs().startOf("day")).toISOString(),
         fulfillmentLocationId: fulfillmentLocationId ?? undefined,
         total,
+        priceListType,
         items: items.map((item) => ({
           productId: item.productId,
           quantity: Number(item.quantity),
