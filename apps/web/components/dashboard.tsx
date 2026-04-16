@@ -30,8 +30,9 @@ import {
   Table,
   Tag,
 } from "antd";
+import { isPromoGiftComboName } from "@/lib/order-calculator/order-promo";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 function startOfLocalDay(d: Date): Date {
   const x = new Date(d);
@@ -59,6 +60,7 @@ function sumExpensesSince(expenses: Expense[], method: "CASH" | "CARD", sinceIso
 
 export function Dashboard() {
   const { message } = App.useApp();
+  const lowStockSectionRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
   const [baseline, setBaseline] = useState<TreasuryBaseline | null>(null);
@@ -144,7 +146,9 @@ export function Dashboard() {
       setRawOrders(allOrders);
       setRawExpenses(allExpenses);
 
-      const lowStock = productsRes.data.filter((p) => p.stock < 10);
+      const lowStock = productsRes.data.filter(
+        (p) => p.stock < 10 && !isPromoGiftComboName(p.name),
+      );
       const todayStart = startOfLocalDay(new Date());
       const recentOrders = allOrders
         .filter((order) => {
@@ -180,6 +184,10 @@ export function Dashboard() {
       });
     }
   }, [cashFlowModalOpen, baseline, form]);
+
+  const scrollToLowStockSection = () => {
+    lowStockSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const saveBaseline = async () => {
     try {
@@ -320,7 +328,20 @@ export function Dashboard() {
             </Col>
 
             <Col xs={24} sm={12} lg={6}>
-              <Card style={{ background: "#1f2937", borderColor: "#2d3748" }} variant="outlined">
+              <Card
+                style={{ background: "#1f2937", borderColor: "#2d3748", cursor: "pointer" }}
+                variant="outlined"
+                role="button"
+                tabIndex={0}
+                aria-label="Ir a la lista de productos con stock bajo"
+                onClick={scrollToLowStockSection}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    scrollToLowStockSection();
+                  }
+                }}
+              >
                 <Statistic
                   title="Productos en Stock"
                   value={stats.lowStockProducts.length}
@@ -372,6 +393,11 @@ export function Dashboard() {
 
           <Row gutter={[16, 16]}>
             <Col span={24}>
+              <div
+                id="dashboard-low-stock"
+                ref={lowStockSectionRef}
+                style={{ scrollMarginTop: 72 }}
+              >
               <Card
                 title="Productos con Stock Bajo"
                 style={{ background: "#1f2937", borderColor: "#2d3748" }}
@@ -395,6 +421,7 @@ export function Dashboard() {
                   <Empty description="Todos los productos tienen stock suficiente" style={{ color: "#9ca3af" }} />
                 )}
               </Card>
+              </div>
             </Col>
           </Row>
         </>

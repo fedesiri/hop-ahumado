@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsIn,
   IsNumber,
   IsOptional,
   IsUUID,
@@ -55,4 +56,9 @@ export class UpdateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => CreatePaymentDto)
   payments?: CreatePaymentDto[];
+
+  @IsOptional()
+  @ValidateIf((o: UpdateOrderDto) => o.items != null)
+  @IsIn(["mayorista", "minorista", "fabrica"], { message: "priceListType debe ser mayorista, minorista o fabrica" })
+  priceListType?: "mayorista" | "minorista" | "fabrica";
 }

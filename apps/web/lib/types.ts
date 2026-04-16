@@ -467,6 +467,8 @@ export interface CreateOrderRequest {
   deliveryDate?: string;
   fulfillmentLocationId?: string;
   total: number;
+  /** Si se envía, el API valida precios con la promo por umbral (combos regalo). */
+  priceListType?: "mayorista" | "minorista" | "fabrica";
   items: CreateOrderItemRequest[];
   payments: CreateOrderPaymentRequest[];
 }
@@ -478,6 +480,7 @@ export interface UpdateOrderRequest {
   fulfillmentLocationId?: string;
   /** Si se envían, deben ir juntos con payments y total; reemplaza líneas y pagos y ajusta stock. */
   total?: number;
+  priceListType?: "mayorista" | "minorista" | "fabrica";
   items?: CreateOrderItemRequest[];
   payments?: CreateOrderPaymentRequest[];
 }

@@ -1,11 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { Order, StockMovementType } from "@prisma/client";
+import { Order, Prisma, StockMovementType } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { InventoryService } from "../inventory/inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
+import { getPromoThresholdCategoryNames, validateOrderPromoPricing } from "./order-promo";
 
 type OrderWithRelations = Order & {
   orderItems: Array<{
@@ -39,12 +40,7 @@ export class OrderService {
     for (const item of dto.items) {
       await this.validateProductExists(item.productId);
     }
-    const itemsTotal = dto.items.reduce((sum, i) => sum + i.quantity * i.price, 0);
-    if (Math.abs(itemsTotal - dto.total) > 0.01) {
-      throw new BadRequestException(
-        `El total (${dto.total}) no coincide con la suma de ítems (${itemsTotal.toFixed(2)})`,
-      );
-    }
+    await this.validateOrderItemsTotalOrPromo(dto);
     const paymentsTotal = dto.payments.reduce((sum, p) => sum + p.amount, 0);
     if (Math.abs(paymentsTotal - dto.total) > 0.01) {
       throw new BadRequestException(
@@ -85,19 +81,21 @@ export class OrderService {
         },
       });
 
-      // Descontar stock por cada ítem (se permite stock negativo: entregas parciales, se regulariza al cargar nuevo stock)
+      // Descontar stock: si el producto tiene receta (combo), se descuentan los ingredientes; si no, el producto mismo.
       for (const item of order.orderItems) {
-        const product = item.product as { id: string; name: string; stock: number };
-        await this.inventory.applyBalanceDelta(tx, product.id, fulfillmentLocationId, -item.quantity);
-        await tx.stockMovement.create({
-          data: {
-            productId: product.id,
-            quantity: item.quantity,
-            type: StockMovementType.OUT,
-            reason: `Orden ${order.id.slice(0, 8)}`,
-            locationId: fulfillmentLocationId,
-          },
-        });
+        const targets = await this.stockTargetsForOrderLine(tx, item.productId, item.quantity);
+        for (const t of targets) {
+          await this.inventory.applyBalanceDelta(tx, t.productId, fulfillmentLocationId, -t.quantity);
+          await tx.stockMovement.create({
+            data: {
+              productId: t.productId,
+              quantity: t.quantity,
+              type: StockMovementType.OUT,
+              reason: `Orden ${order.id.slice(0, 8)}`,
+              locationId: fulfillmentLocationId,
+            },
+          });
+        }
       }
 
       return tx.order.findUnique({
@@ -239,10 +237,7 @@ export class OrderService {
       await this.validateProductExists(item.productId);
     }
 
-    const itemsTotal = items.reduce((sum, i) => sum + i.quantity * i.price, 0);
-    if (Math.abs(itemsTotal - total) > 0.01) {
-      throw new BadRequestException(`El total (${total}) no coincide con la suma de ítems (${itemsTotal.toFixed(2)})`);
-    }
+    await this.validateOrderItemsTotalOrPromo({ items, total, priceListType: dto.priceListType });
     const paymentsTotal = payments.reduce((sum, p) => sum + p.amount, 0);
     if (Math.abs(paymentsTotal - total) > 0.01) {
       throw new BadRequestException(
@@ -272,17 +267,19 @@ export class OrderService {
       const revertLocation = existing.fulfillmentLocationId ?? (await this.inventory.getDefaultLocationId(tx));
 
       for (const line of existing.orderItems) {
-        const product = line.product as { id: string; stock: number };
-        await this.inventory.applyBalanceDelta(tx, product.id, revertLocation, line.quantity);
-        await tx.stockMovement.create({
-          data: {
-            productId: product.id,
-            quantity: line.quantity,
-            type: StockMovementType.IN,
-            reason: `Reversión edición orden ${id.slice(0, 8)}`,
-            locationId: revertLocation,
-          },
-        });
+        const targets = await this.stockTargetsForOrderLine(tx, line.productId, line.quantity);
+        for (const t of targets) {
+          await this.inventory.applyBalanceDelta(tx, t.productId, revertLocation, t.quantity);
+          await tx.stockMovement.create({
+            data: {
+              productId: t.productId,
+              quantity: t.quantity,
+              type: StockMovementType.IN,
+              reason: `Reversión edición orden ${id.slice(0, 8)}`,
+              locationId: revertLocation,
+            },
+          });
+        }
       }
 
       const newFulfillmentLocationId =
@@ -293,16 +290,19 @@ export class OrderService {
         if (!product) {
           throw new BadRequestException(`Producto con id "${item.productId}" no encontrado`);
         }
-        await this.inventory.applyBalanceDelta(tx, item.productId, newFulfillmentLocationId, -item.quantity);
-        await tx.stockMovement.create({
-          data: {
-            productId: item.productId,
-            quantity: item.quantity,
-            type: StockMovementType.OUT,
-            reason: `Orden ${id.slice(0, 8)}`,
-            locationId: newFulfillmentLocationId,
-          },
-        });
+        const targets = await this.stockTargetsForOrderLine(tx, item.productId, item.quantity);
+        for (const t of targets) {
+          await this.inventory.applyBalanceDelta(tx, t.productId, newFulfillmentLocationId, -t.quantity);
+          await tx.stockMovement.create({
+            data: {
+              productId: t.productId,
+              quantity: t.quantity,
+              type: StockMovementType.OUT,
+              reason: `Orden ${id.slice(0, 8)}`,
+              locationId: newFulfillmentLocationId,
+            },
+          });
+        }
       }
 
       return tx.order.update({
@@ -364,5 +364,69 @@ export class OrderService {
     if (!product) {
       throw new BadRequestException(`Producto con id "${productId}" no encontrado`);
     }
+  }
+
+  /**
+   * Con `priceListType` valida lista y promo por umbral (combos); sin él mantiene la suma simple líneas = total.
+   */
+  private async validateOrderItemsTotalOrPromo(dto: {
+    items: { productId: string; quantity: number; price: number }[];
+    total: number;
+    priceListType?: "mayorista" | "minorista" | "fabrica";
+  }) {
+    if (dto.priceListType) {
+      const ids = [...new Set(dto.items.map((i) => i.productId))];
+      const products = await this.prisma.product.findMany({
+        where: { id: { in: ids } },
+        include: { category: true },
+      });
+      if (products.length !== ids.length) {
+        throw new BadRequestException("Hay productos en el pedido que no existen en la base");
+      }
+      const productsById = new Map(products.map((p) => [p.id, { name: p.name, category: p.category }]));
+      const prices = await this.prisma.price.findMany({
+        where: { productId: { in: ids }, deactivatedAt: null },
+      });
+      const pricesByProductId = new Map<string, typeof prices>();
+      for (const pr of prices) {
+        const arr = pricesByProductId.get(pr.productId) ?? [];
+        arr.push(pr);
+        pricesByProductId.set(pr.productId, arr);
+      }
+      validateOrderPromoPricing({
+        priceListType: dto.priceListType,
+        items: dto.items,
+        total: dto.total,
+        productsById,
+        pricesByProductId,
+        categoryNames: getPromoThresholdCategoryNames(),
+      });
+      return;
+    }
+    const itemsTotal = dto.items.reduce((sum, i) => sum + i.quantity * i.price, 0);
+    if (Math.abs(itemsTotal - dto.total) > 0.01) {
+      throw new BadRequestException(
+        `El total (${dto.total}) no coincide con la suma de ítems (${itemsTotal.toFixed(2)})`,
+      );
+    }
+  }
+
+  /**
+   * Si `productId` tiene filas en `RecipeItem`, el pedido descuenta esos ingredientes (cantidad línea × cantidad receta).
+   * Si no hay receta, se descuenta el propio producto (comportamiento clásico).
+   */
+  private async stockTargetsForOrderLine(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    lineQuantity: number,
+  ): Promise<{ productId: string; quantity: number }[]> {
+    const recipe = await tx.recipeItem.findMany({ where: { productId } });
+    if (recipe.length === 0) {
+      return [{ productId, quantity: lineQuantity }];
+    }
+    return recipe.map((r) => ({
+      productId: r.ingredientId,
+      quantity: lineQuantity * r.quantity,
+    }));
   }
 }

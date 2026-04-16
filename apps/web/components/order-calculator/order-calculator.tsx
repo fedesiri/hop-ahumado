@@ -1,6 +1,13 @@
 "use client";
 
 import { formatCurrency } from "@/lib/format-currency";
+import {
+  ORDER_PROMO_THRESHOLD_ARS,
+  computeOrderTotalWithPromo,
+  effectiveUnitPriceForOrderLine,
+  getPromoThresholdCategoryNames,
+  isPromoGiftComboName,
+} from "@/lib/order-calculator/order-promo";
 import { PRICE_TYPE_LABELS, getPriceForType, type PriceType } from "@/lib/order-calculator/price-types";
 import type { Price, Product } from "@/lib/types";
 import { SearchOutlined } from "@ant-design/icons";
@@ -38,11 +45,12 @@ export interface OrderCalculatorProps {
   pricesByProductId: Record<string, Price[]>;
   /** Clientes de la DB para elegir en la calculadora */
   customers: { id: string; name: string }[];
-  /** Si se pasa, se muestra el botón "Confirmar pedido"; se llama con ítems, total y customerId (opcional) */
+  /** Si se pasa, se muestra el botón "Confirmar pedido"; incluye lista de precios para validar promo en el API. */
   onConfirmOrder?: (
     items: { productId: string; quantity: number; price: number }[],
     total: number,
     customerId?: string | null,
+    priceListType?: PriceType,
   ) => void;
   /** Cantidades iniciales por productId (p. ej. al editar una orden) */
   initialQuantities?: Record<string, number>;
@@ -134,6 +142,24 @@ export function OrderCalculator({
   const [mounted, setMounted] = useState(false);
 
   const productIds = useMemo(() => products.map((p) => p.id), [products]);
+  const promoCategoryNames = useMemo(() => getPromoThresholdCategoryNames(), []);
+  const promoVolumeTag = `+${Math.round(ORDER_PROMO_THRESHOLD_ARS / 1000)}k`;
+
+  const { total, thresholdSubtotal, promoActive } = useMemo(
+    () => computeOrderTotalWithPromo(products, quantities, pricesByProductId, priceType, promoCategoryNames),
+    [products, quantities, pricesByProductId, priceType, promoCategoryNames],
+  );
+
+  const promoFooterNote = useMemo(() => {
+    if (priceType === "fabrica") {
+      return "Lista fábrica: no aplica la promo por umbral de compra.";
+    }
+    const base =
+      promoCategoryNames.length > 0
+        ? `Subtotal para promo (categorías: ${promoCategoryNames.join(", ")}): ${formatCurrency(thresholdSubtotal)}. Umbral: ${formatCurrency(ORDER_PROMO_THRESHOLD_ARS)}.`
+        : `Subtotal para promo (todo excepto Estuche/Copa y Estuche/Vaso): ${formatCurrency(thresholdSubtotal)}. Umbral: ${formatCurrency(ORDER_PROMO_THRESHOLD_ARS)}.`;
+    return promoActive ? `${base} Aplicando precio promo en combos regalo (${promoVolumeTag}).` : base;
+  }, [priceType, promoCategoryNames, thresholdSubtotal, promoActive, promoVolumeTag]);
 
   useEffect(() => {
     setMounted(true);
@@ -187,16 +213,6 @@ export function OrderCalculator({
     if (mounted && persistToLocalStorage) localStorage.setItem(STORAGE_KEYS.quantities, JSON.stringify(quantities));
   }, [quantities, mounted, persistToLocalStorage]);
 
-  const total = useMemo(() => {
-    return products.reduce((sum, p) => {
-      const qty = quantities[p.id] ?? 0;
-      if (qty <= 0) return sum;
-      const prices = pricesByProductId[p.id] ?? [];
-      const unitPrice = getPriceForType(prices, priceType);
-      return sum + qty * unitPrice;
-    }, 0);
-  }, [products, quantities, pricesByProductId, priceType]);
-
   const hasItems = products.some((p) => (quantities[p.id] ?? 0) > 0);
 
   const updateQuantity = useCallback((productId: string, qty: number) => {
@@ -215,7 +231,7 @@ export function OrderCalculator({
       const qty = quantities[p.id] ?? 0;
       if (qty <= 0) return;
       const prices = pricesByProductId[p.id] ?? [];
-      const unitPrice = getPriceForType(prices, priceType);
+      const unitPrice = effectiveUnitPriceForOrderLine(p, prices, priceType, promoActive);
       lines.push({ name: p.name, qty, subtotal: qty * unitPrice });
     });
     lines.sort((a, b) => b.qty - a.qty);
@@ -239,7 +255,7 @@ export function OrderCalculator({
         toast.success("Pedido copiado");
       })
       .catch(() => toast.error("No se pudo copiar"));
-  }, [products, quantities, pricesByProductId, priceType, total, customerNameForCopy]);
+  }, [products, quantities, pricesByProductId, priceType, total, customerNameForCopy, promoActive]);
 
   const handleClear = useCallback(() => {
     if (navigator.vibrate) navigator.vibrate(30);
@@ -282,11 +298,21 @@ export function OrderCalculator({
       const qty = quantities[p.id] ?? 0;
       if (qty <= 0) return;
       const prices = pricesByProductId[p.id] ?? [];
-      const unitPrice = getPriceForType(prices, priceType);
+      const unitPrice = effectiveUnitPriceForOrderLine(p, prices, priceType, promoActive);
       items.push({ productId: p.id, quantity: qty, price: unitPrice });
     });
-    onConfirmOrder(items, total, selectedCustomerId);
-  }, [onConfirmOrder, hasItems, products, quantities, pricesByProductId, priceType, total, selectedCustomerId]);
+    onConfirmOrder(items, total, selectedCustomerId, priceType);
+  }, [
+    onConfirmOrder,
+    hasItems,
+    products,
+    quantities,
+    pricesByProductId,
+    priceType,
+    total,
+    selectedCustomerId,
+    promoActive,
+  ]);
 
   if (!mounted) {
     return (
@@ -346,6 +372,10 @@ export function OrderCalculator({
             {filteredProducts.map((product) => {
               const prices = pricesByProductId[product.id] ?? [];
               if (prices.length === 0) return null;
+              const list = getPriceForType(prices, priceType);
+              const effective = effectiveUnitPriceForOrderLine(product, prices, priceType, promoActive);
+              const showPromoRow =
+                promoActive && isPromoGiftComboName(product.name) && Math.abs(effective - list) > 0.02;
               return (
                 <Col xs={24} sm={24} md={12} xl={8} key={product.id}>
                   <ProductRow
@@ -355,6 +385,9 @@ export function OrderCalculator({
                     priceType={priceType}
                     quantity={quantities[product.id] ?? 0}
                     onQuantityChange={(qty) => updateQuantity(product.id, qty)}
+                    unitPriceOverride={showPromoRow ? effective : undefined}
+                    listUnitPrice={list}
+                    promoTag={promoVolumeTag}
                   />
                 </Col>
               );
@@ -371,6 +404,7 @@ export function OrderCalculator({
         onNewOrder={handleNewOrder}
         onConfirmOrder={onConfirmOrder ? handleConfirmOrder : undefined}
         confirmButtonLabel={confirmButtonLabel}
+        footerNote={promoFooterNote}
       />
     </div>
   );

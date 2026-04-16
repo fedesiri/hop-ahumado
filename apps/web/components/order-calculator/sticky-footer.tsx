@@ -12,6 +12,8 @@ interface StickyFooterProps {
   onNewOrder: () => void;
   onConfirmOrder?: () => void;
   confirmButtonLabel?: string;
+  /** Texto secundario bajo el total (p. ej. estado de promo). */
+  footerNote?: string;
 }
 
 export function StickyFooter({
@@ -22,6 +24,7 @@ export function StickyFooter({
   onNewOrder,
   onConfirmOrder,
   confirmButtonLabel = "Confirmar pedido (descontar stock)",
+  footerNote,
 }: StickyFooterProps) {
   return (
     <div
@@ -67,6 +70,9 @@ export function StickyFooter({
             {formatCurrency(total)}
           </span>
         </div>
+        {footerNote ? (
+          <p style={{ margin: 0, fontSize: 12, color: "#9ca3af", lineHeight: 1.4 }}>{footerNote}</p>
+        ) : null}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
           <Button icon={<RollbackOutlined />} onClick={onNewOrder} title="Nueva orden" />
           <Button icon={<DeleteOutlined />} onClick={onClear} disabled={!hasItems} title="Limpiar" />
