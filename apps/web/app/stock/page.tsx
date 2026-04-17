@@ -5,8 +5,10 @@ import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { Cost, PaginationMeta, Product, StockLocation, StockMovement, StockMovementType } from "@/lib/types";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 
 function roundMoney(value: number): number {
@@ -25,6 +27,7 @@ export default function StockPage() {
 
 function StockContent() {
   const { message } = App.useApp();
+  const isMobile = useMediaQuery("(max-width: 768px)");
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
@@ -293,20 +296,33 @@ function StockContent() {
     }
   };
 
-  const columns = [
+  const columns: ColumnsType<StockMovement> = [
     {
       title: "Producto",
       dataIndex: ["product", "name"],
       key: "product",
+      ellipsis: true,
+      minWidth: 140,
       render: (text: string) => text || "-",
     },
     {
-      title: "Ubicación / traslado",
+      title: isMobile ? "Ubicación" : "Ubicación / traslado",
       key: "where",
+      ellipsis: !isMobile,
+      minWidth: isMobile ? 112 : 160,
       render: (_: unknown, row: StockMovement) => {
         if (row.type === "TRANSFER") {
           const a = row.fromLocation?.name ?? "—";
           const b = row.toLocation?.name ?? "—";
+          if (isMobile) {
+            return (
+              <div style={{ fontSize: 12, lineHeight: 1.35, color: "#e5e7eb" }}>
+                <div style={{ wordBreak: "break-word" }}>{a}</div>
+                <div style={{ color: "#9ca3af", margin: "2px 0" }}>→</div>
+                <div style={{ wordBreak: "break-word" }}>{b}</div>
+              </div>
+            );
+          }
           return `${a} → ${b}`;
         }
         return row.location?.name ?? "—";
@@ -316,33 +332,57 @@ function StockContent() {
       title: "Tipo",
       dataIndex: "type",
       key: "type",
-      render: (type: string) => <Tag color={getMovementTypeColor(type)}>{getMovementTypeLabel(type)}</Tag>,
+      width: isMobile ? 86 : 108,
+      align: "center",
+      render: (type: string) => (
+        <Tag color={getMovementTypeColor(type)} style={{ margin: 0, fontSize: isMobile ? 11 : undefined }}>
+          {getMovementTypeLabel(type)}
+        </Tag>
+      ),
     },
     {
-      title: "Cantidad",
+      title: "Cant.",
       dataIndex: "quantity",
       key: "quantity",
+      width: isMobile ? 72 : 88,
+      align: "right",
       render: (q: number) => formatQuantity(q),
     },
     {
       title: "Razón",
       dataIndex: "reason",
       key: "reason",
-      render: (text: string) => text || "-",
+      ellipsis: true,
+      minWidth: 100,
+      render: (text: string | null) => text || "—",
     },
     {
       title: "Fecha",
       dataIndex: "createdAt",
       key: "createdAt",
-      render: (date: string) => new Date(date).toLocaleDateString("es-AR"),
+      width: isMobile ? 76 : 96,
+      render: (date: string) => (
+        <span style={{ fontSize: isMobile ? 12 : undefined, whiteSpace: "nowrap" }}>
+          {new Date(date).toLocaleDateString("es-AR", isMobile ? { day: "2-digit", month: "2-digit" } : undefined)}
+        </span>
+      ),
     },
   ];
 
   return (
-    <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between" }}>
+    <div style={{ width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box" }}>
+      <div
+        style={{
+          marginBottom: "24px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: isMobile ? "stretch" : "center",
+          flexDirection: isMobile ? "column" : "row",
+          gap: 12,
+        }}
+      >
         <h1 style={{ margin: 0, color: "#ffffff" }}>Movimientos de Stock</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} block={isMobile}>
           Registrar Movimiento
         </Button>
       </div>
@@ -358,20 +398,36 @@ function StockContent() {
       {loading ? (
         <Spin />
       ) : movements.length > 0 ? (
-        <Table
-          columns={columns}
-          dataSource={movements}
-          rowKey="id"
-          style={{ backgroundColor: "#1f2937" }}
-          pagination={{
-            current: pagination.page,
-            pageSize: pagination.limit,
-            total: meta?.total || 0,
-            onChange: (page, pageSize) => {
-              setPagination({ page, limit: pageSize });
-            },
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "100%",
+            minWidth: 0,
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
           }}
-        />
+        >
+          <Table<StockMovement>
+            columns={columns}
+            dataSource={movements}
+            rowKey="id"
+            size={isMobile ? "small" : "middle"}
+            tableLayout={isMobile ? "auto" : "fixed"}
+            style={{ backgroundColor: "#1f2937", minWidth: isMobile ? 680 : undefined }}
+            scroll={{ x: isMobile ? 680 : 960 }}
+            pagination={{
+              current: pagination.page,
+              pageSize: pagination.limit,
+              total: meta?.total || 0,
+              size: isMobile ? "small" : "default",
+              showSizeChanger: !isMobile,
+              responsive: true,
+              onChange: (page, pageSize) => {
+                setPagination({ page, limit: pageSize });
+              },
+            }}
+          />
+        </div>
       ) : (
         <Empty description="No hay movimientos de stock" style={{ color: "#9ca3af" }} />
       )}
@@ -381,6 +437,8 @@ function StockContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
+        width={isMobile ? "calc(100vw - 24px)" : 520}
+        styles={{ body: { maxHeight: isMobile ? "75vh" : undefined, overflowY: "auto" } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
