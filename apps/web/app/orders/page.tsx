@@ -6,6 +6,7 @@ import type { Dayjs } from "@/lib/dayjs";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { Customer, Order, OrderItem, User } from "@/lib/types";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import {
   Alert,
@@ -24,6 +25,7 @@ import {
   Spin,
   Table,
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -39,6 +41,7 @@ export default function OrdersPage() {
 
 function OrdersContent() {
   const { message, modal } = App.useApp();
+  const isMobile = useMediaQuery("(max-width: 768px)");
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -123,50 +126,58 @@ function OrdersContent() {
     });
   };
 
-  const columns = [
+  const columns: ColumnsType<Order> = [
     {
       title: "ID",
       dataIndex: "id",
       key: "id",
+      width: 96,
+      fixed: isMobile ? undefined : ("left" as const),
       render: (text: string) => text.slice(0, 8) + "...",
     },
     {
       title: "Cliente",
       dataIndex: ["customer", "name"],
       key: "customer",
+      ellipsis: true,
+      minWidth: 148,
       render: (text: string) => text || "-",
     },
     {
       title: "Total",
       dataIndex: "total",
       key: "total",
+      width: 112,
       render: (amount: number | string) => formatCurrency(amount),
     },
     {
       title: "Ítems",
       dataIndex: "orderItems",
       key: "items",
+      width: 72,
       render: (items: OrderItem[]) => items?.length || 0,
     },
     {
       title: "Entrega",
       key: "deliveryDate",
+      width: 108,
       render: (_: unknown, record: Order) =>
         record.deliveryDate ? new Date(record.deliveryDate).toLocaleDateString("es-AR") : "—",
     },
     {
       title: "Stock desde",
       key: "fulfillmentLocation",
-      width: 140,
+      width: 128,
       ellipsis: true,
       render: (_: unknown, record: Order) => record.fulfillmentLocation?.name ?? "—",
     },
     {
       title: "Acciones",
       key: "actions",
-      width: 168,
-      render: (_: any, record: Order) => (
-        <Space>
+      width: isMobile ? 156 : 168,
+      fixed: isMobile ? undefined : ("right" as const),
+      render: (_: unknown, record: Order) => (
+        <Space size={4} wrap={isMobile}>
           <Button
             type="default"
             size="small"
@@ -198,20 +209,23 @@ function OrdersContent() {
   ];
 
   return (
-    <div>
+    <div style={{ width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box" }}>
       <div
         style={{
           marginBottom: "24px",
           display: "flex",
           flexWrap: "wrap",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: isMobile ? "stretch" : "center",
           gap: 12,
+          flexDirection: isMobile ? "column" : "row",
         }}
       >
         <h1 style={{ margin: 0, color: "#ffffff" }}>Órdenes</h1>
-        <Link href="/orders/calculator">
-          <Button type="primary">Nueva orden (cargar productos)</Button>
+        <Link href="/orders/calculator" style={isMobile ? { width: "100%" } : undefined}>
+          <Button type="primary" block={isMobile}>
+            Nueva orden (cargar productos)
+          </Button>
         </Link>
       </div>
 
@@ -233,76 +247,122 @@ function OrdersContent() {
       />
 
       <Card style={{ marginBottom: "16px", background: "#1f2937", borderColor: "#2d3748" }}>
-        <Space wrap>
-          <Select
-            allowClear
-            placeholder="Filtrar por cliente"
-            style={{ minWidth: 200 }}
-            value={filterCustomerId}
-            options={customers.map((c) => ({ label: c.name, value: c.id }))}
-            onChange={(value) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              setFilterCustomerId(value || undefined);
-            }}
-          />
-          <Select
-            allowClear
-            placeholder="Filtrar por vendedor"
-            style={{ minWidth: 200 }}
-            value={filterUserId}
-            options={users.map((u) => ({ label: u.name, value: u.id }))}
-            onChange={(value) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              setFilterUserId(value || undefined);
-            }}
-          />
-          <DatePicker.RangePicker
-            allowClear
-            placeholder={["Desde fecha", "Hasta fecha"]}
-            value={filterDateRange as any}
-            onChange={(values) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              setFilterDateRange(values as [Dayjs, Dayjs] | null);
-            }}
-          />
-          <InputNumber
-            placeholder="Total mínimo"
-            min={0}
-            value={filterMinTotal}
-            onChange={(value) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              setFilterMinTotal(value ?? undefined);
-            }}
-          />
-          <InputNumber
-            placeholder="Total máximo"
-            min={0}
-            value={filterMaxTotal}
-            onChange={(value) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              setFilterMaxTotal(value ?? undefined);
-            }}
-          />
-        </Space>
+        <Row gutter={[12, 12]}>
+          <Col xs={24} sm={12} md={8} lg={6}>
+            <Select
+              allowClear
+              showSearch
+              placeholder="Filtrar por cliente"
+              style={{ width: "100%" }}
+              popupMatchSelectWidth={false}
+              dropdownStyle={{ maxWidth: "min(100vw - 32px, 360px)" }}
+              optionFilterProp="label"
+              filterOption={(input, option) =>
+                String(option?.label ?? "")
+                  .toLowerCase()
+                  .includes(input.trim().toLowerCase())
+              }
+              value={filterCustomerId}
+              options={customers.map((c) => ({ label: c.name, value: c.id }))}
+              onChange={(value) => {
+                setPagination((prev) => ({ ...prev, page: 1 }));
+                setFilterCustomerId(value || undefined);
+              }}
+            />
+          </Col>
+          <Col xs={24} sm={12} md={8} lg={6}>
+            <Select
+              allowClear
+              showSearch
+              placeholder="Filtrar por vendedor"
+              style={{ width: "100%" }}
+              popupMatchSelectWidth={false}
+              dropdownStyle={{ maxWidth: "min(100vw - 32px, 320px)" }}
+              optionFilterProp="label"
+              filterOption={(input, option) =>
+                String(option?.label ?? "")
+                  .toLowerCase()
+                  .includes(input.trim().toLowerCase())
+              }
+              value={filterUserId}
+              options={users.map((u) => ({ label: u.name, value: u.id }))}
+              onChange={(value) => {
+                setPagination((prev) => ({ ...prev, page: 1 }));
+                setFilterUserId(value || undefined);
+              }}
+            />
+          </Col>
+          <Col xs={24} md={12} lg={8}>
+            <DatePicker.RangePicker
+              allowClear
+              placeholder={["Desde fecha", "Hasta fecha"]}
+              style={{ width: "100%" }}
+              value={filterDateRange as any}
+              onChange={(values) => {
+                setPagination((prev) => ({ ...prev, page: 1 }));
+                setFilterDateRange(values as [Dayjs, Dayjs] | null);
+              }}
+            />
+          </Col>
+          <Col xs={12} sm={8} md={6} lg={4}>
+            <InputNumber
+              placeholder="Total mínimo"
+              min={0}
+              style={{ width: "100%" }}
+              value={filterMinTotal}
+              onChange={(value) => {
+                setPagination((prev) => ({ ...prev, page: 1 }));
+                setFilterMinTotal(value ?? undefined);
+              }}
+            />
+          </Col>
+          <Col xs={12} sm={8} md={6} lg={4}>
+            <InputNumber
+              placeholder="Total máximo"
+              min={0}
+              style={{ width: "100%" }}
+              value={filterMaxTotal}
+              onChange={(value) => {
+                setPagination((prev) => ({ ...prev, page: 1 }));
+                setFilterMaxTotal(value ?? undefined);
+              }}
+            />
+          </Col>
+        </Row>
       </Card>
 
       {loading ? (
         <Spin />
       ) : orders.length > 0 ? (
-        <Table
-          columns={columns}
-          dataSource={orders}
-          rowKey="id"
-          style={{ backgroundColor: "#1f2937" }}
-          pagination={{
-            current: pagination.page,
-            pageSize: pagination.limit,
-            total: meta?.total || 0,
-            onChange: (page, pageSize) => {
-              setPagination({ page, limit: pageSize });
-            },
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "100%",
+            minWidth: 0,
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
           }}
-        />
+        >
+          <Table
+            columns={columns}
+            dataSource={orders}
+            rowKey="id"
+            tableLayout={isMobile ? "auto" : "fixed"}
+            style={{ backgroundColor: "#1f2937", minWidth: isMobile ? 920 : 880 }}
+            scroll={{ x: isMobile ? 920 : 1040 }}
+            pagination={{
+              current: pagination.page,
+              pageSize: pagination.limit,
+              total: meta?.total || 0,
+              size: isMobile ? "small" : "default",
+              showSizeChanger: !isMobile,
+              responsive: true,
+              onChange: (page, pageSize) => {
+                setPagination({ page, limit: pageSize });
+              },
+            }}
+          />
+        </div>
       ) : (
         <Empty description="No hay órdenes" style={{ color: "#9ca3af" }} />
       )}
@@ -312,29 +372,30 @@ function OrdersContent() {
         open={viewModalOpen}
         onCancel={() => setViewModalOpen(false)}
         footer={null}
-        width={800}
+        width={isMobile ? "calc(100vw - 24px)" : 800}
+        styles={{ body: { maxHeight: isMobile ? "75vh" : undefined, overflowY: "auto" } }}
       >
         {selectedOrder && (
           <div>
             <Card style={{ marginBottom: "16px", background: "#1f2937" }}>
-              <Row gutter={16}>
-                <Col span={12}>
+              <Row gutter={[16, 12]}>
+                <Col xs={24} sm={12}>
                   <strong>Cliente:</strong> {selectedOrder.customer?.name || "-"}
                 </Col>
-                <Col span={12}>
+                <Col xs={24} sm={12}>
                   <strong>Vendedor:</strong> {selectedOrder.user?.name || "-"}
                 </Col>
-                <Col span={12}>
+                <Col xs={24} sm={12}>
                   <strong>Total:</strong> {formatCurrency(selectedOrder.total)}
                 </Col>
-                <Col span={12}>
+                <Col xs={24} sm={12}>
                   <strong>Creada:</strong> {new Date(selectedOrder.createdAt).toLocaleDateString("es-AR")}
                 </Col>
-                <Col span={12}>
+                <Col xs={24} sm={12}>
                   <strong>Entrega:</strong>{" "}
                   {selectedOrder.deliveryDate ? new Date(selectedOrder.deliveryDate).toLocaleDateString("es-AR") : "—"}
                 </Col>
-                <Col span={12}>
+                <Col xs={24} sm={12}>
                   <strong>Ubicación de stock:</strong> {selectedOrder.fulfillmentLocation?.name ?? "—"}
                 </Col>
               </Row>
