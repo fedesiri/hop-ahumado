@@ -13,13 +13,20 @@ import type {
   UpdateCustomerProfileRequest,
   User,
 } from "@/lib/types";
+import {
+  CRM_CUSTOMER_TYPE_OPTIONS,
+  CRM_SOURCE_OPTIONS,
+  CRM_STATUS_OPTIONS,
+  mergeCrmSelectOptions,
+  normalizeCrmStatusForForm,
+} from "@/lib/crm-profile-options";
 import { InteractionChannel as ChannelEnum } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
 import { ArrowLeftOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, Card, DatePicker, Descriptions, Form, Input, Modal, Select, Space, Spin, Tabs } from "antd";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type DetailData = CustomerProfile & {
   customer: Customer;
@@ -52,6 +59,23 @@ export default function CrmCustomerDetailPage() {
   const [profileForm] = Form.useForm();
   const [opportunityForm] = Form.useForm();
   const [interactionForm] = Form.useForm();
+
+  const profileStatusOptions = useMemo(
+    () =>
+      mergeCrmSelectOptions(
+        detail ? (normalizeCrmStatusForForm(detail.status) ?? detail.status ?? undefined) : undefined,
+        CRM_STATUS_OPTIONS,
+      ),
+    [detail?.status, editProfileOpen],
+  );
+  const profileCustomerTypeOptions = useMemo(
+    () => mergeCrmSelectOptions(detail?.customerType ?? undefined, CRM_CUSTOMER_TYPE_OPTIONS),
+    [detail?.customerType, editProfileOpen],
+  );
+  const profileSourceOptions = useMemo(
+    () => mergeCrmSelectOptions(detail?.source ?? undefined, CRM_SOURCE_OPTIONS),
+    [detail?.source, editProfileOpen],
+  );
 
   useEffect(() => {
     if (profileId) {
@@ -310,7 +334,7 @@ export default function CrmCustomerDetailPage() {
             phone: detail.phone,
             email: detail.email,
             customerType: detail.customerType,
-            status: detail.status,
+            status: normalizeCrmStatusForForm(detail.status) ?? detail.status ?? undefined,
             source: detail.source,
             responsibleId: detail.responsibleId,
             generalNotes: detail.generalNotes,
@@ -331,17 +355,29 @@ export default function CrmCustomerDetailPage() {
           <Form.Item name="customerType" label="Tipo de cliente">
             <Select
               allowClear
-              options={[
-                { value: "Empresa", label: "Empresa" },
-                { value: "Particular", label: "Particular" },
-              ]}
+              showSearch
+              optionFilterProp="label"
+              placeholder="Empresa o particular"
+              options={profileCustomerTypeOptions}
             />
           </Form.Item>
           <Form.Item name="status" label="Estado del contacto">
-            <Input placeholder="Ej: Prospecto, Cliente, Inactivo" />
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Seleccioná un estado"
+              options={profileStatusOptions}
+            />
           </Form.Item>
           <Form.Item name="source" label="¿De dónde nos conoció? (origen del cliente)">
-            <Input placeholder="Ej: Web, Referido, Evento, Redes sociales" />
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Elegí un origen"
+              options={profileSourceOptions}
+            />
           </Form.Item>
           <Form.Item
             name="responsibleId"

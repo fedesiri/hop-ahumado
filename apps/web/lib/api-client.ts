@@ -279,6 +279,7 @@ export class ApiClient {
     status?: string,
     source?: string,
     customerType?: string,
+    responsibleId?: string,
     responsibleSearch?: string,
   ): Promise<PaginatedResponse<CrmCustomerListItem>> {
     return this.request(
@@ -289,6 +290,7 @@ export class ApiClient {
         status,
         source,
         customerType,
+        responsibleId,
         responsibleSearch,
       })}`,
     );

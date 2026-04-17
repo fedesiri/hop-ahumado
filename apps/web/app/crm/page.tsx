@@ -3,12 +3,19 @@
 import { apiClient } from "@/lib/api-client";
 import type { Dayjs } from "@/lib/dayjs";
 import dayjs from "@/lib/dayjs";
+import {
+  CRM_CUSTOMER_TYPE_OPTIONS,
+  CRM_SOURCE_OPTIONS,
+  CRM_STATUS_OPTIONS,
+  mergeCrmSelectOptions,
+  normalizeCrmStatusForForm,
+} from "@/lib/crm-profile-options";
 import type { CreateCrmCustomerRequest, CrmCustomerListItem, PaginationMeta, User } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
 import { EditOutlined, EyeOutlined, FormOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag } from "antd";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export default function CrmPage() {
   return <CrmContent />;
@@ -31,18 +38,10 @@ function CrmContent() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [sourceFilter, setSourceFilter] = useState<string | undefined>(undefined);
   const [customerTypeFilter, setCustomerTypeFilter] = useState<string | undefined>(undefined);
-  const [responsibleFilter, setResponsibleFilter] = useState<string | undefined>(undefined);
+  const [responsibleIdFilter, setResponsibleIdFilter] = useState<string | undefined>(undefined);
 
   /** false = abrir en modo crear (reset); objeto = valores al editar. Se aplica en afterOpenChange cuando el Form ya está montado. */
   const pendingModalFormRef = useRef<Record<string, unknown> | false | null>(null);
-
-  const STATUS_OPTIONS = [
-    { value: "Lead", label: "Lead" },
-    { value: "Prospecto", label: "Prospecto" },
-    { value: "Cliente", label: "Cliente" },
-    { value: "Pausado", label: "Pausado" },
-    { value: "Perdido", label: "Perdido" },
-  ];
 
   const getStatusColor = (status: string | null) => {
     if (!status) return "default";
@@ -55,10 +54,29 @@ function CrmContent() {
     return "default";
   };
 
+  const statusFormOptions = useMemo(
+    () =>
+      mergeCrmSelectOptions(
+        editingRecord
+          ? (normalizeCrmStatusForForm(editingRecord.status) ?? editingRecord.status ?? undefined)
+          : undefined,
+        CRM_STATUS_OPTIONS,
+      ),
+    [editingRecord, modalOpen],
+  );
+  const customerTypeFormOptions = useMemo(
+    () => mergeCrmSelectOptions(editingRecord?.customerType ?? undefined, CRM_CUSTOMER_TYPE_OPTIONS),
+    [editingRecord, modalOpen],
+  );
+  const sourceFormOptions = useMemo(
+    () => mergeCrmSelectOptions(editingRecord?.source ?? undefined, CRM_SOURCE_OPTIONS),
+    [editingRecord, modalOpen],
+  );
+
   useEffect(() => {
     fetchList();
     fetchUsers();
-  }, [pagination.page, pagination.limit, search, statusFilter, sourceFilter, customerTypeFilter, responsibleFilter]);
+  }, [pagination.page, pagination.limit, search, statusFilter, sourceFilter, customerTypeFilter, responsibleIdFilter]);
 
   const fetchList = async () => {
     try {
@@ -70,7 +88,7 @@ function CrmContent() {
         statusFilter,
         sourceFilter,
         customerTypeFilter,
-        responsibleFilter,
+        responsibleIdFilter,
       );
       setList(response.data);
       setMeta(response.meta);
@@ -110,7 +128,7 @@ function CrmContent() {
           contactName: detail.contactName,
           phone: detail.phone,
           email: detail.email,
-          status: detail.status,
+          status: normalizeCrmStatusForForm(detail.status) ?? detail.status ?? undefined,
           source: detail.source,
           responsibleId: detail.responsibleId,
           generalNotes: detail.generalNotes,
@@ -131,7 +149,7 @@ function CrmContent() {
         contactName: record.contactName,
         phone: record.phone,
         email: record.email,
-        status: record.status,
+        status: normalizeCrmStatusForForm(record.status) ?? record.status ?? undefined,
         source: record.source,
         responsibleId: record.responsibleId,
         generalNotes: null,
@@ -299,48 +317,56 @@ function CrmContent() {
               setSearch(v === "" ? undefined : v);
             }}
           />
-          <Input
+          <Select
             allowClear
-            placeholder="Tipo de cliente (ej: Empresa, B2B, particular)"
-            style={{ minWidth: 220 }}
-            value={customerTypeFilter ?? ""}
-            onChange={(e) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              const v = e.target.value;
-              setCustomerTypeFilter(v === "" ? undefined : v);
-            }}
-          />
-          <Input
-            allowClear
-            placeholder="Estado del contacto (ej: Prospecto, Cliente)"
-            style={{ minWidth: 220 }}
-            value={statusFilter ?? ""}
-            onChange={(e) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              const v = e.target.value;
-              setStatusFilter(v === "" ? undefined : v);
-            }}
-          />
-          <Input
-            allowClear
-            placeholder="Origen (ej: Web, Referido)"
-            style={{ minWidth: 180 }}
-            value={sourceFilter ?? ""}
-            onChange={(e) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              const v = e.target.value;
-              setSourceFilter(v === "" ? undefined : v);
-            }}
-          />
-          <Input
-            allowClear
-            placeholder="Socio responsable (nombre)"
+            showSearch
+            optionFilterProp="label"
+            placeholder="Tipo de cliente"
             style={{ minWidth: 200 }}
-            value={responsibleFilter ?? ""}
-            onChange={(e) => {
+            value={customerTypeFilter}
+            options={[...CRM_CUSTOMER_TYPE_OPTIONS]}
+            onChange={(v) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
-              const v = e.target.value;
-              setResponsibleFilter(v === "" ? undefined : v);
+              setCustomerTypeFilter(v);
+            }}
+          />
+          <Select
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder="Estado del contacto"
+            style={{ minWidth: 200 }}
+            value={statusFilter}
+            options={[...CRM_STATUS_OPTIONS]}
+            onChange={(v) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              setStatusFilter(v);
+            }}
+          />
+          <Select
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder="Origen"
+            style={{ minWidth: 200 }}
+            value={sourceFilter}
+            options={[...CRM_SOURCE_OPTIONS]}
+            onChange={(v) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              setSourceFilter(v);
+            }}
+          />
+          <Select
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder="Socio responsable"
+            style={{ minWidth: 220 }}
+            value={responsibleIdFilter}
+            options={users.map((u) => ({ value: u.id, label: u.name }))}
+            onChange={(v) => {
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              setResponsibleIdFilter(v);
             }}
           />
         </Space>
@@ -398,10 +424,10 @@ function CrmContent() {
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="customerType" label="Tipo de cliente" initialValue={editingRecord ? undefined : "Empresa"}>
             <Select
-              options={[
-                { value: "Empresa", label: "Empresa" },
-                { value: "Particular", label: "Particular" },
-              ]}
+              showSearch
+              optionFilterProp="label"
+              placeholder="Empresa o particular"
+              options={customerTypeFormOptions}
             />
           </Form.Item>
           <Form.Item name="name" label="Nombre o razón social" rules={[{ required: true, message: "Requerido" }]}>
@@ -417,10 +443,22 @@ function CrmContent() {
             <Input type="email" placeholder="Email de contacto" />
           </Form.Item>
           <Form.Item name="status" label="Estado del contacto">
-            <Select allowClear placeholder="Seleccioná un estado" options={STATUS_OPTIONS} />
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Seleccioná un estado"
+              options={statusFormOptions}
+            />
           </Form.Item>
           <Form.Item name="source" label="¿De dónde nos conoció? (origen del cliente)">
-            <Input placeholder="Ej: Web, Referido, Evento, Redes sociales, Google" />
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Elegí un origen"
+              options={sourceFormOptions}
+            />
           </Form.Item>
           <Form.Item
             name="responsibleId"

@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from "class-validator";
+import { IsOptional, IsString, IsUUID } from "class-validator";
 import { PaginationQueryDto } from "../../common/pagination";
 
 export class GetCrmCustomersQueryDto extends PaginationQueryDto {
@@ -17,6 +17,11 @@ export class GetCrmCustomersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   customerType?: string;
+
+  @IsOptional()
+  @IsUUID()
+  /** Filtro exacto por socio responsable (preferido frente a texto libre). */
+  responsibleId?: string;
 
   @IsOptional()
   @IsString()
