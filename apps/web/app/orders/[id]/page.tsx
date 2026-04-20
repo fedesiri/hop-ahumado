@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
+import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
 import type { Order, OrderItem, OrderPayment } from "@/lib/types";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { Table as AntTable, App, Button, Card, Col, Row, Spin } from "antd";
@@ -91,6 +92,9 @@ function OrderDetailContent({ id }: { id: string }) {
           </Col>
           <Col span={12}>
             <strong>Total:</strong> {formatCurrency(order.total)}
+          </Col>
+          <Col span={12}>
+            <strong>Lista de precios:</strong> {orderPriceListDisplayLabel(order.priceListType)}
           </Col>
           <Col span={12}>
             <strong>Fecha de entrega:</strong>{" "}

@@ -196,6 +196,8 @@ model Order {
   userId                String?
   deliveryDate          DateTime @default(now())
   total                 Decimal
+  /// Lista de precios al armar el pedido: mayorista, minorista o fabrica (opcional).
+  priceListType         String?
   /// Notas u observaciones del pedido (opcional).
   comment               String?
   createdAt             DateTime @default(now())
@@ -242,11 +244,11 @@ model Expense {
 
 // Una sola fila: saldos iniciales de caja y desde cuándo sumar órdenes/gastos al movimiento del dashboard.
 model TreasuryBaseline {
-  id           String   @id @default("singleton")
-  openingCash  Decimal  @default(0)
-  openingCard  Decimal  @default(0)
-  deltaSince   DateTime
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default("singleton")
+  openingCash Decimal  @default(0)
+  openingCard Decimal  @default(0)
+  deltaSince  DateTime
+  updatedAt   DateTime @updatedAt
 }
 
 model StockMovement {

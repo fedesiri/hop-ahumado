@@ -111,3 +111,15 @@ export function inferPriceTypeFromOrderLines(
   }
   return winner;
 }
+
+/** Valor guardado en `Order.priceListType` (API / Prisma). */
+export function parsePriceListType(raw: string | null | undefined): PriceType | undefined {
+  if (raw === "mayorista" || raw === "minorista" || raw === "fabrica") return raw;
+  return undefined;
+}
+
+/** Etiqueta para UI o "—" si no hay dato (órdenes viejas). */
+export function orderPriceListDisplayLabel(raw: string | null | undefined): string {
+  const t = parsePriceListType(raw);
+  return t ? PRICE_TYPE_LABELS[t] : "—";
+}

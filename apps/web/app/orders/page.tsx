@@ -5,9 +5,11 @@ import { apiClient } from "@/lib/api-client";
 import type { Dayjs } from "@/lib/dayjs";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
+import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
+import { buildOrderClipboardText } from "@/lib/order-clipboard";
 import type { Customer, Order, OrderItem, User } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
+import { CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import {
   Alert,
   Table as AntTable,
@@ -108,6 +110,21 @@ function OrdersContent() {
     setViewModalOpen(true);
   };
 
+  const handleCopyOrder = async (record: Order) => {
+    const text = buildOrderClipboardText(record);
+    if (!text) {
+      message.warning("Esta orden no tiene ítems para copiar");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      if (navigator.vibrate) navigator.vibrate(30);
+      message.success("Pedido copiado");
+    } catch {
+      message.error("No se pudo copiar");
+    }
+  };
+
   const handleDelete = (id: string) => {
     modal.confirm({
       title: "Confirmar eliminacion",
@@ -151,6 +168,13 @@ function OrdersContent() {
       render: (amount: number | string) => formatCurrency(amount),
     },
     {
+      title: "Lista",
+      key: "priceListType",
+      width: 100,
+      ellipsis: true,
+      render: (_: unknown, record: Order) => orderPriceListDisplayLabel(record.priceListType),
+    },
+    {
       title: "Ítems",
       dataIndex: "orderItems",
       key: "items",
@@ -174,7 +198,7 @@ function OrdersContent() {
     {
       title: "Acciones",
       key: "actions",
-      width: isMobile ? 156 : 168,
+      width: isMobile ? 204 : 216,
       fixed: isMobile ? undefined : ("right" as const),
       render: (_: unknown, record: Order) => (
         <Space size={4} wrap={isMobile}>
@@ -185,6 +209,14 @@ function OrdersContent() {
             title="Ver detalle"
             aria-label="Ver detalle"
             onClick={() => handleViewOrder(record)}
+          />
+          <Button
+            type="default"
+            size="small"
+            icon={<CopyOutlined />}
+            title="Copiar pedido"
+            aria-label="Copiar pedido"
+            onClick={() => void handleCopyOrder(record)}
           />
           <Link href={`/orders/${record.id}/edit`}>
             <Button
@@ -348,8 +380,8 @@ function OrdersContent() {
             dataSource={orders}
             rowKey="id"
             tableLayout={isMobile ? "auto" : "fixed"}
-            style={{ backgroundColor: "#1f2937", minWidth: isMobile ? 920 : 880 }}
-            scroll={{ x: isMobile ? 920 : 1040 }}
+            style={{ backgroundColor: "#1f2937", minWidth: isMobile ? 1068 : 1028 }}
+            scroll={{ x: isMobile ? 1068 : 1200 }}
             pagination={{
               current: pagination.page,
               pageSize: pagination.limit,
@@ -387,6 +419,9 @@ function OrdersContent() {
                 </Col>
                 <Col xs={24} sm={12}>
                   <strong>Total:</strong> {formatCurrency(selectedOrder.total)}
+                </Col>
+                <Col xs={24} sm={12}>
+                  <strong>Lista de precios:</strong> {orderPriceListDisplayLabel(selectedOrder.priceListType)}
                 </Col>
                 <Col xs={24} sm={12}>
                   <strong>Creada:</strong> {new Date(selectedOrder.createdAt).toLocaleDateString("es-AR")}

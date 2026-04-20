@@ -60,6 +60,9 @@ export class OrderService {
           ...(dto.comment !== undefined && {
             comment: dto.comment.trim() ? dto.comment.trim() : null,
           }),
+          ...(dto.priceListType !== undefined && {
+            priceListType: dto.priceListType || null,
+          }),
           fulfillmentLocationId,
           orderItems: {
             create: dto.items.map((i) => ({
@@ -218,6 +221,9 @@ export class OrderService {
         ...(dto.comment !== undefined && {
           comment: dto.comment.trim() ? dto.comment.trim() : null,
         }),
+        ...(dto.priceListType !== undefined && {
+          priceListType: dto.priceListType || null,
+        }),
       },
       include: {
         orderItems: { include: { product: { select: { id: true, name: true } } } },
@@ -323,6 +329,9 @@ export class OrderService {
           }),
           ...(dto.comment !== undefined && {
             comment: dto.comment.trim() ? dto.comment.trim() : null,
+          }),
+          ...(dto.priceListType !== undefined && {
+            priceListType: dto.priceListType || null,
           }),
           orderItems: {
             deleteMany: {},

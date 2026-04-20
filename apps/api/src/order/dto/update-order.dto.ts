@@ -59,8 +59,8 @@ export class UpdateOrderDto {
   @Type(() => CreatePaymentDto)
   payments?: CreatePaymentDto[];
 
+  /** Lista usada al armar el pedido; se puede enviar solo o junto con ítems/pagos. */
   @IsOptional()
-  @ValidateIf((o: UpdateOrderDto) => o.items != null)
   @IsIn(["mayorista", "minorista", "fabrica"], { message: "priceListType debe ser mayorista, minorista o fabrica" })
   priceListType?: "mayorista" | "minorista" | "fabrica";
 

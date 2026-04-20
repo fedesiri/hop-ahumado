@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import dayjs, { type Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
-import { inferPriceTypeFromOrderLines, type PriceType } from "@/lib/order-calculator/price-types";
+import { inferPriceTypeFromOrderLines, parsePriceListType, type PriceType } from "@/lib/order-calculator/price-types";
 import {
   expandOrderLineDemands,
   fetchRecipesByProductIds,
@@ -318,7 +318,7 @@ function OrderEditPageContent({ id }: { id: string }) {
           onConfirmOrder={handleConfirmOrder}
           initialQuantities={initialQuantities}
           initialCustomerId={order.customerId ?? null}
-          initialPriceType={inferredPriceType}
+          initialPriceType={parsePriceListType(order.priceListType) ?? inferredPriceType ?? "mayorista"}
           title="Editar orden"
           confirmButtonLabel="Guardar cambios (ajustar stock)"
           persistToLocalStorage={false}

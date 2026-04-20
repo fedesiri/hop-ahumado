@@ -257,6 +257,8 @@ export interface Order {
   total: number;
   /** Observaciones del pedido (opcional). */
   comment?: string | null;
+  /** Lista de precios usada al crear el pedido (órdenes anteriores a este campo: ausente). */
+  priceListType?: string | null;
   createdAt: string;
   updatedAt: string;
   fulfillmentLocationId?: string | null;
