@@ -7,15 +7,15 @@ import { useAuth } from "@/lib/auth-context";
 import dayjs, { type Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
+import type { PriceType } from "@/lib/order-calculator/price-types";
 import {
   expandOrderLineDemands,
   fetchRecipesByProductIds,
   type RecipeIngredientRow,
 } from "@/lib/order-calculator/stock-preview";
-import type { PriceType } from "@/lib/order-calculator/price-types";
 import type { CreateOrderRequest, Customer, Price, Product, StockLocation } from "@/lib/types";
 import { PaymentMethod } from "@/lib/types";
-import { Alert, App, Button, DatePicker, Modal, Select, Spin } from "antd";
+import { Alert, App, Button, DatePicker, Input, Modal, Select, Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function OrderCalculatorPage() {
@@ -48,6 +48,7 @@ function OrderCalculatorPageContent() {
   const [submitting, setSubmitting] = useState(false);
   const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
   const [fulfillmentLocationId, setFulfillmentLocationId] = useState<string | null>(null);
+  const [orderComment, setOrderComment] = useState("");
   const [balanceByProductId, setBalanceByProductId] = useState<Record<string, number>>({});
   const [recipesByProductId, setRecipesByProductId] = useState<Record<string, RecipeIngredientRow[]>>({});
   const [stockPreviewReady, setStockPreviewReady] = useState(false);
@@ -191,6 +192,7 @@ function OrderCalculatorPageContent() {
     customerId?: string | null,
     priceListType?: PriceType,
   ) => {
+    setOrderComment("");
     setDeliveryDate(dayjs().startOf("day"));
     setPendingOrder({
       items,
@@ -217,6 +219,7 @@ function OrderCalculatorPageContent() {
         fulfillmentLocationId: fulfillmentLocationId ?? undefined,
         total,
         priceListType,
+        ...(orderComment.trim() ? { comment: orderComment.trim() } : {}),
         items: items.map((item) => ({
           productId: item.productId,
           quantity: Number(item.quantity),
@@ -358,6 +361,19 @@ function OrderCalculatorPageContent() {
                 { label: "Transferencia", value: PaymentMethod.CARD },
               ]}
             />
+            <div style={{ marginTop: 12, marginBottom: 28 }}>
+              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
+                Comentario del pedido (opcional)
+              </label>
+              <Input.TextArea
+                value={orderComment}
+                onChange={(e) => setOrderComment(e.target.value)}
+                placeholder="Ej. horario de retiro, instrucciones especiales…"
+                rows={3}
+                maxLength={2000}
+                showCount
+              />
+            </div>
           </div>
         )}
       </Modal>

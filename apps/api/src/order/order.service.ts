@@ -57,6 +57,9 @@ export class OrderService {
           userId: dto.userId ?? undefined,
           deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
           total: dto.total,
+          ...(dto.comment !== undefined && {
+            comment: dto.comment.trim() ? dto.comment.trim() : null,
+          }),
           fulfillmentLocationId,
           orderItems: {
             create: dto.items.map((i) => ({
@@ -212,6 +215,9 @@ export class OrderService {
         ...(dto.deliveryDate !== undefined && {
           deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
         }),
+        ...(dto.comment !== undefined && {
+          comment: dto.comment.trim() ? dto.comment.trim() : null,
+        }),
       },
       include: {
         orderItems: { include: { product: { select: { id: true, name: true } } } },
@@ -314,6 +320,9 @@ export class OrderService {
           ...(dto.userId !== undefined && { userId: dto.userId }),
           ...(dto.deliveryDate !== undefined && {
             deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
+          }),
+          ...(dto.comment !== undefined && {
+            comment: dto.comment.trim() ? dto.comment.trim() : null,
           }),
           orderItems: {
             deleteMany: {},

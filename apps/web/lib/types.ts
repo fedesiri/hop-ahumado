@@ -255,6 +255,8 @@ export interface Order {
   userId?: string | null;
   deliveryDate?: string | null;
   total: number;
+  /** Observaciones del pedido (opcional). */
+  comment?: string | null;
   createdAt: string;
   updatedAt: string;
   fulfillmentLocationId?: string | null;
@@ -469,6 +471,8 @@ export interface CreateOrderRequest {
   total: number;
   /** Si se envía, el API valida precios con la promo por umbral (combos regalo). */
   priceListType?: "mayorista" | "minorista" | "fabrica";
+  /** Comentario u observaciones del pedido (opcional). */
+  comment?: string;
   items: CreateOrderItemRequest[];
   payments: CreateOrderPaymentRequest[];
 }
@@ -481,6 +485,7 @@ export interface UpdateOrderRequest {
   /** Si se envían, deben ir juntos con payments y total; reemplaza líneas y pagos y ajusta stock. */
   total?: number;
   priceListType?: "mayorista" | "minorista" | "fabrica";
+  comment?: string;
   items?: CreateOrderItemRequest[];
   payments?: CreateOrderPaymentRequest[];
 }

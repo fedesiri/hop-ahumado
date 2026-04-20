@@ -398,6 +398,11 @@ function OrdersContent() {
                 <Col xs={24} sm={12}>
                   <strong>Ubicación de stock:</strong> {selectedOrder.fulfillmentLocation?.name ?? "—"}
                 </Col>
+                {selectedOrder.comment ? (
+                  <Col xs={24}>
+                    <strong>Comentario:</strong> <span style={{ whiteSpace: "pre-wrap" }}>{selectedOrder.comment}</span>
+                  </Col>
+                ) : null}
               </Row>
             </Card>
 

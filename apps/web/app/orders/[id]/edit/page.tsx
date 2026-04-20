@@ -16,7 +16,7 @@ import {
 import type { Customer, Order, Price, Product, StockLocation } from "@/lib/types";
 import { PaymentMethod } from "@/lib/types";
 import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Alert, App, Button, DatePicker, Modal, Select, Spin } from "antd";
+import { Alert, App, Button, DatePicker, Input, Modal, Select, Spin } from "antd";
 import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -55,6 +55,7 @@ function OrderEditPageContent({ id }: { id: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
   const [fulfillmentLocationId, setFulfillmentLocationId] = useState<string | null>(null);
+  const [orderComment, setOrderComment] = useState("");
   const [balanceByProductId, setBalanceByProductId] = useState<Record<string, number>>({});
   const [recipesByProductId, setRecipesByProductId] = useState<Record<string, RecipeIngredientRow[]>>({});
   const [stockPreviewReady, setStockPreviewReady] = useState(false);
@@ -108,15 +109,7 @@ function OrderEditPageContent({ id }: { id: string }) {
       }
     }
     return result;
-  }, [
-    pendingOrder,
-    products,
-    order,
-    fulfillmentLocationId,
-    balanceByProductId,
-    recipesByProductId,
-    stockPreviewReady,
-  ]);
+  }, [pendingOrder, products, order, fulfillmentLocationId, balanceByProductId, recipesByProductId, stockPreviewReady]);
 
   const limit = 100;
 
@@ -144,6 +137,7 @@ function OrderEditPageContent({ id }: { id: string }) {
           setPaymentMethod(orderData.payments[0].method);
         }
         setDeliveryDate(orderData.deliveryDate ? dayjs(orderData.deliveryDate) : null);
+        setOrderComment(orderData.comment ?? "");
 
         await fetchProducts();
 
@@ -260,6 +254,7 @@ function OrderEditPageContent({ id }: { id: string }) {
         fulfillmentLocationId: fulfillmentLocationId ?? undefined,
         total,
         priceListType,
+        comment: orderComment,
         items: items.map((item) => ({
           productId: item.productId,
           quantity: Number(item.quantity),
@@ -418,6 +413,19 @@ function OrderEditPageContent({ id }: { id: string }) {
                 { label: "Transferencia", value: PaymentMethod.CARD },
               ]}
             />
+            <div style={{ marginTop: 12, marginBottom: 28 }}>
+              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
+                Comentario del pedido (opcional)
+              </label>
+              <Input.TextArea
+                value={orderComment}
+                onChange={(e) => setOrderComment(e.target.value)}
+                placeholder="Ej. horario de retiro, instrucciones especiales…"
+                rows={3}
+                maxLength={2000}
+                showCount
+              />
+            </div>
           </div>
         )}
       </Modal>

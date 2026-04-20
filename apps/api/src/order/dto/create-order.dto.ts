@@ -6,7 +6,9 @@ import {
   IsIn,
   IsNumber,
   IsOptional,
+  IsString,
   IsUUID,
+  MaxLength,
   Min,
   ValidateNested,
 } from "class-validator";
@@ -42,6 +44,11 @@ export class CreateOrderDto {
   @IsOptional()
   @IsIn(["mayorista", "minorista", "fabrica"], { message: "priceListType debe ser mayorista, minorista o fabrica" })
   priceListType?: "mayorista" | "minorista" | "fabrica";
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000, { message: "El comentario no puede superar los 2000 caracteres" })
+  comment?: string;
 
   @IsArray()
   @ArrayMinSize(1, { message: "La orden debe tener al menos un ítem" })

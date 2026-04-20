@@ -6,7 +6,9 @@ import {
   IsIn,
   IsNumber,
   IsOptional,
+  IsString,
   IsUUID,
+  MaxLength,
   Min,
   ValidateIf,
   ValidateNested,
@@ -61,4 +63,9 @@ export class UpdateOrderDto {
   @ValidateIf((o: UpdateOrderDto) => o.items != null)
   @IsIn(["mayorista", "minorista", "fabrica"], { message: "priceListType debe ser mayorista, minorista o fabrica" })
   priceListType?: "mayorista" | "minorista" | "fabrica";
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000, { message: "El comentario no puede superar los 2000 caracteres" })
+  comment?: string;
 }

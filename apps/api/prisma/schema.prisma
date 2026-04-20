@@ -196,6 +196,8 @@ model Order {
   userId                String?
   deliveryDate          DateTime @default(now())
   total                 Decimal
+  /// Notas u observaciones del pedido (opcional).
+  comment               String?
   createdAt             DateTime @default(now())
   fulfillmentLocationId String?
 

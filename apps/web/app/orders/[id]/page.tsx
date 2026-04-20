@@ -99,6 +99,11 @@ function OrderDetailContent({ id }: { id: string }) {
           <Col span={12}>
             <strong>Ubicación de stock:</strong> {order.fulfillmentLocation?.name ?? "—"}
           </Col>
+          {order.comment ? (
+            <Col span={24}>
+              <strong>Comentario:</strong> <span style={{ whiteSpace: "pre-wrap" }}>{order.comment}</span>
+            </Col>
+          ) : null}
         </Row>
       </Card>
 
