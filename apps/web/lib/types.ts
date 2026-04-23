@@ -27,6 +27,12 @@ export enum PaymentMethod {
   CARD = "CARD",
 }
 
+export enum OrderPaymentStatus {
+  UNPAID = "UNPAID",
+  PARTIALLY_PAID = "PARTIALLY_PAID",
+  PAID = "PAID",
+}
+
 export enum StockMovementType {
   IN = "IN",
   OUT = "OUT",
@@ -254,7 +260,13 @@ export interface Order {
   customerId?: string | null;
   userId?: string | null;
   deliveryDate?: string | null;
+  deliveredAt?: string | null;
   total: number;
+  totalPrice: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: OrderPaymentStatus;
+  isDelivered: boolean;
   /** Observaciones del pedido (opcional). */
   comment?: string | null;
   /** Lista de precios usada al crear el pedido (órdenes anteriores a este campo: ausente). */
@@ -476,20 +488,19 @@ export interface CreateOrderRequest {
   /** Comentario u observaciones del pedido (opcional). */
   comment?: string;
   items: CreateOrderItemRequest[];
-  payments: CreateOrderPaymentRequest[];
 }
 
 export interface UpdateOrderRequest {
   customerId?: string | null;
   userId?: string | null;
   deliveryDate?: string;
+  deliveredAt?: string | null;
   fulfillmentLocationId?: string;
-  /** Si se envían, deben ir juntos con payments y total; reemplaza líneas y pagos y ajusta stock. */
+  /** Si se envían, deben ir juntos con total; reemplaza líneas y ajusta stock. */
   total?: number;
   priceListType?: "mayorista" | "minorista" | "fabrica";
   comment?: string;
   items?: CreateOrderItemRequest[];
-  payments?: CreateOrderPaymentRequest[];
 }
 
 // Context types for line selection

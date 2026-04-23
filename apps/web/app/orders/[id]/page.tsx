@@ -5,9 +5,9 @@ import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
-import type { Order, OrderItem, OrderPayment } from "@/lib/types";
+import { OrderPaymentStatus, PaymentMethod, type Order, type OrderItem, type OrderPayment } from "@/lib/types";
 import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Table as AntTable, App, Button, Card, Col, Row, Spin } from "antd";
+import { Table as AntTable, App, Button, Card, Col, InputNumber, Row, Select, Space, Spin, Tag } from "antd";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 
@@ -30,22 +30,51 @@ function OrderDetailContent({ id }: { id: string }) {
   const { message } = App.useApp();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [paymentAmount, setPaymentAmount] = useState<number | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
+  const [addingPayment, setAddingPayment] = useState(false);
+
+  const loadOrder = async () => {
+    setLoading(true);
+    try {
+      const data = await apiClient.getOrder(id);
+      setOrder(data);
+      const remaining = Number(data.remainingAmount ?? 0);
+      setPaymentAmount(remaining > 0 ? remaining : null);
+    } catch (error) {
+      console.error(error);
+      message.error("Error al cargar la orden");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const data = await apiClient.getOrder(id);
-        setOrder(data);
-      } catch (error) {
-        console.error(error);
-        message.error("Error al cargar la orden");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    void loadOrder();
   }, [id, message]);
+
+  const handleAddPayment = async () => {
+    if (!order || !paymentAmount || paymentAmount <= 0) return;
+    try {
+      setAddingPayment(true);
+      const updated = await apiClient.createOrderPayment(order.id, {
+        amount: Number(paymentAmount),
+        method: paymentMethod,
+      });
+      setOrder(updated);
+      const remaining = Number(updated.remainingAmount ?? 0);
+      setPaymentAmount(remaining > 0 ? remaining : null);
+      message.success("Pago registrado");
+    } catch (error: unknown) {
+      const msg =
+        error && typeof error === "object" && "message" in error
+          ? String((error as { message: string }).message)
+          : "No se pudo registrar el pago";
+      message.error(msg);
+    } finally {
+      setAddingPayment(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -94,11 +123,41 @@ function OrderDetailContent({ id }: { id: string }) {
             <strong>Total:</strong> {formatCurrency(order.total)}
           </Col>
           <Col span={12}>
+            <strong>Total calculado:</strong> {formatCurrency(order.totalPrice)}
+          </Col>
+          <Col span={12}>
+            <strong>Estado de pago:</strong>{" "}
+            <Tag
+              color={
+                order.paymentStatus === OrderPaymentStatus.PAID
+                  ? "green"
+                  : order.paymentStatus === OrderPaymentStatus.PARTIALLY_PAID
+                    ? "gold"
+                    : "default"
+              }
+            >
+              {order.paymentStatus}
+            </Tag>
+          </Col>
+          <Col span={12}>
+            <strong>Pagado:</strong> {formatCurrency(order.paidAmount)}
+          </Col>
+          <Col span={12}>
+            <strong>Pendiente:</strong> {formatCurrency(order.remainingAmount)}
+          </Col>
+          <Col span={12}>
             <strong>Lista de precios:</strong> {orderPriceListDisplayLabel(order.priceListType)}
           </Col>
           <Col span={12}>
             <strong>Fecha de entrega:</strong>{" "}
             {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString("es-AR") : "-"}
+          </Col>
+          <Col span={12}>
+            <strong>Entregado:</strong> {order.isDelivered ? "Sí" : "No"}
+          </Col>
+          <Col span={12}>
+            <strong>Entregado en:</strong>{" "}
+            {order.deliveredAt ? new Date(order.deliveredAt).toLocaleString("es-AR") : "-"}
           </Col>
           <Col span={12}>
             <strong>Ubicación de stock:</strong> {order.fulfillmentLocation?.name ?? "—"}
@@ -140,6 +199,35 @@ function OrderDetailContent({ id }: { id: string }) {
       />
 
       <h3 style={{ color: "#ffffff" }}>Pagos</h3>
+      <Card style={{ marginBottom: 16, background: "#1f2937" }}>
+        <Space wrap>
+          <InputNumber
+            min={0.01}
+            value={paymentAmount ?? undefined}
+            onChange={(v) => setPaymentAmount(v ?? null)}
+            placeholder="Monto"
+            disabled={order.paymentStatus === OrderPaymentStatus.PAID}
+          />
+          <Select
+            value={paymentMethod}
+            onChange={(v) => setPaymentMethod(v)}
+            style={{ width: 180 }}
+            options={[
+              { label: "Efectivo", value: PaymentMethod.CASH },
+              { label: "Transferencia", value: PaymentMethod.CARD },
+            ]}
+            disabled={order.paymentStatus === OrderPaymentStatus.PAID}
+          />
+          <Button
+            type="primary"
+            onClick={handleAddPayment}
+            loading={addingPayment}
+            disabled={order.paymentStatus === OrderPaymentStatus.PAID || !paymentAmount || paymentAmount <= 0}
+          >
+            Agregar pago
+          </Button>
+        </Space>
+      </Card>
       <AntTable
         columns={[
           {

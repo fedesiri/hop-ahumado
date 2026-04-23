@@ -7,7 +7,7 @@ import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
 import { buildOrderClipboardText } from "@/lib/order-clipboard";
-import type { Customer, Order, OrderItem, User } from "@/lib/types";
+import { OrderPaymentStatus, type Customer, type Order, type OrderItem, type User } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import {
@@ -26,6 +26,7 @@ import {
   Space,
   Spin,
   Table,
+  Tag,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import Link from "next/link";
@@ -168,6 +169,43 @@ function OrdersContent() {
       render: (amount: number | string) => formatCurrency(amount),
     },
     {
+      title: "Total calc.",
+      dataIndex: "totalPrice",
+      key: "totalPrice",
+      width: 120,
+      render: (amount: number | string) => formatCurrency(amount),
+    },
+    {
+      title: "Pago",
+      key: "paymentStatus",
+      width: 132,
+      render: (_: unknown, record: Order) => (
+        <Tag
+          color={
+            record.paymentStatus === OrderPaymentStatus.PAID
+              ? "green"
+              : record.paymentStatus === OrderPaymentStatus.PARTIALLY_PAID
+                ? "gold"
+                : "default"
+          }
+        >
+          {record.paymentStatus}
+        </Tag>
+      ),
+    },
+    {
+      title: "Pagado",
+      key: "paidAmount",
+      width: 112,
+      render: (_: unknown, record: Order) => formatCurrency(record.paidAmount ?? 0),
+    },
+    {
+      title: "Pendiente",
+      key: "remainingAmount",
+      width: 120,
+      render: (_: unknown, record: Order) => formatCurrency(record.remainingAmount ?? 0),
+    },
+    {
       title: "Lista",
       key: "priceListType",
       width: 100,
@@ -182,11 +220,17 @@ function OrdersContent() {
       render: (items: OrderItem[]) => items?.length || 0,
     },
     {
-      title: "Entrega",
+      title: "Programada",
       key: "deliveryDate",
       width: 108,
       render: (_: unknown, record: Order) =>
         record.deliveryDate ? new Date(record.deliveryDate).toLocaleDateString("es-AR") : "—",
+    },
+    {
+      title: "Entregada",
+      key: "isDelivered",
+      width: 100,
+      render: (_: unknown, record: Order) => (record.isDelivered ? "Sí" : "No"),
     },
     {
       title: "Stock desde",
@@ -421,6 +465,29 @@ function OrdersContent() {
                   <strong>Total:</strong> {formatCurrency(selectedOrder.total)}
                 </Col>
                 <Col xs={24} sm={12}>
+                  <strong>Total calculado:</strong> {formatCurrency(selectedOrder.totalPrice)}
+                </Col>
+                <Col xs={24} sm={12}>
+                  <strong>Estado de pago:</strong>{" "}
+                  <Tag
+                    color={
+                      selectedOrder.paymentStatus === OrderPaymentStatus.PAID
+                        ? "green"
+                        : selectedOrder.paymentStatus === OrderPaymentStatus.PARTIALLY_PAID
+                          ? "gold"
+                          : "default"
+                    }
+                  >
+                    {selectedOrder.paymentStatus}
+                  </Tag>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <strong>Pagado:</strong> {formatCurrency(selectedOrder.paidAmount)}
+                </Col>
+                <Col xs={24} sm={12}>
+                  <strong>Pendiente:</strong> {formatCurrency(selectedOrder.remainingAmount)}
+                </Col>
+                <Col xs={24} sm={12}>
                   <strong>Lista de precios:</strong> {orderPriceListDisplayLabel(selectedOrder.priceListType)}
                 </Col>
                 <Col xs={24} sm={12}>
@@ -429,6 +496,13 @@ function OrdersContent() {
                 <Col xs={24} sm={12}>
                   <strong>Entrega:</strong>{" "}
                   {selectedOrder.deliveryDate ? new Date(selectedOrder.deliveryDate).toLocaleDateString("es-AR") : "—"}
+                </Col>
+                <Col xs={24} sm={12}>
+                  <strong>Entregada:</strong> {selectedOrder.isDelivered ? "Sí" : "No"}
+                </Col>
+                <Col xs={24} sm={12}>
+                  <strong>Entregado en:</strong>{" "}
+                  {selectedOrder.deliveredAt ? new Date(selectedOrder.deliveredAt).toLocaleString("es-AR") : "—"}
                 </Col>
                 <Col xs={24} sm={12}>
                   <strong>Ubicación de stock:</strong> {selectedOrder.fulfillmentLocation?.name ?? "—"}

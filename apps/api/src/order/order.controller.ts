@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { toLimit, toPage } from "../common/pagination";
 import { CreateOrderDto } from "./dto/create-order.dto";
+import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { GetOrdersQueryDto } from "./dto/get-orders-query.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
 import { OrderService } from "./order.service";
@@ -36,6 +37,11 @@ export class OrderController {
   @Patch(":id")
   update(@Param("id") id: string, @Body() dto: UpdateOrderDto) {
     return this.orderService.update(id, dto);
+  }
+
+  @Post(":id/payments")
+  createPayment(@Param("id") id: string, @Body() dto: CreatePaymentDto) {
+    return this.orderService.createPayment(id, dto);
   }
 
   @Delete(":id")

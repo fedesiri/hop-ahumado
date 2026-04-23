@@ -9,6 +9,7 @@ import type {
   CreateCustomerProfileRequest,
   CreateCustomerRequest,
   CreateExpenseRequest,
+  CreateOrderPaymentRequest,
   CreateOrderRequest,
   CreatePriceRequest,
   CreateProductRequest,
@@ -32,9 +33,9 @@ import type {
   StockBalanceRow,
   StockLocation,
   StockMovement,
-  TreasuryBaseline,
   TransferAllStockRequest,
   TransferAllStockResult,
+  TreasuryBaseline,
   UpdateCategoryRequest,
   UpdateCostRequest,
   UpdateCustomerInteractionRequest,
@@ -567,6 +568,13 @@ export class ApiClient {
   async updateOrder(id: string, data: UpdateOrderRequest): Promise<Order> {
     return this.request(`/orders/${id}`, {
       method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async createOrderPayment(orderId: string, data: CreateOrderPaymentRequest): Promise<Order> {
+    return this.request(`/orders/${orderId}/payments`, {
+      method: "POST",
       body: JSON.stringify(data),
     });
   }

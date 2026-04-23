@@ -191,16 +191,17 @@ model RecipeItem {
 }
 
 model Order {
-  id                    String   @id @default(uuid())
+  id                    String    @id @default(uuid())
   customerId            String?
   userId                String?
-  deliveryDate          DateTime @default(now())
+  deliveryDate          DateTime  @default(now())
+  deliveredAt           DateTime?
   total                 Decimal
   /// Lista de precios al armar el pedido: mayorista, minorista o fabrica (opcional).
   priceListType         String?
   /// Notas u observaciones del pedido (opcional).
   comment               String?
-  createdAt             DateTime @default(now())
+  createdAt             DateTime  @default(now())
   fulfillmentLocationId String?
 
   orderItems          OrderItem[]
