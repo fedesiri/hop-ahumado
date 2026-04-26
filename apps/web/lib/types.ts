@@ -309,7 +309,8 @@ export interface UpdateProductRequest {
   sku?: string;
   barcode?: string;
   stock?: number;
-  deactivationDate?: string;
+  /** `null` reactiva el producto (quita la fecha de desactivación). */
+  deactivationDate?: string | null;
 }
 
 export interface CreateUserRequest {

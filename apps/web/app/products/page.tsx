@@ -15,7 +15,7 @@ import {
   type Product,
   type UpdateProductRequest,
 } from "@/lib/types";
-import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, PlusOutlined, UndoOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
@@ -148,6 +148,25 @@ function ProductsContent() {
     });
   };
 
+  const handleReactivate = (id: string) => {
+    modal.confirm({
+      title: "Reactivar producto",
+      content:
+        "Vuelve al listado de activos y a las ventas. Las cantidades en stock que tenía al desactivarse se conservan; podés editarlas después si hace falta.",
+      okText: "Reactivar",
+      cancelText: "Cancelar",
+      onOk: async () => {
+        try {
+          await apiClient.updateProduct(id, { deactivationDate: null });
+          message.success("Producto reactivado");
+          fetchProducts();
+        } catch (error) {
+          message.error("Error al reactivar producto");
+        }
+      },
+    });
+  };
+
   const handleSubmit = async (values: any) => {
     try {
       const data: CreateProductRequest = {
@@ -230,11 +249,21 @@ function ProductsContent() {
     {
       title: "Acciones",
       key: "actions",
-      width: 120,
+      width: showDeactivated ? 160 : 120,
       render: (_: any, record: Product) => (
         <Space>
           <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
+          {showDeactivated ? (
+            <Button
+              type="default"
+              size="small"
+              title="Reactivar"
+              icon={<UndoOutlined />}
+              onClick={() => handleReactivate(record.id)}
+            />
+          ) : (
+            <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
+          )}
         </Space>
       ),
     },
