@@ -2,6 +2,7 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { OrderDetailView } from "@/components/orders/order-detail-view";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import type { Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
@@ -13,7 +14,6 @@ import { OrderPaymentStatus, type Customer, type Order, type OrderItem, type Use
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import {
-  Alert,
   App,
   Button,
   Card,
@@ -178,30 +178,16 @@ function OrdersContent() {
 
   const columns: ColumnsType<Order> = [
     {
-      title: "ID",
-      dataIndex: "id",
-      key: "id",
-      width: 96,
-      fixed: isMobile ? undefined : ("left" as const),
-      render: (text: string) => text.slice(0, 8) + "...",
-    },
-    {
       title: "Cliente",
-      dataIndex: ["customer", "name"],
       key: "customer",
       ellipsis: true,
-      minWidth: 148,
-      render: (text: string) => text || "-",
+      minWidth: 200,
+      width: 220,
+      fixed: isMobile ? undefined : ("left" as const),
+      render: (_: unknown, record: Order) => record.customer?.name?.trim() || "Sin cliente",
     },
     {
       title: "Total",
-      dataIndex: "total",
-      key: "total",
-      width: 112,
-      render: (amount: number | string) => formatCurrency(amount),
-    },
-    {
-      title: "Total calculado",
       dataIndex: "totalPrice",
       key: "totalPrice",
       width: 120,
@@ -353,22 +339,16 @@ function OrdersContent() {
         </Link>
       </div>
 
-      <Alert
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-        message="Dónde están los productos al armar un pedido"
-        description={
-          <>
-            Los ítems salen del catálogo en <strong>Productos</strong>. Para que aparezcan con precio en la calculadora,
-            cargá al menos un <strong>Precio</strong> activo para cada producto. Luego abrí{" "}
-            <Link href="/orders/calculator">Nueva orden</Link>: elegís cliente, buscás el producto (ej. panes) y la
-            cantidad. Al confirmar, el sistema <strong>descuenta solo el stock del producto vendido</strong> (el pan),
-            no los ingredientes de la receta; las recetas hoy sirven para documentar composición, no para descontar
-            insumos automáticamente.
-          </>
-        }
-      />
+      <ScreenInfoPanel title="Dónde están los productos al armar un pedido">
+        <>
+          Los ítems salen del catálogo en <strong>Productos</strong>. Para que aparezcan con precio en la calculadora,
+          cargá al menos un <strong>Precio</strong> activo para cada producto. Luego abrí{" "}
+          <Link href="/orders/calculator">Nueva orden</Link>: elegís cliente, buscás el producto (ej. panes) y la
+          cantidad. Al confirmar, el sistema <strong>descuenta solo el stock del producto vendido</strong> (el pan), no
+          los ingredientes de la receta; las recetas hoy sirven para documentar composición, no para descontar insumos
+          automáticamente.
+        </>
+      </ScreenInfoPanel>
 
       <Card style={{ marginBottom: "16px", background: "#1f2937", borderColor: "#2d3748" }}>
         <Row gutter={[12, 12]}>
@@ -472,8 +452,8 @@ function OrdersContent() {
             dataSource={orders}
             rowKey="id"
             tableLayout={isMobile ? "auto" : "fixed"}
-            style={{ backgroundColor: "#1f2937", minWidth: isMobile ? 1280 : 1300 }}
-            scroll={{ x: isMobile ? 1280 : 1500 }}
+            style={{ backgroundColor: "#1f2937", minWidth: isMobile ? 1180 : 1200 }}
+            scroll={{ x: isMobile ? 1180 : 1400 }}
             pagination={{
               current: pagination.page,
               pageSize: pagination.limit,

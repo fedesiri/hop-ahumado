@@ -1,5 +1,6 @@
 "use client";
 
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import dayjs from "@/lib/dayjs";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
@@ -439,11 +440,16 @@ export function Dashboard() {
         width={520}
         destroyOnClose
       >
-        <p style={{ color: "#9ca3af", marginTop: 0, fontSize: 13, marginBottom: 16 }}>
-          Definí cuánto tenés hoy en efectivo y en transferencia, y desde qué fecha deben sumarse las{" "}
-          <strong style={{ color: "#e5e7eb" }}>órdenes y gastos nuevos</strong> (por ejemplo justo después de importar
-          el Excel, para no duplicar lo histórico).
-        </p>
+        <ScreenInfoPanel
+          title="Cómo se calcula el movimiento de caja"
+          style={{ marginTop: 0, marginBottom: 16, fontSize: 13 }}
+        >
+          <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
+            Definí cuánto tenés hoy en efectivo y en transferencia, y desde qué fecha deben sumarse las{" "}
+            <strong style={{ color: "#e5e7eb" }}>órdenes y gastos nuevos</strong> (por ejemplo justo después de importar
+            el Excel, para no duplicar lo histórico).
+          </span>
+        </ScreenInfoPanel>
         <Form form={form} layout="vertical" style={{ marginBottom: 16 }}>
           <Form.Item
             name="openingCash"

@@ -1,13 +1,14 @@
 "use client";
 
 import { AppLayout } from "@/components/app-layout";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import { PRICE_TYPE_LABELS, PRICE_TYPES, type PriceType } from "@/lib/order-calculator/price-types";
 import type { CreatePriceRequest, Price, Product, UpdatePriceRequest } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, App, AutoComplete, Button, Empty, Form, InputNumber, Modal, Select, Space, Spin, Table } from "antd";
+import { App, AutoComplete, Button, Empty, Form, InputNumber, Modal, Select, Space, Spin, Table } from "antd";
 import { useEffect, useState } from "react";
 
 export default function PricesPage() {
@@ -168,21 +169,15 @@ function PricesContent() {
         </Button>
       </div>
 
-      <Alert
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-        message="Tres listas para todos los productos"
-        description={
-          <>
-            Podés cargar <strong>mayorista</strong>, <strong>minorista</strong> y <strong>fábrica</strong> para{" "}
-            <strong>cualquier</strong> producto (cerveza, pan, lo que sea): son tres registros de precio distintos con
-            la misma descripción de lista. En <strong>Nueva orden</strong> el selector usa esas etiquetas para elegir
-            qué valor aplicar. Si dejás otra descripción libre, el precio se guarda pero la calculadora puede no
-            reconocerla como lista estándar.
-          </>
-        }
-      />
+      <ScreenInfoPanel title="Tres listas para todos los productos">
+        <>
+          Podés cargar <strong>mayorista</strong>, <strong>minorista</strong> y <strong>fábrica</strong> para{" "}
+          <strong>cualquier</strong> producto (cerveza, pan, lo que sea): son tres registros de precio distintos con la
+          misma descripción de lista. En <strong>Nueva orden</strong> el selector usa esas etiquetas para elegir qué
+          valor aplicar. Si dejás otra descripción libre, el precio se guarda pero la calculadora puede no reconocerla
+          como lista estándar.
+        </>
+      </ScreenInfoPanel>
 
       {loading ? (
         <Spin />

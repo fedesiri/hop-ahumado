@@ -1,13 +1,14 @@
 "use client";
 
 import { AppLayout } from "@/components/app-layout";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { Cost, PaginationMeta, Product, StockLocation, StockMovement, StockMovementType } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag } from "antd";
+import { App, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 
@@ -387,13 +388,10 @@ function StockContent() {
         </Button>
       </div>
 
-      <Alert
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-        message=""
-        description="Usá decimales si el producto se mide en kg, litros, etc. (ej. entrada 2,5 kg de tomate). Mantené la misma unidad que en el producto y en recetas."
-      />
+      <ScreenInfoPanel title="Unidades y decimales en movimientos">
+        Usá decimales si el producto se mide en kg, litros, etc. (ej. entrada 2,5 kg de tomate). Mantené la misma unidad
+        que en el producto y en recetas.
+      </ScreenInfoPanel>
 
       {loading ? (
         <Spin />

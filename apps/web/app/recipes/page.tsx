@@ -1,6 +1,7 @@
 "use client";
 
 import { AppLayout } from "@/components/app-layout";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { LineProvider } from "@/lib/line-context";
 import {
@@ -441,9 +442,14 @@ function RecipesContent() {
           </Col>
         </Row>
 
-        <div style={{ marginTop: 14, color: "#9ca3af", lineHeight: 1.5 }}>
-          Si el producto final está en <strong>kg</strong> o <strong>gr</strong>, la tabla muestra cuánto insumo entra
-          por <strong>cada 1 kg de final</strong>. Si no, se muestra por la unidad del final (unidad, litro, etc.).
+        <div style={{ marginTop: 14 }}>
+          <ScreenInfoPanel title="Cómo se lee la tabla de receta">
+            <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
+              Si el producto final está en <strong>kg</strong> o <strong>gr</strong>, la tabla muestra cuánto insumo
+              entra por <strong>cada 1 kg de final</strong>. Si no, se muestra por la unidad del final (unidad, litro,
+              etc.).
+            </span>
+          </ScreenInfoPanel>
         </div>
       </Card>
 
@@ -464,12 +470,17 @@ function RecipesContent() {
             style={{ marginTop: 20, background: "#1f2937", borderColor: "#2d3748" }}
             styles={{ header: { borderColor: "#2d3748", color: "#ffffff" } }}
           >
-            <p style={{ color: "#9ca3af", marginBottom: 16, lineHeight: 1.55 }}>
-              Tomá las proporciones de la receta de arriba. Indicá{" "}
-              <strong>cuánto vas a elaborar del producto final</strong> (en la misma unidad que tiene cargado ese
-              producto: {UNIT_SHORT_LABEL[selectedProduct?.unit ?? ProductUnit.UNIT]}). El listado es solo orientativo;
-              no modifica stock ni la receta guardada.
-            </p>
+            <ScreenInfoPanel
+              title="Cómo usar la calculadora de ingredientes"
+              style={{ marginBottom: calculatorRows.length > 0 ? 16 : 0 }}
+            >
+              <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
+                Tomá las proporciones de la receta de arriba. Indicá{" "}
+                <strong>cuánto vas a elaborar del producto final</strong> (en la misma unidad que tiene cargado ese
+                producto: {UNIT_SHORT_LABEL[selectedProduct?.unit ?? ProductUnit.UNIT]}). El listado es solo orientativo;
+                no modifica stock ni la receta guardada.
+              </span>
+            </ScreenInfoPanel>
             <Space wrap align="center" style={{ marginBottom: calculatorRows.length > 0 ? 16 : 0 }}>
               <span style={{ color: "#e5e7eb" }}>Quiero elaborar</span>
               <InputNumber
@@ -514,11 +525,16 @@ function RecipesContent() {
         onCancel={() => setModalOpen(false)}
         width={480}
       >
-        <p style={{ color: "#9ca3af", marginBottom: 16, lineHeight: 1.55 }}>
-          Receta de <strong>{selectedProduct?.name ?? "…"}</strong> (producto final). Para cada ingrediente cargás dos
-          cantidades que corresponden a <strong>la misma tanda o lote</strong>: una del final y otra del insumo. El
-          primero es siempre el <strong>{selectedProduct?.name ?? "producto final"}</strong>, no el ingrediente.
-        </p>
+        <ScreenInfoPanel
+          title="Cómo cargar las cantidades de la tanda"
+          style={{ marginBottom: 16 }}
+        >
+          <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
+            Receta de <strong>{selectedProduct?.name ?? "…"}</strong> (producto final). Para cada ingrediente cargás dos
+            cantidades que corresponden a <strong>la misma tanda o lote</strong>: una del final y otra del insumo. El
+            primero es siempre el <strong>{selectedProduct?.name ?? "producto final"}</strong>, no el ingrediente.
+          </span>
+        </ScreenInfoPanel>
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
             name="ingredientId"

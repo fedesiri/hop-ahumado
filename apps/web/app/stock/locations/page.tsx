@@ -1,6 +1,7 @@
 "use client";
 
 import { AppLayout } from "@/components/app-layout";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
@@ -8,7 +9,6 @@ import type { StockBalanceRow, StockLocation } from "@/lib/types";
 import { ProductUnit } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, SwapOutlined } from "@ant-design/icons";
 import {
-  Alert,
   App,
   Button,
   Checkbox,
@@ -191,28 +191,22 @@ function StockLocationsContent() {
         </Button>
       </div>
 
-      <Alert
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-        message=""
-        description={
-          <div style={{ lineHeight: 1.6 }}>
-            <p style={{ margin: "0 0 8px 0" }}>
-              Cada ubicación es un depósito o lugar donde tenés inventario (local, tu casa, casa de un socio). Los
-              movimientos y los pedidos eligen desde cuál se descuenta o hacia cuál ingresa.
-            </p>
-            <p style={{ margin: "0 0 8px 0" }}>
-              Usá la <strong>misma unidad</strong> de cantidad que definiste al cargar el producto (enteros o decimales,
-              ej. 10,5 kg).
-            </p>
-            <p style={{ margin: 0 }}>
-              Podés <strong>traspasar todo el stock</strong> para consolidar depósitos. Solo podés eliminar una
-              ubicación si no tiene stock.
-            </p>
-          </div>
-        }
-      />
+      <ScreenInfoPanel title="Cómo funcionan las ubicaciones de stock">
+        <div>
+          <p style={{ margin: "0 0 8px 0" }}>
+            Cada ubicación es un depósito o lugar donde tenés inventario (local, tu casa, casa de un socio). Los
+            movimientos y los pedidos eligen desde cuál se descuenta o hacia cuál ingresa.
+          </p>
+          <p style={{ margin: "0 0 8px 0" }}>
+            Usá la <strong>misma unidad</strong> de cantidad que definiste al cargar el producto (enteros o decimales,
+            ej. 10,5 kg).
+          </p>
+          <p style={{ margin: 0 }}>
+            Podés <strong>traspasar todo el stock</strong> para consolidar depósitos. Solo podés eliminar una
+            ubicación si no tiene stock.
+          </p>
+        </div>
+      </ScreenInfoPanel>
 
       {loading ? (
         <Spin />

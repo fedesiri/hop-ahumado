@@ -1,6 +1,7 @@
 "use client";
 
 import { AppLayout } from "@/components/app-layout";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
@@ -16,7 +17,6 @@ import {
 } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import {
-  Alert,
   App,
   Button,
   Card,
@@ -249,33 +249,26 @@ function ProductsContent() {
         </Button>
       </div>
 
-      <Alert
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-        message="¿Qué número va en «stock»?"
-        description={
-          <div style={{ lineHeight: 1.6 }}>
-            <p style={{ margin: "0 0 8px 0" }}>
-              Es <strong>cuánto tenés disponible</strong> de ese producto, en la unidad que elijas para él (el sistema
-              no guarda «kg» o «unidades» aparte: vos lo interpretás).
-            </p>
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              <li>
-                <strong>Venta por unidad</strong> (ej. cerveza, pan en unidades): stock = cantidad de unidades (12,
-                50…).
-              </li>
-              <li>
-                <strong>Venta o insumo por peso/volumen</strong> (ej. tomate en kg): stock = kg o litros, podés usar
-                decimales (10,5).
-              </li>
-            </ul>
-            <p style={{ margin: "8px 0 0 0" }}>
-              Usá la <strong>misma unidad</strong> en movimientos de stock y en recetas para ese producto.
-            </p>
-          </div>
-        }
-      />
+      <ScreenInfoPanel title="¿Qué número va en «stock»?">
+        <div>
+          <p style={{ margin: "0 0 8px 0" }}>
+            Es <strong>cuánto tenés disponible</strong> de ese producto, en la unidad que elijas para él (el sistema no
+            guarda «kg» o «unidades» aparte: vos lo interpretás).
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <li>
+              <strong>Venta por unidad</strong> (ej. cerveza, pan en unidades): stock = cantidad de unidades (12, 50…).
+            </li>
+            <li>
+              <strong>Venta o insumo por peso/volumen</strong> (ej. tomate en kg): stock = kg o litros, podés usar
+              decimales (10,5).
+            </li>
+          </ul>
+          <p style={{ margin: "8px 0 0 0" }}>
+            Usá la <strong>misma unidad</strong> en movimientos de stock y en recetas para ese producto.
+          </p>
+        </div>
+      </ScreenInfoPanel>
 
       <Card style={{ marginBottom: "16px", background: "#1f2937", borderColor: "#2d3748" }}>
         <Space wrap>
@@ -405,9 +398,14 @@ function ProductsContent() {
                 <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1300" style={{ width: "100%" }} />
               </Form.Item>
 
-              <div style={{ color: "#9ca3af", lineHeight: 1.5 }}>
-                Si dejás algún precio vacío, podés cargarlo después en la pantalla de <strong>Precios</strong>.
-              </div>
+              <ScreenInfoPanel
+                title="Sobre costos y precios en este formulario"
+                style={{ marginBottom: 0, marginTop: 8 }}
+              >
+                <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
+                  Si dejás algún precio vacío, podés cargarlo después en la pantalla de <strong>Precios</strong>.
+                </span>
+              </ScreenInfoPanel>
             </div>
           )}
         </Form>
