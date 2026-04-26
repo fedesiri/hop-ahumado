@@ -1,4 +1,5 @@
-import { IsNumberString, IsOptional, IsString } from "class-validator";
+import { IsIn, IsNumberString, IsOptional, IsString } from "class-validator";
+import { OrderPaymentStatus } from "../order-payment-status.enum";
 import { PaginationQueryDto } from "../../common/pagination";
 
 export class GetOrdersQueryDto extends PaginationQueryDto {
@@ -25,4 +26,14 @@ export class GetOrdersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsNumberString()
   maxTotal?: string;
+
+  @IsOptional()
+  @IsIn([OrderPaymentStatus.UNPAID, OrderPaymentStatus.PARTIALLY_PAID, OrderPaymentStatus.PAID], {
+    message: "paymentStatus debe ser UNPAID, PARTIALLY_PAID o PAID",
+  })
+  paymentStatus?: OrderPaymentStatus;
+
+  @IsOptional()
+  @IsIn(["true", "false"], { message: "delivered debe ser true o false" })
+  delivered?: "true" | "false";
 }

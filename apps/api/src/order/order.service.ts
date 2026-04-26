@@ -129,37 +129,29 @@ export class OrderService {
     dateTo?: string,
     minTotal?: number,
     maxTotal?: number,
+    paymentStatus?: OrderPaymentStatus,
+    delivered?: "true" | "false",
   ): Promise<PaginatedResponse<OrderWithComputedFields>> {
     const skip = (page - 1) * limit;
+    const tol = ORDER_PAYMENT_TOLERANCE;
 
-    const where: any = {};
-    if (customerId) {
-      where.customerId = customerId;
+    if (paymentStatus !== undefined) {
+      const whereClause = this.sqlOrderListWhereClauses(
+        { customerId, userId, dateFrom, dateTo, minTotal, maxTotal, delivered },
+        this.sqlOrderPaymentStatusCondition(paymentStatus, tol),
+      );
+      return this.findAllWithPaymentStatusSql(page, limit, skip, whereClause);
     }
-    if (userId) {
-      where.userId = userId;
-    }
-    if (dateFrom || dateTo) {
-      where.createdAt = {};
-      if (dateFrom) {
-        where.createdAt.gte = new Date(dateFrom);
-      }
-      if (dateTo) {
-        // incluir hasta el final del día
-        const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
-        where.createdAt.lte = end;
-      }
-    }
-    if (minTotal !== undefined || maxTotal !== undefined) {
-      where.total = {};
-      if (minTotal !== undefined) {
-        where.total.gte = minTotal;
-      }
-      if (maxTotal !== undefined) {
-        where.total.lte = maxTotal;
-      }
-    }
+
+    const where: Prisma.OrderWhereInput = this.buildPrismaOrderListWhere({
+      customerId,
+      userId,
+      dateFrom,
+      dateTo,
+      minTotal,
+      maxTotal,
+      delivered,
+    });
 
     const [data, total] = await Promise.all([
       this.prisma.order.findMany({
@@ -172,6 +164,161 @@ export class OrderService {
       this.prisma.order.count({ where }),
     ]);
     return buildPaginatedResponse(this.enrichOrders(data as OrderWithRelations[]), total, page, limit);
+  }
+
+  private buildPrismaOrderListWhere(params: {
+    customerId?: string;
+    userId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    minTotal?: number;
+    maxTotal?: number;
+    delivered?: "true" | "false";
+  }): Prisma.OrderWhereInput {
+    const where: Prisma.OrderWhereInput = {};
+    if (params.customerId) {
+      where.customerId = params.customerId;
+    }
+    if (params.userId) {
+      where.userId = params.userId;
+    }
+    if (params.dateFrom || params.dateTo) {
+      where.createdAt = {};
+      if (params.dateFrom) {
+        where.createdAt.gte = new Date(params.dateFrom);
+      }
+      if (params.dateTo) {
+        const end = new Date(params.dateTo);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+    if (params.minTotal !== undefined || params.maxTotal !== undefined) {
+      where.total = {};
+      if (params.minTotal !== undefined) {
+        where.total.gte = params.minTotal;
+      }
+      if (params.maxTotal !== undefined) {
+        where.total.lte = params.maxTotal;
+      }
+    }
+    if (params.delivered === "true") {
+      where.deliveredAt = { not: null };
+    } else if (params.delivered === "false") {
+      where.deliveredAt = null;
+    }
+    return where;
+  }
+
+  /** Condición SQL alineada con `computeOrderFields` (líneas vs pagos, tolerancia monetaria). */
+  private sqlOrderPaymentStatusCondition(status: OrderPaymentStatus, tol: number): Prisma.Sql {
+    if (status === OrderPaymentStatus.UNPAID) {
+      return Prisma.sql`(
+        (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") < ${tol}
+      )`;
+    }
+    if (status === OrderPaymentStatus.PAID) {
+      return Prisma.sql`(
+        ABS(
+          (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") -
+          (SELECT COALESCE(SUM(oi."quantity" * oi."price"::float8), 0) FROM "OrderItem" oi WHERE oi."orderId" = o."id")
+        ) < ${tol}
+        OR
+        (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") >
+        (SELECT COALESCE(SUM(oi."quantity" * oi."price"::float8), 0) FROM "OrderItem" oi WHERE oi."orderId" = o."id")
+      )`;
+    }
+    return Prisma.sql`(
+      (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") >= ${tol}
+      AND NOT (
+        (
+          ABS(
+            (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") -
+            (SELECT COALESCE(SUM(oi."quantity" * oi."price"::float8), 0) FROM "OrderItem" oi WHERE oi."orderId" = o."id")
+          ) < ${tol}
+        )
+        OR
+        (
+          (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") >
+          (SELECT COALESCE(SUM(oi."quantity" * oi."price"::float8), 0) FROM "OrderItem" oi WHERE oi."orderId" = o."id")
+        )
+      )
+    )`;
+  }
+
+  private sqlOrderListWhereClauses(
+    params: {
+      customerId?: string;
+      userId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      minTotal?: number;
+      maxTotal?: number;
+      delivered?: "true" | "false";
+    },
+    paymentCondition: Prisma.Sql,
+  ): Prisma.Sql {
+    const parts: Prisma.Sql[] = [];
+    if (params.customerId) {
+      parts.push(Prisma.sql`o."customerId" = ${params.customerId}`);
+    }
+    if (params.userId) {
+      parts.push(Prisma.sql`o."userId" = ${params.userId}`);
+    }
+    if (params.dateFrom) {
+      parts.push(Prisma.sql`o."createdAt" >= ${new Date(params.dateFrom)}`);
+    }
+    if (params.dateTo) {
+      const end = new Date(params.dateTo);
+      end.setHours(23, 59, 59, 999);
+      parts.push(Prisma.sql`o."createdAt" <= ${end}`);
+    }
+    if (params.minTotal !== undefined) {
+      parts.push(Prisma.sql`o."total"::float8 >= ${params.minTotal}`);
+    }
+    if (params.maxTotal !== undefined) {
+      parts.push(Prisma.sql`o."total"::float8 <= ${params.maxTotal}`);
+    }
+    if (params.delivered === "true") {
+      parts.push(Prisma.sql`o."deliveredAt" IS NOT NULL`);
+    } else if (params.delivered === "false") {
+      parts.push(Prisma.sql`o."deliveredAt" IS NULL`);
+    }
+    if (parts.length === 0) {
+      return paymentCondition;
+    }
+    return Prisma.join([...parts, paymentCondition], " AND ");
+  }
+
+  private async findAllWithPaymentStatusSql(
+    page: number,
+    limit: number,
+    skip: number,
+    whereClause: Prisma.Sql,
+  ): Promise<PaginatedResponse<OrderWithComputedFields>> {
+    const [countResult] = await this.prisma.$queryRaw<[{ c: number }]>(
+      Prisma.sql`SELECT COUNT(*)::int AS c FROM "Order" o WHERE ${whereClause}`,
+    );
+    const total = countResult?.c ?? 0;
+    if (total === 0) {
+      return buildPaginatedResponse([], 0, page, limit);
+    }
+
+    const idRows = await this.prisma.$queryRaw<{ id: string }[]>(
+      Prisma.sql`SELECT o."id" FROM "Order" o WHERE ${whereClause} ORDER BY o."createdAt" DESC LIMIT ${limit} OFFSET ${skip}`,
+    );
+    const ids = idRows.map((r) => r.id);
+    if (ids.length === 0) {
+      return buildPaginatedResponse([], total, page, limit);
+    }
+
+    const rows = (await this.prisma.order.findMany({
+      where: { id: { in: ids } },
+      include: ORDER_INCLUDE,
+    })) as OrderWithRelations[];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const ordered = ids.map((id) => byId.get(id)).filter((o): o is OrderWithRelations => o != null);
+    return buildPaginatedResponse(this.enrichOrders(ordered), total, page, limit);
   }
 
   async findOne(id: string) {

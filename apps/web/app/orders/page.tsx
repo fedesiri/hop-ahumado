@@ -62,6 +62,8 @@ function OrdersContent() {
   const [filterDateRange, setFilterDateRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [filterMinTotal, setFilterMinTotal] = useState<number | undefined>(undefined);
   const [filterMaxTotal, setFilterMaxTotal] = useState<number | undefined>(undefined);
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState<OrderPaymentStatus | undefined>(undefined);
+  const [filterDelivered, setFilterDelivered] = useState<"true" | "false" | undefined>(undefined);
 
   useEffect(() => {
     fetchOrders();
@@ -74,6 +76,8 @@ function OrdersContent() {
     filterDateRange,
     filterMinTotal,
     filterMaxTotal,
+    filterPaymentStatus,
+    filterDelivered,
   ]);
 
   const fetchOrders = async () => {
@@ -88,6 +92,8 @@ function OrdersContent() {
         filterDateRange ? filterDateRange[1]?.endOf("day").toISOString() : undefined,
         filterMinTotal,
         filterMaxTotal,
+        filterPaymentStatus,
+        filterDelivered,
       );
       setOrders(response.data);
       setMeta(response.meta);
@@ -429,6 +435,43 @@ function OrdersContent() {
               onChange={(value) => {
                 setPagination((prev) => ({ ...prev, page: 1 }));
                 setFilterMaxTotal(value ?? undefined);
+              }}
+            />
+          </Col>
+          <Col xs={24} sm={12} md={8} lg={6}>
+            <Select
+              allowClear
+              placeholder="Estado de pago"
+              style={{ width: "100%" }}
+              popupMatchSelectWidth={false}
+              value={filterPaymentStatus}
+              options={[
+                { value: OrderPaymentStatus.UNPAID, label: orderPaymentStatusLabel(OrderPaymentStatus.UNPAID) },
+                {
+                  value: OrderPaymentStatus.PARTIALLY_PAID,
+                  label: orderPaymentStatusLabel(OrderPaymentStatus.PARTIALLY_PAID),
+                },
+                { value: OrderPaymentStatus.PAID, label: orderPaymentStatusLabel(OrderPaymentStatus.PAID) },
+              ]}
+              onChange={(value) => {
+                setPagination((prev) => ({ ...prev, page: 1 }));
+                setFilterPaymentStatus(value);
+              }}
+            />
+          </Col>
+          <Col xs={24} sm={12} md={8} lg={6}>
+            <Select
+              allowClear
+              placeholder="Entrega"
+              style={{ width: "100%" }}
+              value={filterDelivered}
+              options={[
+                { value: "true", label: "Entregadas" },
+                { value: "false", label: "No entregadas" },
+              ]}
+              onChange={(value) => {
+                setPagination((prev) => ({ ...prev, page: 1 }));
+                setFilterDelivered((value as "true" | "false") || undefined);
               }}
             />
           </Col>

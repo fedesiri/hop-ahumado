@@ -26,6 +26,8 @@ export class OrderController {
       query.dateTo,
       query.minTotal ? Number(query.minTotal) : undefined,
       query.maxTotal ? Number(query.maxTotal) : undefined,
+      query.paymentStatus,
+      query.delivered,
     );
   }
 

@@ -548,9 +548,22 @@ export class ApiClient {
     dateTo?: string,
     minTotal?: number,
     maxTotal?: number,
+    paymentStatus?: string,
+    delivered?: "true" | "false",
   ): Promise<PaginatedResponse<Order>> {
     return this.request(
-      `/orders${this.buildParams({ page, limit, customerId, userId, dateFrom, dateTo, minTotal, maxTotal })}`,
+      `/orders${this.buildParams({
+        page,
+        limit,
+        customerId,
+        userId,
+        dateFrom,
+        dateTo,
+        minTotal,
+        maxTotal,
+        paymentStatus,
+        delivered,
+      })}`,
     );
   }
 
