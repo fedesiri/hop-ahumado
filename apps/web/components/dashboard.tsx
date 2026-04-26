@@ -152,6 +152,7 @@ export function Dashboard() {
       const todayStart = startOfLocalDay(new Date());
       const recentOrders = allOrders
         .filter((order) => {
+          if (order.isDelivered) return false;
           if (!order.deliveryDate) return false;
           return startOfLocalDay(new Date(order.deliveryDate)).getTime() >= todayStart.getTime();
         })
@@ -366,7 +367,7 @@ export function Dashboard() {
           <Row gutter={[16, 16]} style={{ marginBottom: "24px" }}>
             <Col span={24}>
               <Card
-                title="Órdenes recientes (entrega hoy o posterior)"
+                title="Entregas pendientes (hoy o posterior)"
                 style={{ background: "#1f2937", borderColor: "#2d3748" }}
                 extra={
                   <Link href="/orders">
@@ -385,7 +386,10 @@ export function Dashboard() {
                     style={{ backgroundColor: "#111111" }}
                   />
                 ) : (
-                  <Empty description="No hay órdenes con entrega hoy o fecha futura" style={{ color: "#9ca3af" }} />
+                  <Empty
+                    description="No hay entregas pendientes con fecha hoy o futura"
+                    style={{ color: "#9ca3af" }}
+                  />
                 )}
               </Card>
             </Col>
