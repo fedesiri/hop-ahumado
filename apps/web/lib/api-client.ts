@@ -42,6 +42,7 @@ import type {
   UpdateCustomerOpportunityRequest,
   UpdateCustomerProfileRequest,
   UpdateCustomerRequest,
+  UpdateOrderPaymentRequest,
   UpdateOrderRequest,
   UpdatePriceRequest,
   UpdateProductRequest,
@@ -588,6 +589,17 @@ export class ApiClient {
   async createOrderPayment(orderId: string, data: CreateOrderPaymentRequest): Promise<Order> {
     return this.request(`/orders/${orderId}/payments`, {
       method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateOrderPayment(
+    orderId: string,
+    paymentId: string,
+    data: UpdateOrderPaymentRequest,
+  ): Promise<Order> {
+    return this.request(`/orders/${orderId}/payments/${paymentId}`, {
+      method: "PATCH",
       body: JSON.stringify(data),
     });
   }

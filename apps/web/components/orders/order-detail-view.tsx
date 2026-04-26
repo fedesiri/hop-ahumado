@@ -3,7 +3,7 @@
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
-import { orderPaymentStatusLabel, paymentMethodLabel } from "@/lib/order-labels";
+import { orderPaymentStatusLabel } from "@/lib/order-labels";
 import { OrderPaymentStatus, PaymentMethod, type Order, type OrderItem, type OrderPayment } from "@/lib/types";
 import { App, Button, Card, Col, InputNumber, Row, Select, Space, Table as AntTable, Tag } from "antd";
 import { useEffect, useState } from "react";
@@ -18,6 +18,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
   const [paymentAmount, setPaymentAmount] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [addingPayment, setAddingPayment] = useState(false);
+  const [updatingPaymentId, setUpdatingPaymentId] = useState<string | null>(null);
 
   useEffect(() => {
     const r = Number(order.remainingAmount ?? 0);
@@ -44,6 +45,24 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       message.error(msg);
     } finally {
       setAddingPayment(false);
+    }
+  };
+
+  const handleUpdatePaymentMethod = async (paymentId: string, method: PaymentMethod) => {
+    if (order.payments?.find((p) => p.id === paymentId)?.method === method) return;
+    try {
+      setUpdatingPaymentId(paymentId);
+      const updated = await apiClient.updateOrderPayment(order.id, paymentId, { method });
+      onOrderUpdated(updated);
+      message.success("Medio de pago actualizado");
+    } catch (error: unknown) {
+      const msg =
+        error && typeof error === "object" && "message" in error
+          ? String((error as { message: string }).message)
+          : "No se pudo actualizar el medio de pago";
+      message.error(msg);
+    } finally {
+      setUpdatingPaymentId(null);
     }
   };
 
@@ -175,7 +194,22 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
             title: "Medio",
             dataIndex: "method",
             key: "method",
-            render: (v: string) => paymentMethodLabel(v),
+            width: 220,
+            render: (_: unknown, record: OrderPayment) => (
+              <Select
+                size="small"
+                value={record.method}
+                style={{ minWidth: 180 }}
+                loading={updatingPaymentId === record.id}
+                disabled={updatingPaymentId !== null}
+                onChange={(v) => void handleUpdatePaymentMethod(record.id, v as PaymentMethod)}
+                options={[
+                  { label: "Efectivo", value: PaymentMethod.CASH },
+                  { label: "Transferencia", value: PaymentMethod.CARD },
+                ]}
+                aria-label="Medio de pago"
+              />
+            ),
           },
           {
             title: "Monto",

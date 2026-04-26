@@ -4,6 +4,7 @@ import { CreateOrderDto } from "./dto/create-order.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { GetOrdersQueryDto } from "./dto/get-orders-query.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
+import { UpdatePaymentDto } from "./dto/update-payment.dto";
 import { OrderService } from "./order.service";
 
 @Controller("orders")
@@ -34,6 +35,15 @@ export class OrderController {
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.orderService.findOne(id);
+  }
+
+  @Patch(":id/payments/:paymentId")
+  updatePayment(
+    @Param("id") id: string,
+    @Param("paymentId") paymentId: string,
+    @Body() dto: UpdatePaymentDto,
+  ) {
+    return this.orderService.updatePayment(id, paymentId, dto);
   }
 
   @Patch(":id")

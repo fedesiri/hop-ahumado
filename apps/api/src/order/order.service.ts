@@ -7,6 +7,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
+import { UpdatePaymentDto } from "./dto/update-payment.dto";
 import {
   computeOrderFields,
   enrichOrdersWithComputedFields,
@@ -495,6 +496,36 @@ export class OrderService {
           amount: dto.amount,
           method: dto.method,
         },
+      });
+
+      return tx.order.findUnique({
+        where: { id: orderId },
+        include: ORDER_INCLUDE,
+      }) as Promise<OrderWithRelations>;
+    });
+
+    if (!updatedOrder) {
+      throw new NotFoundException(`Orden con id "${orderId}" no encontrada`);
+    }
+
+    return this.enrichOrder(updatedOrder);
+  }
+
+  async updatePayment(orderId: string, paymentId: string, dto: UpdatePaymentDto) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { id: paymentId, orderId },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(
+        `Pago con id "${paymentId}" no encontrado en la orden "${orderId}"`,
+      );
+    }
+
+    const updatedOrder = await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: paymentId },
+        data: { method: dto.method },
       });
 
       return tx.order.findUnique({

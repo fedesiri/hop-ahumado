@@ -477,6 +477,10 @@ export interface CreateOrderPaymentRequest {
   method: PaymentMethod;
 }
 
+export interface UpdateOrderPaymentRequest {
+  method: PaymentMethod;
+}
+
 export interface CreateOrderRequest {
   customerId?: string;
   userId?: string;
