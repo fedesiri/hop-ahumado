@@ -14,7 +14,6 @@ import {
   ValidateNested,
 } from "class-validator";
 import { CreateOrderItemDto } from "./create-order-item.dto";
-import { CreatePaymentDto } from "./create-payment.dto";
 
 export class UpdateOrderDto {
   @IsOptional()
@@ -31,12 +30,17 @@ export class UpdateOrderDto {
   @IsDateString()
   deliveryDate?: string;
 
+  @IsOptional()
+  @ValidateIf((o: UpdateOrderDto) => o.deliveredAt !== null && o.deliveredAt !== undefined)
+  @IsDateString()
+  deliveredAt?: string | null;
+
   /** Al reemplazar ítems, opcionalmente cambia la ubicación de cumplimiento del pedido. */
   @IsOptional()
   @IsUUID("4", { message: "fulfillmentLocationId debe ser un UUID válido" })
   fulfillmentLocationId?: string;
 
-  /** Si se envían ítems, deben ir junto con pagos y total (reemplazo completo de líneas + ajuste de stock). */
+  /** Si se envían ítems, deben ir junto con total (reemplazo completo de líneas + ajuste de stock). */
   @IsOptional()
   @ValidateIf((o: UpdateOrderDto) => o.items != null)
   @IsNumber()
@@ -51,15 +55,7 @@ export class UpdateOrderDto {
   @Type(() => CreateOrderItemDto)
   items?: CreateOrderItemDto[];
 
-  @IsOptional()
-  @ValidateIf((o: UpdateOrderDto) => o.items != null)
-  @IsArray()
-  @ArrayMinSize(1, { message: "La orden debe tener al menos un pago" })
-  @ValidateNested({ each: true })
-  @Type(() => CreatePaymentDto)
-  payments?: CreatePaymentDto[];
-
-  /** Lista usada al armar el pedido; se puede enviar solo o junto con ítems/pagos. */
+  /** Lista usada al armar el pedido; se puede enviar solo o junto con ítems. */
   @IsOptional()
   @IsIn(["mayorista", "minorista", "fabrica"], { message: "priceListType debe ser mayorista, minorista o fabrica" })
   priceListType?: "mayorista" | "minorista" | "fabrica";

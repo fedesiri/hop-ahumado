@@ -1,18 +1,19 @@
 "use client";
 
 import { AppLayout } from "@/components/app-layout";
+import { OrderDetailView } from "@/components/orders/order-detail-view";
 import { apiClient } from "@/lib/api-client";
 import type { Dayjs } from "@/lib/dayjs";
-import { formatCurrency, formatQuantity } from "@/lib/format-currency";
+import { formatCurrency } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
 import { buildOrderClipboardText } from "@/lib/order-clipboard";
-import type { Customer, Order, OrderItem, User } from "@/lib/types";
+import { formatPaymentMethodsOnly, orderPaymentStatusLabel } from "@/lib/order-labels";
+import { OrderPaymentStatus, type Customer, type Order, type OrderItem, type User } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import {
   Alert,
-  Table as AntTable,
   App,
   Button,
   Card,
@@ -25,7 +26,9 @@ import {
   Select,
   Space,
   Spin,
+  Switch,
   Table,
+  Tag,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import Link from "next/link";
@@ -49,7 +52,9 @@ function OrdersContent() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [modalOrder, setModalOrder] = useState<Order | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [togglingDeliveryId, setTogglingDeliveryId] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
   const [filterCustomerId, setFilterCustomerId] = useState<string | undefined>(undefined);
@@ -105,9 +110,37 @@ function OrdersContent() {
     }
   };
 
-  const handleViewOrder = (record: Order) => {
-    setSelectedOrder(record);
+  const openViewModal = async (orderId: string) => {
     setViewModalOpen(true);
+    setModalOrder(null);
+    setModalLoading(true);
+    try {
+      const data = await apiClient.getOrder(orderId);
+      setModalOrder(data);
+    } catch (error) {
+      console.error(error);
+      message.error("No se pudo cargar el detalle de la orden");
+      setViewModalOpen(false);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleToggleDelivered = async (record: Order, nextDelivered: boolean) => {
+    setTogglingDeliveryId(record.id);
+    try {
+      const updated = await apiClient.updateOrder(record.id, {
+        deliveredAt: nextDelivered ? new Date().toISOString() : null,
+      });
+      setOrders((prev) => prev.map((o) => (o.id === record.id ? updated : o)));
+      setModalOrder((m) => (m?.id === record.id ? updated : m));
+      message.success(nextDelivered ? "Orden marcada como entregada" : "Entrega desmarcada");
+    } catch (error) {
+      console.error(error);
+      message.error("No se pudo actualizar el estado de entrega");
+    } finally {
+      setTogglingDeliveryId(null);
+    }
   };
 
   const handleCopyOrder = async (record: Order) => {
@@ -127,9 +160,9 @@ function OrdersContent() {
 
   const handleDelete = (id: string) => {
     modal.confirm({
-      title: "Confirmar eliminacion",
-      content: "Estas seguro de que deseas eliminar esta orden?",
-      okText: "Si",
+      title: "Confirmar eliminación",
+      content: "¿Seguro que deseas eliminar esta orden?",
+      okText: "Sí",
       cancelText: "No",
       onOk: async () => {
         try {
@@ -168,7 +201,53 @@ function OrdersContent() {
       render: (amount: number | string) => formatCurrency(amount),
     },
     {
-      title: "Lista",
+      title: "Total calculado",
+      dataIndex: "totalPrice",
+      key: "totalPrice",
+      width: 120,
+      render: (amount: number | string) => formatCurrency(amount),
+    },
+    {
+      title: "Estado de pago",
+      key: "paymentStatus",
+      width: 128,
+      render: (_: unknown, record: Order) => (
+        <Tag
+          color={
+            record.paymentStatus === OrderPaymentStatus.PAID
+              ? "green"
+              : record.paymentStatus === OrderPaymentStatus.PARTIALLY_PAID
+                ? "gold"
+                : "default"
+          }
+        >
+          {orderPaymentStatusLabel(record.paymentStatus)}
+        </Tag>
+      ),
+    },
+    {
+      title: "Medios de pago",
+      key: "paymentMethods",
+      width: 200,
+      ellipsis: true,
+      render: (_: unknown, record: Order) => (
+        <span style={{ color: "rgba(255,255,255,0.85)" }}>{formatPaymentMethodsOnly(record.payments)}</span>
+      ),
+    },
+    {
+      title: "Pagado",
+      key: "paidAmount",
+      width: 112,
+      render: (_: unknown, record: Order) => formatCurrency(record.paidAmount ?? 0),
+    },
+    {
+      title: "Pendiente",
+      key: "remainingAmount",
+      width: 120,
+      render: (_: unknown, record: Order) => formatCurrency(record.remainingAmount ?? 0),
+    },
+    {
+      title: "Lista de precios",
       key: "priceListType",
       width: 100,
       ellipsis: true,
@@ -182,11 +261,24 @@ function OrdersContent() {
       render: (items: OrderItem[]) => items?.length || 0,
     },
     {
-      title: "Entrega",
+      title: "Programada",
       key: "deliveryDate",
       width: 108,
       render: (_: unknown, record: Order) =>
         record.deliveryDate ? new Date(record.deliveryDate).toLocaleDateString("es-AR") : "—",
+    },
+    {
+      title: "Entregada",
+      key: "isDelivered",
+      width: 108,
+      render: (_: unknown, record: Order) => (
+        <Switch
+          size="small"
+          checked={record.isDelivered}
+          loading={togglingDeliveryId === record.id}
+          onChange={(checked) => void handleToggleDelivered(record, checked)}
+        />
+      ),
     },
     {
       title: "Stock desde",
@@ -208,7 +300,7 @@ function OrdersContent() {
             icon={<EyeOutlined />}
             title="Ver detalle"
             aria-label="Ver detalle"
-            onClick={() => handleViewOrder(record)}
+            onClick={() => void openViewModal(record.id)}
           />
           <Button
             type="default"
@@ -380,8 +472,8 @@ function OrdersContent() {
             dataSource={orders}
             rowKey="id"
             tableLayout={isMobile ? "auto" : "fixed"}
-            style={{ backgroundColor: "#1f2937", minWidth: isMobile ? 1068 : 1028 }}
-            scroll={{ x: isMobile ? 1068 : 1200 }}
+            style={{ backgroundColor: "#1f2937", minWidth: isMobile ? 1280 : 1300 }}
+            scroll={{ x: isMobile ? 1280 : 1500 }}
             pagination={{
               current: pagination.page,
               pageSize: pagination.limit,
@@ -400,96 +492,40 @@ function OrdersContent() {
       )}
 
       <Modal
-        title="Detalles de la Orden"
+        title="Detalle de la orden"
         open={viewModalOpen}
-        onCancel={() => setViewModalOpen(false)}
-        footer={null}
-        width={isMobile ? "calc(100vw - 24px)" : 800}
+        onCancel={() => {
+          setViewModalOpen(false);
+          setModalOrder(null);
+        }}
+        footer={
+          <Space wrap>
+            {modalOrder ? (
+              <Link href={`/orders/${modalOrder.id}`}>
+                <Button type="link">Abrir en página completa</Button>
+              </Link>
+            ) : null}
+            <Button onClick={() => setViewModalOpen(false)}>Cerrar</Button>
+          </Space>
+        }
+        width={isMobile ? "calc(100vw - 24px)" : 880}
         styles={{ body: { maxHeight: isMobile ? "75vh" : undefined, overflowY: "auto" } }}
       >
-        {selectedOrder && (
-          <div>
-            <Card style={{ marginBottom: "16px", background: "#1f2937" }}>
-              <Row gutter={[16, 12]}>
-                <Col xs={24} sm={12}>
-                  <strong>Cliente:</strong> {selectedOrder.customer?.name || "-"}
-                </Col>
-                <Col xs={24} sm={12}>
-                  <strong>Vendedor:</strong> {selectedOrder.user?.name || "-"}
-                </Col>
-                <Col xs={24} sm={12}>
-                  <strong>Total:</strong> {formatCurrency(selectedOrder.total)}
-                </Col>
-                <Col xs={24} sm={12}>
-                  <strong>Lista de precios:</strong> {orderPriceListDisplayLabel(selectedOrder.priceListType)}
-                </Col>
-                <Col xs={24} sm={12}>
-                  <strong>Creada:</strong> {new Date(selectedOrder.createdAt).toLocaleDateString("es-AR")}
-                </Col>
-                <Col xs={24} sm={12}>
-                  <strong>Entrega:</strong>{" "}
-                  {selectedOrder.deliveryDate ? new Date(selectedOrder.deliveryDate).toLocaleDateString("es-AR") : "—"}
-                </Col>
-                <Col xs={24} sm={12}>
-                  <strong>Ubicación de stock:</strong> {selectedOrder.fulfillmentLocation?.name ?? "—"}
-                </Col>
-                {selectedOrder.comment ? (
-                  <Col xs={24}>
-                    <strong>Comentario:</strong> <span style={{ whiteSpace: "pre-wrap" }}>{selectedOrder.comment}</span>
-                  </Col>
-                ) : null}
-              </Row>
-            </Card>
-
-            <h3 style={{ color: "#ffffff" }}>Ítems</h3>
-            <AntTable
-              columns={[
-                { title: "Producto", dataIndex: ["product", "name"], key: "product" },
-                {
-                  title: "Cantidad",
-                  dataIndex: "quantity",
-                  key: "quantity",
-                  render: (q: number) => formatQuantity(q),
-                },
-                {
-                  title: "Precio",
-                  dataIndex: "price",
-                  key: "price",
-                  render: (v) => formatCurrency(v),
-                },
-                {
-                  title: "Subtotal",
-                  key: "subtotal",
-                  render: (_, record: OrderItem) => formatCurrency(Number(record.price) * Number(record.quantity)),
-                },
-              ]}
-              dataSource={selectedOrder.orderItems || []}
-              rowKey="id"
-              pagination={false}
-            />
-
-            <h3 style={{ color: "#ffffff", marginTop: "24px" }}>Pagos</h3>
-            <AntTable
-              columns={[
-                {
-                  title: "Método",
-                  dataIndex: "method",
-                  key: "method",
-                  render: (v) => (v === "CASH" ? "Efectivo" : "Transferencia"),
-                },
-                {
-                  title: "Monto",
-                  dataIndex: "amount",
-                  key: "amount",
-                  render: (v) => formatCurrency(v),
-                },
-              ]}
-              dataSource={selectedOrder.payments || []}
-              rowKey="id"
-              pagination={false}
-            />
+        {modalLoading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+            <Spin />
           </div>
-        )}
+        ) : null}
+        {modalOrder ? (
+          <OrderDetailView
+            key={modalOrder.id}
+            order={modalOrder}
+            onOrderUpdated={(o) => {
+              setModalOrder(o);
+              setOrders((prev) => prev.map((row) => (row.id === o.id ? o : row)));
+            }}
+          />
+        ) : null}
       </Modal>
     </div>
   );

@@ -14,7 +14,6 @@ import {
   type RecipeIngredientRow,
 } from "@/lib/order-calculator/stock-preview";
 import type { Customer, Order, Price, Product, StockLocation } from "@/lib/types";
-import { PaymentMethod } from "@/lib/types";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { Alert, App, Button, DatePicker, Input, Modal, Select, Spin } from "antd";
 import Link from "next/link";
@@ -50,8 +49,8 @@ function OrderEditPageContent({ id }: { id: string }) {
     customerId: string | null;
     priceListType: PriceType;
   } | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [deliveryDate, setDeliveryDate] = useState<Dayjs | null>(null);
+  const [deliveredAt, setDeliveredAt] = useState<Dayjs | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
   const [fulfillmentLocationId, setFulfillmentLocationId] = useState<string | null>(null);
@@ -133,10 +132,8 @@ function OrderEditPageContent({ id }: { id: string }) {
         setLoading(true);
         const orderData = await apiClient.getOrder(id);
         setOrder(orderData);
-        if (orderData.payments?.[0]?.method) {
-          setPaymentMethod(orderData.payments[0].method);
-        }
         setDeliveryDate(orderData.deliveryDate ? dayjs(orderData.deliveryDate) : null);
+        setDeliveredAt(orderData.deliveredAt ? dayjs(orderData.deliveredAt) : null);
         setOrderComment(orderData.comment ?? "");
 
         await fetchProducts();
@@ -251,6 +248,7 @@ function OrderEditPageContent({ id }: { id: string }) {
         userId: order.userId ?? user?.id ?? undefined,
         deliveryDate:
           deliveryDate?.toISOString() ?? (order.deliveryDate ? new Date(order.deliveryDate).toISOString() : undefined),
+        deliveredAt: deliveredAt ? deliveredAt.toISOString() : null,
         fulfillmentLocationId: fulfillmentLocationId ?? undefined,
         total,
         priceListType,
@@ -260,7 +258,6 @@ function OrderEditPageContent({ id }: { id: string }) {
           quantity: Number(item.quantity),
           price: Number(item.price),
         })),
-        payments: [{ amount: Number(total), method: paymentMethod }],
       });
       message.success("Orden actualizada. El stock se ajustó correctamente.");
       setConfirmModalOpen(false);
@@ -379,6 +376,17 @@ function OrderEditPageContent({ id }: { id: string }) {
                 format="DD/MM/YYYY"
               />
             </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Entregado en (real)</label>
+              <DatePicker
+                showTime
+                style={{ width: "100%" }}
+                value={deliveredAt}
+                onChange={(v) => setDeliveredAt(v)}
+                format="DD/MM/YYYY HH:mm"
+                allowClear
+              />
+            </div>
             {productsGoingNegative.length > 0 && (
               <Alert
                 type="warning"
@@ -403,16 +411,6 @@ function OrderEditPageContent({ id }: { id: string }) {
                 }
               />
             )}
-            <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Método de pago</label>
-            <Select
-              value={paymentMethod}
-              onChange={(v) => setPaymentMethod(v)}
-              style={{ width: "100%" }}
-              options={[
-                { label: "Efectivo", value: PaymentMethod.CASH },
-                { label: "Transferencia", value: PaymentMethod.CARD },
-              ]}
-            />
             <div style={{ marginTop: 12, marginBottom: 28 }}>
               <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
                 Comentario del pedido (opcional)

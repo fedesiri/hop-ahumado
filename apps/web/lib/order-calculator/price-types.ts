@@ -10,7 +10,7 @@ export const PRICE_TYPES: PriceType[] = ["mayorista", "minorista", "fabrica"];
 export const PRICE_TYPE_LABELS: Record<PriceType, string> = {
   mayorista: "Mayorista",
   minorista: "Minorista",
-  fabrica: "Fabrica",
+  fabrica: "Fábrica",
 };
 
 /** Precio con description opcional (como viene de la API; value puede venir como number o string) */

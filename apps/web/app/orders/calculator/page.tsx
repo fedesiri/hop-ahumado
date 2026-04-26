@@ -14,7 +14,6 @@ import {
   type RecipeIngredientRow,
 } from "@/lib/order-calculator/stock-preview";
 import type { CreateOrderRequest, Customer, Price, Product, StockLocation } from "@/lib/types";
-import { PaymentMethod } from "@/lib/types";
 import { Alert, App, Button, DatePicker, Input, Modal, Select, Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -43,7 +42,6 @@ function OrderCalculatorPageContent() {
     customerId: string | null;
     priceListType: PriceType;
   } | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [deliveryDate, setDeliveryDate] = useState<Dayjs | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
@@ -225,10 +223,9 @@ function OrderCalculatorPageContent() {
           quantity: Number(item.quantity),
           price: Number(item.price),
         })),
-        payments: [{ amount: Number(total), method: paymentMethod }],
       };
-      await apiClient.createOrder(data);
-      message.success("Orden creada. El stock se descontó correctamente.");
+      const createdOrder = await apiClient.createOrder(data);
+      message.success(`Orden creada (${createdOrder.paymentStatus}). El stock se descontó correctamente.`);
       if (typeof window !== "undefined") {
         try {
           localStorage.removeItem("order-calc-quantities");
@@ -351,16 +348,6 @@ function OrderCalculatorPageContent() {
                 format="DD/MM/YYYY"
               />
             </div>
-            <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Método de pago</label>
-            <Select
-              value={paymentMethod}
-              onChange={(v) => setPaymentMethod(v)}
-              style={{ width: "100%" }}
-              options={[
-                { label: "Efectivo", value: PaymentMethod.CASH },
-                { label: "Transferencia", value: PaymentMethod.CARD },
-              ]}
-            />
             <div style={{ marginTop: 12, marginBottom: 28 }}>
               <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
                 Comentario del pedido (opcional)
