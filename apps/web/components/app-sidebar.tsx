@@ -126,23 +126,44 @@ export function AppSidebar({ collapsed = false, onCollapsedChange, isMobile = fa
         top: 0,
         bottom: 0,
         backgroundColor: "#111111",
+        overflow: "hidden",
       }}
     >
       <div
         style={{
-          padding: "24px 0",
-          textAlign: "center",
-          color: "#22c55e",
-          fontSize: collapsed ? "14px" : "20px",
-          fontWeight: "bold",
-          marginBottom: "16px",
-          whiteSpace: "nowrap",
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
           overflow: "hidden",
         }}
       >
-        {collapsed ? "HA" : "Hop Ahumado"}
+        <div
+          style={{
+            flexShrink: 0,
+            padding: "24px 0",
+            textAlign: "center",
+            color: "#22c55e",
+            fontSize: collapsed ? "14px" : "20px",
+            fontWeight: "bold",
+            marginBottom: "16px",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+          }}
+        >
+          {collapsed ? "HA" : "Hop Ahumado"}
+        </div>
+        <div
+          className="app-sidebar-menu-scroll"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            overflowX: "hidden",
+          }}
+        >
+          {menuContent}
+        </div>
       </div>
-      {menuContent}
     </Sider>
   );
 }
