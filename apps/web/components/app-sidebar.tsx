@@ -61,6 +61,7 @@ const menuItems: MenuProps["items"] = [
     children: [
       { key: "/stock", label: "Movimientos" },
       { key: "/stock/locations", label: "Ubicaciones" },
+      { key: "/stock/suggested-order", label: "Pedido sugerido" },
     ],
   },
   { key: "/recipes", icon: <BgColorsOutlined />, label: "Recetas" },
