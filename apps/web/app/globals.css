@@ -238,3 +238,29 @@
 .order-calc-price-segmented .ant-segmented-item.ant-segmented-item-selected {
   background-color: #22c55e !important;
 }
+
+/* Sidebar desktop: scrollbar acorde al panel (#111) y al acento de la app */
+.app-sidebar-menu-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #2d3748 #111111;
+}
+.app-sidebar-menu-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.app-sidebar-menu-scroll::-webkit-scrollbar-track {
+  background: #111111;
+  border-radius: 9999px;
+}
+.app-sidebar-menu-scroll::-webkit-scrollbar-thumb {
+  background: #2d3748;
+  border-radius: 9999px;
+  border: 1px solid #111111;
+  background-clip: padding-box;
+}
+.app-sidebar-menu-scroll:hover::-webkit-scrollbar-thumb {
+  background: #374151;
+}
+.app-sidebar-menu-scroll:hover::-webkit-scrollbar-thumb:hover {
+  background: #22c55e;
+  border-color: #111111;
+}

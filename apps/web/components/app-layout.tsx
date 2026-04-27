@@ -27,7 +27,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   };
 
   return (
-    <Layout style={{ minHeight: "100vh", width: "100%", maxWidth: "100vw", overflow: "hidden" }}>
+    <Layout style={{ minHeight: "100vh", width: "100%", maxWidth: "100vw", overflowX: "hidden" }}>
       {isMobile ? (
         <Drawer
           title="Navegación"

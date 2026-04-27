@@ -7,6 +7,7 @@ import { FirebaseAuthGuard } from "./auth/firebase-auth.guard";
 import { CategoryModule } from "./category/category.module";
 import { CostModule } from "./cost/cost.module";
 import { CrmModule } from "./crm/crm.module";
+import { DistributorSuggestedOrderModule } from "./distributor-suggested-order/distributor-suggested-order.module";
 import { CustomerInteractionModule } from "./customer-interaction/customer-interaction.module";
 import { CustomerOpportunityModule } from "./customer-opportunity/customer-opportunity.module";
 import { CustomerProfileModule } from "./customer-profile/customer-profile.module";
@@ -36,6 +37,7 @@ import { UserModule } from "./user/user.module";
     CustomerInteractionModule,
     CustomerOpportunityModule,
     CrmModule,
+    DistributorSuggestedOrderModule,
     OrderModule,
     PriceModule,
     CostModule,

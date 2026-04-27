@@ -54,6 +54,51 @@ export interface Category {
   name: string;
 }
 
+export interface DistributorSuggestedOrderItem {
+  productId: string;
+  name: string;
+  format: "LITER" | "HALF_LITER";
+  currentStock: number;
+  targetUnits: number;
+  targetBoxes: number;
+  suggestedUnits: number;
+  suggestedBoxes: number;
+  isDeactivated: boolean;
+  unitCost: number | null;
+  costRecordedAt: string | null;
+  lineApproximateTotal: number | null;
+}
+
+export interface DistributorSuggestedOrderCostSummary {
+  approximateTotal: number;
+  orderLinesWithSuggestedUnits: number;
+  orderLinesWithCost: number;
+  orderLinesMissingCost: number;
+  missingCostProductNames: string[];
+  basis: string;
+}
+
+export interface DistributorSuggestedOrderUnknown {
+  productId: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  isDeactivated: boolean;
+}
+
+export interface DistributorSuggestedOrderResponse {
+  parameters: {
+    categoryName: string;
+    literTargetBoxes: number;
+    halfLiterTargetBoxes: number;
+    unitsPerBox: number;
+  };
+  items: DistributorSuggestedOrderItem[];
+  unknownFormat: DistributorSuggestedOrderUnknown[];
+  costSummary: DistributorSuggestedOrderCostSummary;
+  copyText: string;
+}
+
 export interface StockLocation {
   id: string;
   name: string;

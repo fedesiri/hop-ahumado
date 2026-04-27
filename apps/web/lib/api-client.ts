@@ -23,6 +23,7 @@ import type {
   CustomerInteraction,
   CustomerOpportunity,
   CustomerProfile,
+  DistributorSuggestedOrderResponse,
   Expense,
   HealthResponse,
   Order,
@@ -501,6 +502,22 @@ export class ApiClient {
     return this.request(`/stock-movements${this.buildParams({ page, limit, productId })}`);
   }
 
+  async getDistributorSuggestedOrder(params?: {
+    literTargetBoxes?: number;
+    halfLiterTargetBoxes?: number;
+    unitsPerBox?: number;
+    categoryName?: string;
+  }): Promise<DistributorSuggestedOrderResponse> {
+    return this.request<DistributorSuggestedOrderResponse>(
+      `/distributor-suggested-order${this.buildParams({
+        literTargetBoxes: params?.literTargetBoxes,
+        halfLiterTargetBoxes: params?.halfLiterTargetBoxes,
+        unitsPerBox: params?.unitsPerBox,
+        categoryName: params?.categoryName,
+      })}`,
+    );
+  }
+
   async getStockMovement(id: string): Promise<StockMovement> {
     return this.request(`/stock-movements/${id}`);
   }
@@ -593,11 +610,7 @@ export class ApiClient {
     });
   }
 
-  async updateOrderPayment(
-    orderId: string,
-    paymentId: string,
-    data: UpdateOrderPaymentRequest,
-  ): Promise<Order> {
+  async updateOrderPayment(orderId: string, paymentId: string, data: UpdateOrderPaymentRequest): Promise<Order> {
     return this.request(`/orders/${orderId}/payments/${paymentId}`, {
       method: "PATCH",
       body: JSON.stringify(data),
