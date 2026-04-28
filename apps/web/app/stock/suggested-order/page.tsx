@@ -7,7 +7,7 @@ import { LineProvider } from "@/lib/line-context";
 import type { DistributorSuggestedOrderItem, DistributorSuggestedOrderResponse } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CopyOutlined, ShoppingCartOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Card, InputNumber, Space, Table, Tag } from "antd";
+import { Alert, App, Button, Card, Collapse, InputNumber, Table, Tag } from "antd";
 import { useMemo, useState } from "react";
 import type { ColumnsType } from "antd/es/table";
 
@@ -76,31 +76,25 @@ function SuggestedOrderContent() {
         dataIndex: "name",
         key: "name",
         ellipsis: { showTitle: true },
-        minWidth: isMobile ? 120 : 200,
-        render: (text: string) => <span style={{ fontSize: isMobile ? 12 : undefined }}>{text}</span>,
+        minWidth: 200,
       },
       {
-        title: isMobile ? "Fmt." : "Formato",
+        title: "Formato",
         key: "format",
-        width: isMobile ? 48 : 78,
+        width: 72,
         align: "center",
         onHeaderCell: () => ({
-          style: { whiteSpace: "nowrap", textAlign: "center", paddingInline: isMobile ? 4 : 8 },
+          style: { whiteSpace: "nowrap", textAlign: "center" as const, paddingInline: 8 },
         }),
         onCell: () => ({
-          style: { whiteSpace: "nowrap", textAlign: "center", paddingInline: isMobile ? 4 : 8 },
+          style: { whiteSpace: "nowrap", textAlign: "center" as const, paddingInline: 8 },
         }),
         render: (_: unknown, r) => {
           const label = r.format === "LITER" ? "1L" : "½L";
           return (
             <Tag
               color={r.format === "LITER" ? "blue" : "cyan"}
-              style={{
-                margin: 0,
-                lineHeight: isMobile ? "18px" : "22px",
-                padding: isMobile ? "0 5px" : "0 6px",
-                fontSize: isMobile ? 11 : 12,
-              }}
+              style={{ margin: 0, lineHeight: "22px", padding: "0 6px", fontSize: 12 }}
             >
               {label}
             </Tag>
@@ -108,46 +102,46 @@ function SuggestedOrderContent() {
         },
       },
       {
-        title: isMobile ? "Stk" : "Stock",
+        title: "Stock",
         dataIndex: "currentStock",
         key: "stock",
-        width: isMobile ? 40 : 72,
+        width: 72,
         align: "right",
         onHeaderCell: () => ({ style: { whiteSpace: "nowrap" } }),
         onCell: () => ({ style: { fontVariantNumeric: "tabular-nums" } }),
       },
       {
-        title: isMobile ? "Obj." : "Obj. (u)",
+        title: "Obj. (u)",
         dataIndex: "targetUnits",
         key: "targetUnits",
-        width: isMobile ? 44 : 80,
+        width: 80,
         align: "right",
         onHeaderCell: () => ({ style: { whiteSpace: "nowrap" } }),
         onCell: () => ({ style: { fontVariantNumeric: "tabular-nums" } }),
       },
       {
-        title: isMobile ? "Ped." : "Pedido (u)",
+        title: "Pedido (u)",
         dataIndex: "suggestedUnits",
         key: "suggestedUnits",
-        width: isMobile ? 44 : 88,
+        width: 88,
         align: "right",
         onHeaderCell: () => ({ style: { whiteSpace: "nowrap" } }),
         onCell: () => ({ style: { fontVariantNumeric: "tabular-nums" } }),
         render: (u: number) => <span style={{ color: u > 0 ? "#fbbf24" : undefined }}>{u}</span>,
       },
       {
-        title: isMobile ? "Cj." : "Cajas",
+        title: "Cajas",
         dataIndex: "suggestedBoxes",
         key: "suggestedBoxes",
-        width: isMobile ? 40 : 64,
+        width: 64,
         align: "right",
         onHeaderCell: () => ({ style: { whiteSpace: "nowrap" } }),
         onCell: () => ({ style: { fontVariantNumeric: "tabular-nums" } }),
       },
       {
-        title: isMobile ? "c/u" : "Costo u.",
+        title: "Costo u.",
         key: "unitCost",
-        width: isMobile ? 72 : 100,
+        width: 100,
         align: "right",
         onHeaderCell: () => ({ style: { whiteSpace: "nowrap" } }),
         render: (_: unknown, r) => {
@@ -157,7 +151,7 @@ function SuggestedOrderContent() {
           const d = formatCostDate(r.costRecordedAt);
           return (
             <div style={{ fontVariantNumeric: "tabular-nums", lineHeight: 1.25 }}>
-              <div style={{ fontSize: isMobile ? 11 : 13 }}>{formatMoneyApprox(r.unitCost)}</div>
+              <div style={{ fontSize: 13 }}>{formatMoneyApprox(r.unitCost)}</div>
               {d && (
                 <div style={{ fontSize: 10, color: "#6b7280" }} title="Fecha del registro de costo usado">
                   {d}
@@ -168,9 +162,9 @@ function SuggestedOrderContent() {
         },
       },
       {
-        title: isMobile ? "≈$" : "Aprox. línea",
+        title: "Aprox. línea",
         key: "lineApprox",
-        width: isMobile ? 64 : 96,
+        width: 100,
         align: "right",
         onHeaderCell: () => ({ style: { whiteSpace: "nowrap" } }),
         render: (_: unknown, r) => {
@@ -188,20 +182,20 @@ function SuggestedOrderContent() {
         },
       },
       {
-        title: isMobile ? " " : "Estado",
+        title: "Estado",
         key: "baja",
-        width: isMobile ? 46 : 72,
+        width: 72,
         align: "center",
         onHeaderCell: () => ({ style: { whiteSpace: "nowrap" } }),
         render: (_: unknown, r) =>
           r.isDeactivated ? (
-            <Tag style={{ margin: 0, fontSize: isMobile ? 10 : 12 }}>baja</Tag>
+            <Tag style={{ margin: 0, fontSize: 12 }}>baja</Tag>
           ) : (
             <span style={{ color: "#6b7280" }}>—</span>
           ),
       },
     ],
-    [isMobile],
+    [],
   );
 
   return (
@@ -244,29 +238,47 @@ function SuggestedOrderContent() {
         }}
         styles={{ header: { borderBottomColor: "#374151" } }}
       >
-        <Space size="middle" wrap style={{ marginBottom: 12 }}>
-          <span style={{ color: "#9ca3af" }}>Cajas obj. 1L</span>
-          <InputNumber
-            min={1}
-            max={1000}
-            value={params.literTargetBoxes}
-            onChange={(v) => setParams((p) => ({ ...p, literTargetBoxes: v ?? 5 }))}
-          />
-          <span style={{ color: "#9ca3af" }}>Cajas obj. ½L</span>
-          <InputNumber
-            min={1}
-            max={1000}
-            value={params.halfLiterTargetBoxes}
-            onChange={(v) => setParams((p) => ({ ...p, halfLiterTargetBoxes: v ?? 6 }))}
-          />
-          <span style={{ color: "#9ca3af" }}>U. por caja</span>
-          <InputNumber
-            min={1}
-            max={1000}
-            value={params.unitsPerBox}
-            onChange={(v) => setParams((p) => ({ ...p, unitsPerBox: v ?? 12 }))}
-          />
-        </Space>
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            marginBottom: 12,
+            flexDirection: isMobile ? "column" : "row",
+            alignItems: isMobile ? "stretch" : "center",
+            flexWrap: isMobile ? undefined : "wrap",
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ color: "#9ca3af" }}>Cajas obj. 1L</span>
+            <InputNumber
+              min={1}
+              max={1000}
+              value={params.literTargetBoxes}
+              onChange={(v) => setParams((p) => ({ ...p, literTargetBoxes: v ?? 5 }))}
+              style={{ width: isMobile ? "100%" : undefined }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ color: "#9ca3af" }}>Cajas obj. ½L</span>
+            <InputNumber
+              min={1}
+              max={1000}
+              value={params.halfLiterTargetBoxes}
+              onChange={(v) => setParams((p) => ({ ...p, halfLiterTargetBoxes: v ?? 6 }))}
+              style={{ width: isMobile ? "100%" : undefined }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ color: "#9ca3af" }}>U. por caja</span>
+            <InputNumber
+              min={1}
+              max={1000}
+              value={params.unitsPerBox}
+              onChange={(v) => setParams((p) => ({ ...p, unitsPerBox: v ?? 12 }))}
+              style={{ width: isMobile ? "100%" : undefined }}
+            />
+          </div>
+        </div>
 
         {distributorOrder && (
           <>
@@ -317,28 +329,41 @@ function SuggestedOrderContent() {
             )}
 
             <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-              <Button type="default" icon={<CopyOutlined />} onClick={copyText}>
+              <Button type="default" icon={<CopyOutlined />} onClick={copyText} block={isMobile}>
                 Copiar texto (WhatsApp)
               </Button>
             </div>
 
-            <div
-              style={{
-                maxHeight: 220,
-                overflow: "auto",
-                marginBottom: 12,
-                padding: 10,
-                background: "#0f172a",
-                border: "1px solid #334155",
-                borderRadius: 6,
-                color: "#e5e7eb",
-                fontSize: 13,
-                whiteSpace: "pre-wrap",
-                fontFamily: "ui-monospace, monospace",
-              }}
-            >
-              {distributorOrder.copyText}
-            </div>
+            <Collapse
+              size="small"
+              defaultActiveKey={[]}
+              bordered={false}
+              style={{ marginBottom: 12, background: "transparent" }}
+              items={[
+                {
+                  key: "preview",
+                  label: <span style={{ color: "#9ca3af", fontSize: 13 }}>Ver vista previa del texto</span>,
+                  children: (
+                    <div
+                      style={{
+                        maxHeight: 220,
+                        overflow: "auto",
+                        padding: 10,
+                        background: "#0f172a",
+                        border: "1px solid #334155",
+                        borderRadius: 6,
+                        color: "#e5e7eb",
+                        fontSize: 13,
+                        whiteSpace: "pre-wrap",
+                        fontFamily: "ui-monospace, monospace",
+                      }}
+                    >
+                      {distributorOrder.copyText}
+                    </div>
+                  ),
+                },
+              ]}
+            />
 
             <div
               style={{
@@ -351,16 +376,13 @@ function SuggestedOrderContent() {
               }}
             >
               <Table<DistributorSuggestedOrderItem>
-                size={isMobile ? "small" : "middle"}
-                tableLayout={isMobile ? "fixed" : "auto"}
-                style={{
-                  background: "#1f2937",
-                  minWidth: isMobile ? 700 : undefined,
-                }}
+                size="small"
+                tableLayout="auto"
+                style={{ background: "#1f2937", minWidth: 860 }}
                 pagination={false}
                 dataSource={distributorOrder.items}
                 rowKey="productId"
-                scroll={isMobile ? { x: 700 } : undefined}
+                scroll={{ x: 860 }}
                 onRow={(record) => ({
                   style: record.suggestedUnits > 0 ? { background: "rgba(251, 191, 36, 0.06)" } : undefined,
                 })}
