@@ -14,6 +14,20 @@ type CustomerProfileWithRelations = CustomerProfile & {
 export class CustomerProfileService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Crea un perfil mínimo si el cliente no tenía uno (p. ej. tras el primer pedido). Idempotente. */
+  async ensureProfileForCustomer(customerId: string): Promise<CustomerProfile> {
+    await this.validateCustomerExists(customerId);
+    const existing = await this.prisma.customerProfile.findUnique({
+      where: { customerId },
+    });
+    if (existing) {
+      return existing;
+    }
+    return this.prisma.customerProfile.create({
+      data: { customerId },
+    });
+  }
+
   async create(dto: CreateCustomerProfileDto) {
     await this.validateCustomerExists(dto.customerId);
     await this.validateCustomerHasNoProfile(dto.customerId);

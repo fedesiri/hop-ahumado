@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { Order, Prisma, StockMovementType } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
+import { CustomerProfileService } from "../customer-profile/customer-profile.service";
 import { InventoryService } from "../inventory/inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
@@ -57,6 +58,7 @@ export class OrderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
+    private readonly customerProfileService: CustomerProfileService,
   ) {}
 
   async create(dto: CreateOrderDto) {
@@ -118,6 +120,9 @@ export class OrderService {
 
       return reloadedOrder;
     });
+    if (dto.customerId) {
+      await this.customerProfileService.ensureProfileForCustomer(dto.customerId);
+    }
     return this.enrichOrder(createdOrder);
   }
 
@@ -368,6 +373,10 @@ export class OrderService {
       },
       include: ORDER_INCLUDE,
     });
+    const cid = updatedOrder.customerId;
+    if (cid) {
+      await this.customerProfileService.ensureProfileForCustomer(cid);
+    }
     return this.enrichOrder(updatedOrder as OrderWithRelations);
   }
 
@@ -469,6 +478,10 @@ export class OrderService {
         include: ORDER_INCLUDE,
       }) as Promise<OrderWithRelations>;
     });
+    const cid = updatedOrder.customerId;
+    if (cid) {
+      await this.customerProfileService.ensureProfileForCustomer(cid);
+    }
     return this.enrichOrder(updatedOrder);
   }
 
@@ -517,9 +530,7 @@ export class OrderService {
     });
 
     if (!payment) {
-      throw new NotFoundException(
-        `Pago con id "${paymentId}" no encontrado en la orden "${orderId}"`,
-      );
+      throw new NotFoundException(`Pago con id "${paymentId}" no encontrado en la orden "${orderId}"`);
     }
 
     const updatedOrder = await this.prisma.$transaction(async (tx) => {

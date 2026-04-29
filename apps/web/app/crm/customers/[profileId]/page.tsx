@@ -1,6 +1,13 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
+import {
+  CRM_CUSTOMER_TYPE_OPTIONS,
+  CRM_SOURCE_OPTIONS,
+  CRM_STATUS_OPTIONS,
+  mergeCrmSelectOptions,
+  normalizeCrmStatusForForm,
+} from "@/lib/crm-profile-options";
 import type { Dayjs } from "@/lib/dayjs";
 import dayjs from "@/lib/dayjs";
 import type {
@@ -13,13 +20,6 @@ import type {
   UpdateCustomerProfileRequest,
   User,
 } from "@/lib/types";
-import {
-  CRM_CUSTOMER_TYPE_OPTIONS,
-  CRM_SOURCE_OPTIONS,
-  CRM_STATUS_OPTIONS,
-  mergeCrmSelectOptions,
-  normalizeCrmStatusForForm,
-} from "@/lib/crm-profile-options";
 import { InteractionChannel as ChannelEnum } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
 import { ArrowLeftOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
@@ -34,6 +34,8 @@ type DetailData = CustomerProfile & {
   interactions: CustomerInteraction[];
   opportunity?: CustomerOpportunity | null;
   lastContactAt: string | null;
+  lastOrderDeliveryAt: string | null;
+  lastInteractionAt: string | null;
   daysSinceLastContact: number | null;
 };
 
@@ -171,12 +173,12 @@ export default function CrmCustomerDetailPage() {
         notes: values.notes,
         nextStep: values.nextStep,
       });
-      message.success("Interacción agregada");
+      message.success("Seguimiento registrado");
       setAddInteractionOpen(false);
       interactionForm.resetFields();
       fetchDetail();
     } catch (error) {
-      message.error("Error al agregar interacción");
+      message.error("Error al registrar seguimiento");
       console.error(error);
     }
   };
@@ -226,10 +228,16 @@ export default function CrmCustomerDetailPage() {
           <Descriptions.Item label="Socio responsable del seguimiento">
             {detail.responsible?.name ?? "—"}
           </Descriptions.Item>
-          <Descriptions.Item label="Último contacto">
+          <Descriptions.Item label="Último vínculo (pedido o seguimiento)">
             {detail.lastContactAt ? new Date(detail.lastContactAt).toLocaleString("es-AR") : "—"}
           </Descriptions.Item>
-          <Descriptions.Item label="Días sin contacto">
+          <Descriptions.Item label="Última entrega (pedidos)">
+            {detail.lastOrderDeliveryAt ? new Date(detail.lastOrderDeliveryAt).toLocaleString("es-AR") : "—"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Último seguimiento CRM">
+            {detail.lastInteractionAt ? new Date(detail.lastInteractionAt).toLocaleString("es-AR") : "—"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Días sin vínculo">
             {detail.daysSinceLastContact != null ? detail.daysSinceLastContact : "—"}
           </Descriptions.Item>
           <Descriptions.Item label="Próximo seguimiento">
@@ -243,9 +251,15 @@ export default function CrmCustomerDetailPage() {
         items={[
           {
             key: "interactions",
-            label: "Interacciones",
+            label: "Seguimiento comercial",
             children: (
               <Card
+                title={
+                  <span style={{ fontSize: 14, fontWeight: 400, color: "#9ca3af" }}>
+                    Llamadas, mails o WhatsApp que registrás vos; va al KPI &quot;días sin vínculo&quot; si no hay un
+                    pedido más reciente.
+                  </span>
+                }
                 extra={
                   <Button
                     type="primary"
@@ -253,13 +267,13 @@ export default function CrmCustomerDetailPage() {
                     icon={<PlusOutlined />}
                     onClick={() => setAddInteractionOpen(true)}
                   >
-                    Nueva interacción
+                    Registrar seguimiento
                   </Button>
                 }
               >
                 <Space direction="vertical" style={{ width: "100%" }}>
                   {detail.interactions.length === 0 ? (
-                    <span style={{ color: "#9ca3af" }}>Sin interacciones</span>
+                    <span style={{ color: "#9ca3af" }}>Aún no hay seguimientos registrados.</span>
                   ) : (
                     detail.interactions.map((i) => (
                       <Card key={i.id} size="small" type="inner">
@@ -283,9 +297,15 @@ export default function CrmCustomerDetailPage() {
           },
           {
             key: "opportunity",
-            label: "Oportunidad",
+            label: "Oportunidad de venta",
             children: (
               <Card
+                title={
+                  <span style={{ fontSize: 14, fontWeight: 400, color: "#9ca3af" }}>
+                    Acuerdos o negocios en curso (etapa, monto esperado); no sustituye al historial de pedidos ni al
+                    seguimiento comercial arriba.
+                  </span>
+                }
                 extra={
                   <Button
                     type="primary"
@@ -293,7 +313,7 @@ export default function CrmCustomerDetailPage() {
                     icon={detail.opportunity ? <EditOutlined /> : <PlusOutlined />}
                     onClick={() => setEditOpportunityOpen(true)}
                   >
-                    {detail.opportunity ? "Editar" : "Crear"} oportunidad
+                    {detail.opportunity ? "Editar" : "Registrar"} oportunidad
                   </Button>
                 }
               >
@@ -436,7 +456,7 @@ export default function CrmCustomerDetailPage() {
       </Modal>
 
       <Modal
-        title="Nueva interacción"
+        title="Registrar seguimiento"
         open={addInteractionOpen}
         onCancel={() => setAddInteractionOpen(false)}
         onOk={() => interactionForm.submit()}

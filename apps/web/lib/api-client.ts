@@ -306,6 +306,8 @@ export class ApiClient {
       interactions: CustomerInteraction[];
       opportunity?: CustomerOpportunity | null;
       lastContactAt: string | null;
+      lastOrderDeliveryAt: string | null;
+      lastInteractionAt: string | null;
       daysSinceLastContact: number | null;
     }
   > {

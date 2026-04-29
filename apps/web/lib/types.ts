@@ -207,7 +207,10 @@ export interface CrmCustomerListItem {
   responsibleId: string | null;
   responsibleName: string | null;
   nextFollowUpAt: string | null;
+  /** max(pedidos: última entrega, CRM: última interacción) */
   lastContactAt: string | null;
+  lastOrderDeliveryAt: string | null;
+  lastInteractionAt: string | null;
   daysSinceLastContact: number | null;
 }
 

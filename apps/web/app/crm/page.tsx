@@ -1,8 +1,6 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
-import type { Dayjs } from "@/lib/dayjs";
-import dayjs from "@/lib/dayjs";
 import {
   CRM_CUSTOMER_TYPE_OPTIONS,
   CRM_SOURCE_OPTIONS,
@@ -10,10 +8,12 @@ import {
   mergeCrmSelectOptions,
   normalizeCrmStatusForForm,
 } from "@/lib/crm-profile-options";
+import type { Dayjs } from "@/lib/dayjs";
+import dayjs from "@/lib/dayjs";
 import type { CreateCrmCustomerRequest, CrmCustomerListItem, PaginationMeta, User } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
 import { EditOutlined, EyeOutlined, FormOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag } from "antd";
+import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag, Tooltip } from "antd";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -248,13 +248,21 @@ function CrmContent() {
     { title: "Origen (cómo nos conoció)", dataIndex: "source", key: "source" },
     { title: "Socio responsable", dataIndex: "responsibleName", key: "responsibleName" },
     {
-      title: "Último contacto",
+      title: (
+        <Tooltip title="La fecha más reciente entre la última entrega registrada en pedidos y el último seguimiento CRM.">
+          <span style={{ cursor: "help", borderBottom: "1px dotted rgba(250,250,250,0.35)" }}>Último vínculo</span>
+        </Tooltip>
+      ),
       dataIndex: "lastContactAt",
       key: "lastContactAt",
       render: (v: string | null) => (v ? new Date(v).toLocaleDateString("es-AR") : "—"),
     },
     {
-      title: "Días sin contacto",
+      title: (
+        <Tooltip title="Días desde el último vínculo (pedido o seguimiento).">
+          <span style={{ cursor: "help", borderBottom: "1px dotted rgba(250,250,250,0.35)" }}>Días sin vínculo</span>
+        </Tooltip>
+      ),
       dataIndex: "daysSinceLastContact",
       key: "daysSinceLastContact",
       render: (v: number | null) =>

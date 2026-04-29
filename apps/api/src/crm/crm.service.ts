@@ -47,6 +47,16 @@ function customerTypeProfileClause(filter: string): Record<string, unknown> {
   return has(filter);
 }
 
+/** Más reciente entre dos fechas opcionales (último vínculo pedido vs seguimiento CRM). */
+function maxLinkageDate(a: Date | null | undefined, b: Date | null | undefined): Date | null {
+  const ta = a?.getTime();
+  const tb = b?.getTime();
+  if (ta == null && tb == null) return null;
+  if (tb == null) return a!;
+  if (ta == null) return b!;
+  return ta >= tb ? a! : b!;
+}
+
 export interface CrmCustomerListItem {
   /** ID del perfil CRM (null si el cliente aún no tiene perfil) */
   profileId: string | null;
@@ -61,7 +71,12 @@ export interface CrmCustomerListItem {
   responsibleId: string | null;
   responsibleName: string | null;
   nextFollowUpAt: Date | null;
+  /** max(última fecha de entrega de pedidos, última interacción CRM registrada) */
   lastContactAt: Date | null;
+  /** última `deliveryDate` de algún pedido del cliente */
+  lastOrderDeliveryAt: Date | null;
+  /** fecha de la interacción CRM más reciente (si existe) */
+  lastInteractionAt: Date | null;
   daysSinceLastContact: number | null;
 }
 
@@ -157,11 +172,28 @@ export class CrmService {
       this.prisma.customer.count({ where }),
     ]);
 
+    const customerIds = customers.map((c) => c.id);
+    const orderMaxByCustomer =
+      customerIds.length === 0
+        ? []
+        : await this.prisma.order.groupBy({
+            by: ["customerId"],
+            where: { customerId: { in: customerIds } },
+            _max: { deliveryDate: true },
+          });
+    const lastDeliveryByCustomerId = new Map(
+      orderMaxByCustomer
+        .filter((row): row is typeof row & { customerId: string } => row.customerId != null)
+        .map((row) => [row.customerId, row._max.deliveryDate]),
+    );
+
     const now = new Date();
     const data: CrmCustomerListItem[] = customers.map((c) => {
       const p = c.profile;
       const lastInteraction = p?.interactions?.[0];
-      const lastContactAt = lastInteraction?.date ?? null;
+      const lastInteractionAt = lastInteraction?.date ?? null;
+      const lastOrderDeliveryAt = lastDeliveryByCustomerId.get(c.id) ?? null;
+      const lastContactAt = maxLinkageDate(lastOrderDeliveryAt ?? undefined, lastInteractionAt ?? undefined);
       const daysSinceLastContact =
         lastContactAt != null ? Math.floor((now.getTime() - lastContactAt.getTime()) / (1000 * 60 * 60 * 24)) : null;
       return {
@@ -178,6 +210,8 @@ export class CrmService {
         responsibleName: p?.responsible?.name ?? null,
         nextFollowUpAt: p?.nextFollowUpAt ?? null,
         lastContactAt,
+        lastOrderDeliveryAt,
+        lastInteractionAt,
         daysSinceLastContact,
       };
     });
@@ -198,14 +232,22 @@ export class CrmService {
     if (!profile) {
       throw new NotFoundException(`Perfil de cliente con id "${profileId}" no encontrado`);
     }
+    const agg = await this.prisma.order.aggregate({
+      where: { customerId: profile.customerId },
+      _max: { deliveryDate: true },
+    });
+    const lastOrderDeliveryAt = agg._max.deliveryDate ?? null;
     const lastInteraction = profile.interactions[0];
-    const lastContactAt = lastInteraction?.date ?? null;
+    const lastInteractionAt = lastInteraction?.date ?? null;
+    const lastContactAt = maxLinkageDate(lastOrderDeliveryAt ?? undefined, lastInteractionAt ?? undefined);
     const now = new Date();
     const daysSinceLastContact =
       lastContactAt != null ? Math.floor((now.getTime() - lastContactAt.getTime()) / (1000 * 60 * 60 * 24)) : null;
     return {
       ...profile,
       lastContactAt,
+      lastOrderDeliveryAt,
+      lastInteractionAt,
       daysSinceLastContact,
     };
   }

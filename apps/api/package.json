@@ -15,6 +15,7 @@
     "prisma:studio": "prisma studio",
     "import:xlsx": "node scripts/import-from-xlsx.js",
     "import:crm": "node scripts/import-crm-xlsx.js",
+    "backfill:crm-profiles": "node scripts/backfill-customer-profiles-from-orders.js",
     "inspect:crm": "node scripts/inspect-crm-xlsx.js",
     "inspect:xlsx": "node scripts/inspect-xlsx.js"
   },
