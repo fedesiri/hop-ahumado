@@ -1,5 +1,6 @@
 "use client";
 
+import { OrderDetailView } from "@/components/orders/order-detail-view";
 import { apiClient } from "@/lib/api-client";
 import {
   CRM_CUSTOMER_TYPE_OPTIONS,
@@ -10,23 +11,46 @@ import {
 } from "@/lib/crm-profile-options";
 import type { Dayjs } from "@/lib/dayjs";
 import dayjs from "@/lib/dayjs";
+import { formatCurrency } from "@/lib/format-currency";
+import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
+import { formatPaymentMethodsOnly, orderPaymentStatusLabel } from "@/lib/order-labels";
 import type {
   Customer,
   CustomerInteraction,
   CustomerOpportunity,
   CustomerProfile,
   InteractionChannel,
+  Order,
+  OrderItem,
+  OrderPaymentStatus,
   UpdateCustomerOpportunityRequest,
   UpdateCustomerProfileRequest,
   User,
 } from "@/lib/types";
 import { InteractionChannel as ChannelEnum } from "@/lib/types";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { formatStatusLabel } from "@/lib/utils";
-import { ArrowLeftOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Card, DatePicker, Descriptions, Form, Input, Modal, Select, Space, Spin, Tabs } from "antd";
+import { ArrowLeftOutlined, EditOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  App,
+  Button,
+  Card,
+  DatePicker,
+  Descriptions,
+  Form,
+  Input,
+  Modal,
+  Select,
+  Space,
+  Spin,
+  Table,
+  Tabs,
+  Tag,
+} from "antd";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 type DetailData = CustomerProfile & {
   customer: Customer;
@@ -49,15 +73,24 @@ const CHANNEL_OPTIONS = [
 
 export default function CrmCustomerDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const profileId = params.profileId as string;
+  const isMobile = useMediaQuery("(max-width: 768px)");
   const { message } = App.useApp();
   const [detail, setDetail] = useState<DetailData | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [editOpportunityOpen, setEditOpportunityOpen] = useState(false);
   const [addInteractionOpen, setAddInteractionOpen] = useState(false);
+  const [viewOrderOpen, setViewOrderOpen] = useState(false);
+  const [modalOrder, setModalOrder] = useState<Order | null>(null);
+  const [modalOrderLoading, setModalOrderLoading] = useState(false);
+  const [compareMonthA, setCompareMonthA] = useState<string | undefined>(undefined);
+  const [compareMonthB, setCompareMonthB] = useState<string | undefined>(undefined);
+  const [kpiScope, setKpiScope] = useState<"all" | "monthA" | "monthB" | "customRange">("all");
+  const [kpiCustomRange, setKpiCustomRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [profileForm] = Form.useForm();
   const [opportunityForm] = Form.useForm();
   const [interactionForm] = Form.useForm();
@@ -86,6 +119,12 @@ export default function CrmCustomerDetailPage() {
     }
   }, [profileId]);
 
+  useEffect(() => {
+    if (detail?.customer?.id) {
+      fetchOrders(detail.customer.id);
+    }
+  }, [detail?.customer?.id]);
+
   const fetchDetail = async () => {
     try {
       setLoading(true);
@@ -106,6 +145,35 @@ export default function CrmCustomerDetailPage() {
     } catch (error) {
       message.error("Error al cargar usuarios para el responsable");
       console.error(error);
+    }
+  };
+
+  const fetchOrders = async (customerId: string) => {
+    try {
+      setOrdersLoading(true);
+      const response = await apiClient.getOrders(1, 100, customerId);
+      setOrders(response.data);
+    } catch (error) {
+      message.error("Error al cargar pedidos del cliente");
+      console.error(error);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const openOrderDetail = async (orderId: string) => {
+    setViewOrderOpen(true);
+    setModalOrder(null);
+    setModalOrderLoading(true);
+    try {
+      const detailOrder = await apiClient.getOrder(orderId);
+      setModalOrder(detailOrder);
+    } catch (error) {
+      message.error("No se pudo cargar el detalle del pedido");
+      console.error(error);
+      setViewOrderOpen(false);
+    } finally {
+      setModalOrderLoading(false);
     }
   };
 
@@ -182,6 +250,289 @@ export default function CrmCustomerDetailPage() {
       console.error(error);
     }
   };
+
+  const monthlyOrdersSeries = useMemo(() => {
+    const map = new Map<string, { month: string; monthSort: string; count: number }>();
+    for (const order of orders) {
+      const rawDate = order.deliveredAt || order.deliveryDate || order.createdAt;
+      const parsedDate = dayjs(rawDate);
+      if (!parsedDate.isValid()) continue;
+      const monthSort = parsedDate.format("YYYY-MM");
+      const month = parsedDate.format("MM/YYYY");
+      const current = map.get(monthSort) ?? { month, monthSort, count: 0 };
+      current.count += 1;
+      map.set(monthSort, current);
+    }
+    return Array.from(map.values())
+      .sort((a, b) => a.monthSort.localeCompare(b.monthSort))
+      .slice(-12);
+  }, [orders]);
+
+  const itemBreakdown = useMemo(() => {
+    const byItem = new Map<string, number>();
+    for (const order of orders) {
+      for (const item of (order.orderItems ?? []) as OrderItem[]) {
+        const itemName = item.product?.name ?? "Ítem sin nombre";
+        byItem.set(itemName, (byItem.get(itemName) ?? 0) + Number(item.quantity ?? 0));
+      }
+    }
+    return Array.from(byItem.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [orders]);
+
+  const scopedOrders = useMemo(() => {
+    const matchesMonth = (order: Order, monthValue?: string) => {
+      if (!monthValue) return false;
+      const rawDate = order.deliveredAt || order.deliveryDate || order.createdAt;
+      return dayjs(rawDate).format("YYYY-MM") === monthValue;
+    };
+    const matchesCustomRange = (order: Order) => {
+      if (!kpiCustomRange) return true;
+      const rawDate = order.deliveredAt || order.deliveryDate || order.createdAt;
+      const d = dayjs(rawDate);
+      return !d.isBefore(kpiCustomRange[0].startOf("day")) && !d.isAfter(kpiCustomRange[1].endOf("day"));
+    };
+    if (kpiScope === "monthA") return orders.filter((o) => matchesMonth(o, compareMonthA));
+    if (kpiScope === "monthB") return orders.filter((o) => matchesMonth(o, compareMonthB));
+    if (kpiScope === "customRange") return orders.filter(matchesCustomRange);
+    return orders;
+  }, [orders, kpiScope, compareMonthA, compareMonthB, kpiCustomRange]);
+
+  const totalPurchased = useMemo(
+    () => scopedOrders.reduce((sum, order) => sum + Number(order.totalPrice ?? 0), 0),
+    [scopedOrders],
+  );
+  const scopedDistinctItemsCount = useMemo(() => {
+    const unique = new Set<string>();
+    for (const order of scopedOrders) {
+      for (const item of (order.orderItems ?? []) as OrderItem[]) {
+        unique.add(item.product?.name ?? "Ítem sin nombre");
+      }
+    }
+    return unique.size;
+  }, [scopedOrders]);
+
+  const monthOptions = useMemo(() => {
+    const unique = new Set<string>();
+    for (const order of orders) {
+      const rawDate = order.deliveredAt || order.deliveryDate || order.createdAt;
+      const parsedDate = dayjs(rawDate);
+      if (!parsedDate.isValid()) continue;
+      unique.add(parsedDate.format("YYYY-MM"));
+    }
+    return Array.from(unique)
+      .sort((a, b) => b.localeCompare(a))
+      .map((value) => ({ value, label: dayjs(`${value}-01`).format("MM/YYYY") }));
+  }, [orders]);
+
+  useEffect(() => {
+    if (monthOptions.length === 0) {
+      setCompareMonthA(undefined);
+      setCompareMonthB(undefined);
+      return;
+    }
+    setCompareMonthA((prev) => prev ?? monthOptions[0]?.value);
+    setCompareMonthB((prev) => prev ?? monthOptions[1]?.value ?? monthOptions[0]?.value);
+  }, [monthOptions]);
+
+  const monthlyComparisonKpis = useMemo(() => {
+    if (!compareMonthA || !compareMonthB) return null;
+    const countForMonth = (targetMonth: string) =>
+      orders.filter((order) => {
+        const rawDate = order.deliveredAt || order.deliveryDate || order.createdAt;
+        return dayjs(rawDate).format("YYYY-MM") === targetMonth;
+      }).length;
+    const monthACount = countForMonth(compareMonthA);
+    const monthBCount = countForMonth(compareMonthB);
+    return {
+      monthACount,
+      monthBCount,
+      delta: monthACount - monthBCount,
+    };
+  }, [compareMonthA, compareMonthB, orders]);
+
+  const itemComparisonByMonth = useMemo(() => {
+    if (!compareMonthA || !compareMonthB) return [];
+    const byMonthItem = new Map<string, Map<string, number>>();
+    const addItem = (monthKey: string, itemName: string, qty: number) => {
+      const monthMap = byMonthItem.get(monthKey) ?? new Map<string, number>();
+      monthMap.set(itemName, (monthMap.get(itemName) ?? 0) + qty);
+      byMonthItem.set(monthKey, monthMap);
+    };
+    for (const order of orders) {
+      const rawDate = order.deliveredAt || order.deliveryDate || order.createdAt;
+      const monthKey = dayjs(rawDate).format("YYYY-MM");
+      if (monthKey !== compareMonthA && monthKey !== compareMonthB) continue;
+      for (const item of (order.orderItems ?? []) as OrderItem[]) {
+        addItem(monthKey, item.product?.name ?? "Ítem sin nombre", Number(item.quantity ?? 0));
+      }
+    }
+    const monthAMap = byMonthItem.get(compareMonthA) ?? new Map<string, number>();
+    const monthBMap = byMonthItem.get(compareMonthB) ?? new Map<string, number>();
+    const topNames = Array.from(new Set([...monthAMap.keys(), ...monthBMap.keys()]))
+      .map((name) => ({ name, total: (monthAMap.get(name) ?? 0) + (monthBMap.get(name) ?? 0) }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8)
+      .map((x) => x.name);
+    return topNames.map((name) => ({
+      name,
+      monthA: monthAMap.get(name) ?? 0,
+      monthB: monthBMap.get(name) ?? 0,
+    }));
+  }, [compareMonthA, compareMonthB, orders]);
+
+  const formatMonthEs = (monthValue?: string) => {
+    if (!monthValue) return "";
+    const [year, month] = monthValue.split("-").map(Number);
+    if (!year || !month) return monthValue;
+    return new Date(year, month - 1, 1).toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+  };
+  const compareMonthALabel = compareMonthA ? formatMonthEs(compareMonthA) : "Mes A";
+  const compareMonthBLabel = compareMonthB ? formatMonthEs(compareMonthB) : "Mes B";
+  const itemBarData = useMemo(
+    () =>
+      itemBreakdown.slice(0, isMobile ? 6 : 10).map((row) => ({
+        ...row,
+        shortName: row.name.length > (isMobile ? 14 : 24) ? `${row.name.slice(0, isMobile ? 14 : 24)}…` : row.name,
+      })),
+    [itemBreakdown, isMobile],
+  );
+  const orderHistoryColumns = useMemo(() => {
+    if (isMobile) {
+      return [
+        {
+          title: "Total",
+          dataIndex: "totalPrice",
+          key: "totalPrice",
+          width: 120,
+          render: (amount: number | string) => formatCurrency(amount),
+        },
+        {
+          title: "Pago",
+          key: "paymentStatus",
+          width: 90,
+          render: (_: unknown, order: Order) => (
+            <Tag
+              color={
+                order.paymentStatus === "PAID" ? "green" : order.paymentStatus === "PARTIALLY_PAID" ? "gold" : "default"
+              }
+            >
+              {orderPaymentStatusLabel(order.paymentStatus as OrderPaymentStatus)}
+            </Tag>
+          ),
+        },
+        {
+          title: "Fecha",
+          key: "deliveryDate",
+          width: 96,
+          render: (_: unknown, order: Order) =>
+            order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString("es-AR") : "—",
+        },
+        {
+          title: "",
+          key: "actions",
+          width: 56,
+          render: (_: unknown, order: Order) => (
+            <Button
+              size="small"
+              icon={<EyeOutlined />}
+              aria-label="Ver detalle"
+              title="Ver detalle"
+              onClick={() => void openOrderDetail(order.id)}
+            />
+          ),
+        },
+      ];
+    }
+    return [
+      {
+        title: "Total",
+        dataIndex: "totalPrice",
+        key: "totalPrice",
+        width: 120,
+        render: (amount: number | string) => formatCurrency(amount),
+      },
+      {
+        title: "Estado de pago",
+        key: "paymentStatus",
+        width: 136,
+        render: (_: unknown, order: Order) => (
+          <Tag
+            color={
+              order.paymentStatus === "PAID" ? "green" : order.paymentStatus === "PARTIALLY_PAID" ? "gold" : "default"
+            }
+          >
+            {orderPaymentStatusLabel(order.paymentStatus as OrderPaymentStatus)}
+          </Tag>
+        ),
+      },
+      {
+        title: "Pagado",
+        key: "paidAmount",
+        width: 120,
+        render: (_: unknown, order: Order) => formatCurrency(order.paidAmount ?? 0),
+      },
+      {
+        title: "Medios de pago",
+        key: "paymentMethods",
+        width: 200,
+        render: (_: unknown, order: Order) => formatPaymentMethodsOnly(order.payments),
+      },
+      {
+        title: "Pendiente",
+        key: "remainingAmount",
+        width: 120,
+        render: (_: unknown, order: Order) => formatCurrency(order.remainingAmount ?? 0),
+      },
+      {
+        title: "Lista de precios",
+        key: "priceListType",
+        width: 120,
+        render: (_: unknown, order: Order) => orderPriceListDisplayLabel(order.priceListType),
+      },
+      {
+        title: "Cant. ítems",
+        dataIndex: "orderItems",
+        key: "itemsCount",
+        width: 90,
+        render: (items: OrderItem[]) => items?.length || 0,
+      },
+      {
+        title: "Programada",
+        key: "deliveryDate",
+        width: 110,
+        render: (_: unknown, order: Order) =>
+          order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString("es-AR") : "—",
+      },
+      {
+        title: "Entregada",
+        key: "isDelivered",
+        width: 96,
+        render: (_: unknown, order: Order) => (order.isDelivered ? "Sí" : "No"),
+      },
+      {
+        title: "Stock desde",
+        key: "fulfillmentLocation",
+        width: 120,
+        render: (_: unknown, order: Order) => order.fulfillmentLocation?.name ?? "—",
+      },
+      {
+        title: "Detalle",
+        key: "actions",
+        width: 90,
+        render: (_: unknown, order: Order) => (
+          <Button
+            size="small"
+            icon={<EyeOutlined />}
+            aria-label="Ver detalle"
+            title="Ver detalle"
+            onClick={() => void openOrderDetail(order.id)}
+          />
+        ),
+      },
+    ];
+  }, [isMobile, openOrderDetail]);
 
   if (loading && !detail) {
     return (
@@ -336,6 +687,168 @@ export default function CrmCustomerDetailPage() {
               </Card>
             ),
           },
+          {
+            key: "orders",
+            label: "Pedidos",
+            children: (
+              <Space direction="vertical" style={{ width: "100%" }} size={16}>
+                <Card>
+                  <Space direction="vertical" style={{ width: "100%" }} size={12}>
+                    <Space wrap style={{ width: "100%" }}>
+                      <Select
+                        value={kpiScope}
+                        style={{ width: isMobile ? "100%" : 280 }}
+                        onChange={(value) => setKpiScope(value)}
+                        options={[
+                          { value: "all", label: "Métricas: todo el historial" },
+                          { value: "monthA", label: `Métricas: ${compareMonthALabel}` },
+                          { value: "monthB", label: `Métricas: ${compareMonthBLabel}` },
+                          { value: "customRange", label: "Métricas: rango personalizado" },
+                        ]}
+                      />
+                      {kpiScope === "customRange" ? (
+                        <DatePicker.RangePicker
+                          value={kpiCustomRange as any}
+                          onChange={(values) => setKpiCustomRange(values as [Dayjs, Dayjs] | null)}
+                          format="DD/MM/YYYY"
+                          style={{ width: isMobile ? "100%" : undefined }}
+                        />
+                      ) : null}
+                    </Space>
+                    <Space size={24} wrap direction={isMobile ? "vertical" : "horizontal"}>
+                      <div>
+                        <div style={{ color: "#9ca3af", fontSize: 12 }}>Cantidad de pedidos</div>
+                        <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>{scopedOrders.length}</div>
+                      </div>
+                      <div>
+                        <div style={{ color: "#9ca3af", fontSize: 12 }}>Total comprado</div>
+                        <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>
+                          {formatCurrency(totalPurchased)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ color: "#9ca3af", fontSize: 12 }}>Ítems diferentes pedidos</div>
+                        <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>
+                          {scopedDistinctItemsCount}
+                        </div>
+                      </div>
+                    </Space>
+                  </Space>
+                </Card>
+
+                <Card title="Ítems más pedidos (unidades acumuladas)">
+                  <div style={{ width: "100%", height: isMobile ? 280 : 260 }}>
+                    <ResponsiveContainer>
+                      <BarChart data={itemBarData} layout="vertical" margin={{ left: isMobile ? 4 : 20, right: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis type="number" stroke="#9ca3af" allowDecimals={false} />
+                        <YAxis
+                          type="category"
+                          dataKey="shortName"
+                          stroke="#9ca3af"
+                          width={isMobile ? 92 : 140}
+                          interval={0}
+                        />
+                        <Tooltip />
+                        <Bar dataKey="value" name="Unidades" fill="#22c55e" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+
+                <Card title="Pedidos por mes (últimos 12 meses con pedidos)">
+                  <div style={{ width: "100%", height: isMobile ? 220 : 260 }}>
+                    <ResponsiveContainer>
+                      <BarChart data={monthlyOrdersSeries}>
+                        <XAxis dataKey="month" stroke="#9ca3af" />
+                        <YAxis stroke="#9ca3af" allowDecimals={false} />
+                        <Tooltip />
+                        <Bar dataKey="count" name="Pedidos" fill="#60a5fa" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+
+                <Card title="Comparación de meses (ítems pedidos)">
+                  <Space direction="vertical" style={{ width: "100%" }} size={12}>
+                    <Space wrap style={{ width: "100%" }}>
+                      <Select
+                        style={{ width: isMobile ? "100%" : 180 }}
+                        placeholder="Mes A"
+                        value={compareMonthA}
+                        options={monthOptions}
+                        onChange={(value) => setCompareMonthA(value)}
+                      />
+                      <Select
+                        style={{ width: isMobile ? "100%" : 180 }}
+                        placeholder="Mes B"
+                        value={compareMonthB}
+                        options={monthOptions}
+                        onChange={(value) => setCompareMonthB(value)}
+                      />
+                    </Space>
+                    {monthlyComparisonKpis ? (
+                      <Space size={24} wrap>
+                        <span style={{ color: "#9ca3af" }}>
+                          {dayjs(`${compareMonthA}-01`).format("MM/YYYY")}:{" "}
+                          <strong style={{ color: "#fafafa" }}>{monthlyComparisonKpis.monthACount}</strong> pedidos
+                        </span>
+                        <span style={{ color: "#9ca3af" }}>
+                          {dayjs(`${compareMonthB}-01`).format("MM/YYYY")}:{" "}
+                          <strong style={{ color: "#fafafa" }}>{monthlyComparisonKpis.monthBCount}</strong> pedidos
+                        </span>
+                        <span style={{ color: monthlyComparisonKpis.delta >= 0 ? "#22c55e" : "#f43f5e" }}>
+                          Delta: {monthlyComparisonKpis.delta >= 0 ? "+" : ""}
+                          {monthlyComparisonKpis.delta}
+                        </span>
+                      </Space>
+                    ) : null}
+                    <div style={{ width: "100%", height: isMobile ? 260 : 300 }}>
+                      <ResponsiveContainer>
+                        <BarChart data={itemComparisonByMonth}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                          <XAxis
+                            dataKey="name"
+                            stroke="#9ca3af"
+                            interval={0}
+                            angle={isMobile ? -35 : -20}
+                            textAnchor="end"
+                            height={isMobile ? 84 : 70}
+                          />
+                          <YAxis stroke="#9ca3af" allowDecimals={false} />
+                          <Tooltip />
+                          <Legend />
+                          <Bar
+                            dataKey="monthA"
+                            name={compareMonthA ? dayjs(`${compareMonthA}-01`).format("MM/YYYY") : "Mes A"}
+                            fill="#60a5fa"
+                          />
+                          <Bar
+                            dataKey="monthB"
+                            name={compareMonthB ? dayjs(`${compareMonthB}-01`).format("MM/YYYY") : "Mes B"}
+                            fill="#f59e0b"
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </Space>
+                </Card>
+
+                <Card title="Historial de pedidos">
+                  <Spin spinning={ordersLoading}>
+                    <Table
+                      rowKey="id"
+                      dataSource={orders}
+                      size="small"
+                      pagination={{ pageSize: isMobile ? 6 : 8, size: isMobile ? "small" : "default" }}
+                      scroll={isMobile ? undefined : { x: 980 }}
+                      columns={orderHistoryColumns as any}
+                    />
+                  </Spin>
+                </Card>
+              </Space>
+            ),
+          },
         ]}
       />
 
@@ -483,6 +996,35 @@ export default function CrmCustomerDetailPage() {
             <Input />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="Detalle del pedido"
+        open={viewOrderOpen}
+        onCancel={() => {
+          setViewOrderOpen(false);
+          setModalOrder(null);
+        }}
+        footer={<Button onClick={() => setViewOrderOpen(false)}>Cerrar</Button>}
+        width={isMobile ? "calc(100vw - 24px)" : 920}
+        destroyOnClose
+        styles={{ body: { maxHeight: "75vh", overflowY: "auto" } }}
+      >
+        {modalOrderLoading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+            <Spin />
+          </div>
+        ) : null}
+        {modalOrder ? (
+          <OrderDetailView
+            key={modalOrder.id}
+            order={modalOrder}
+            onOrderUpdated={(updatedOrder) => {
+              setModalOrder(updatedOrder);
+              setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)));
+            }}
+          />
+        ) : null}
       </Modal>
     </div>
   );

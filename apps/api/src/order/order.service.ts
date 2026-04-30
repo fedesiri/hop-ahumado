@@ -24,7 +24,7 @@ type OrderWithRelations = Order & {
     productId: string;
     quantity: number;
     price: Decimal;
-    product: { id: string; name: string };
+    product: { id: string; name: string; category?: { id: string; name: string } | null };
   }>;
   payments: Array<{
     id: string;
@@ -46,7 +46,9 @@ type OrderWithComputedFields = OrderWithRelations & {
 };
 
 const ORDER_INCLUDE = {
-  orderItems: { include: { product: { select: { id: true, name: true, stock: true } } } },
+  orderItems: {
+    include: { product: { select: { id: true, name: true, stock: true, category: { select: { id: true, name: true } } } } },
+  },
   payments: true,
   customer: { select: { id: true, name: true } },
   user: { select: { id: true, name: true, email: true } },
