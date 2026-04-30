@@ -48,6 +48,7 @@ const menuItems: MenuProps["items"] = [
     children: [
       { key: "/orders", label: "Listado" },
       { key: "/orders/calculator", label: "Nueva orden" },
+      { key: "/orders/metrics", label: "Métricas" },
     ],
   },
   { key: "/prices", icon: <DollarOutlined />, label: "Precios" },

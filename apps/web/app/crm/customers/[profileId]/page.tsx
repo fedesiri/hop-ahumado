@@ -390,14 +390,31 @@ export default function CrmCustomerDetailPage() {
   };
   const compareMonthALabel = compareMonthA ? formatMonthEs(compareMonthA) : "Mes A";
   const compareMonthBLabel = compareMonthB ? formatMonthEs(compareMonthB) : "Mes B";
-  const itemBarData = useMemo(
-    () =>
-      itemBreakdown.slice(0, isMobile ? 6 : 10).map((row) => ({
-        ...row,
-        shortName: row.name.length > (isMobile ? 14 : 24) ? `${row.name.slice(0, isMobile ? 14 : 24)}…` : row.name,
-      })),
-    [itemBreakdown, isMobile],
-  );
+  const itemBarData = useMemo(() => itemBreakdown.slice(0, isMobile ? 6 : 10), [itemBreakdown, isMobile]);
+
+  const crmItemsBarMinWidthPx = useMemo(() => {
+    if (!isMobile || itemBarData.length === 0) return null as number | null;
+    const longest = itemBarData.reduce((m, r) => Math.max(m, r.name?.length ?? 0), 8);
+    return Math.min(780, Math.max(300, longest * 6.5 + 200));
+  }, [isMobile, itemBarData]);
+
+  const crmItemsYAxisWidth = useMemo(() => {
+    const longest = itemBarData.reduce((m, r) => Math.max(m, r.name?.length ?? 0), 8);
+    if (!isMobile) return Math.min(200, longest * 5.5 + 24);
+    return Math.min(300, Math.max(120, longest * 6));
+  }, [isMobile, itemBarData]);
+
+  const monthlyBarMinWidthPx = useMemo(() => {
+    if (!isMobile || monthlyOrdersSeries.length === 0) return null as number | null;
+    return Math.min(980, Math.max(300, monthlyOrdersSeries.length * 52 + 40));
+  }, [isMobile, monthlyOrdersSeries]);
+
+  const comparisonBarMinWidthPx = useMemo(() => {
+    if (!isMobile || itemComparisonByMonth.length === 0) return null as number | null;
+    const n = itemComparisonByMonth.length;
+    const longest = itemComparisonByMonth.reduce((m, r) => Math.max(m, r.name?.length ?? 0), 6);
+    return Math.min(900, Math.max(320, n * 64 + longest * 4 + 40));
+  }, [isMobile, itemComparisonByMonth]);
   const orderHistoryColumns = useMemo(() => {
     if (isMobile) {
       return [
@@ -737,35 +754,58 @@ export default function CrmCustomerDetailPage() {
                 </Card>
 
                 <Card title="Ítems más pedidos (unidades acumuladas)">
-                  <div style={{ width: "100%", height: isMobile ? 280 : 260 }}>
-                    <ResponsiveContainer>
-                      <BarChart data={itemBarData} layout="vertical" margin={{ left: isMobile ? 4 : 20, right: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                        <XAxis type="number" stroke="#9ca3af" allowDecimals={false} />
-                        <YAxis
-                          type="category"
-                          dataKey="shortName"
-                          stroke="#9ca3af"
-                          width={isMobile ? 92 : 140}
-                          interval={0}
-                        />
-                        <Tooltip />
-                        <Bar dataKey="value" name="Unidades" fill="#22c55e" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <div
+                    style={{
+                      overflowX: isMobile ? "auto" : undefined,
+                      WebkitOverflowScrolling: "touch",
+                      width: "100%",
+                    }}
+                  >
+                    <div style={{ height: isMobile ? 280 : 260, minWidth: crmItemsBarMinWidthPx ?? "100%" }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={itemBarData} layout="vertical" margin={{ left: isMobile ? 12 : 20, right: 16 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                          <XAxis type="number" stroke="#9ca3af" allowDecimals={false} />
+                          <YAxis
+                            type="category"
+                            dataKey="name"
+                            stroke="#9ca3af"
+                            width={crmItemsYAxisWidth}
+                            interval={0}
+                            tick={{ fill: "#9ca3af", fontSize: isMobile ? 11 : 12 }}
+                          />
+                          <Tooltip />
+                          <Bar dataKey="value" name="Unidades" fill="#22c55e" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 </Card>
 
                 <Card title="Pedidos por mes (últimos 12 meses con pedidos)">
-                  <div style={{ width: "100%", height: isMobile ? 220 : 260 }}>
-                    <ResponsiveContainer>
-                      <BarChart data={monthlyOrdersSeries}>
-                        <XAxis dataKey="month" stroke="#9ca3af" />
-                        <YAxis stroke="#9ca3af" allowDecimals={false} />
-                        <Tooltip />
-                        <Bar dataKey="count" name="Pedidos" fill="#60a5fa" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <div
+                    style={{
+                      overflowX: isMobile ? "auto" : undefined,
+                      WebkitOverflowScrolling: "touch",
+                      width: "100%",
+                    }}
+                  >
+                    <div style={{ height: isMobile ? 220 : 260, minWidth: monthlyBarMinWidthPx ?? "100%" }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={monthlyOrdersSeries} margin={{ bottom: isMobile ? 16 : 8 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                          <XAxis
+                            dataKey="month"
+                            stroke="#9ca3af"
+                            tick={{ fill: "#9ca3af", fontSize: isMobile ? 10 : 12 }}
+                            interval={isMobile ? 0 : undefined}
+                          />
+                          <YAxis stroke="#9ca3af" allowDecimals={false} />
+                          <Tooltip />
+                          <Bar dataKey="count" name="Pedidos" fill="#60a5fa" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 </Card>
 
@@ -803,33 +843,45 @@ export default function CrmCustomerDetailPage() {
                         </span>
                       </Space>
                     ) : null}
-                    <div style={{ width: "100%", height: isMobile ? 260 : 300 }}>
-                      <ResponsiveContainer>
-                        <BarChart data={itemComparisonByMonth}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                          <XAxis
-                            dataKey="name"
-                            stroke="#9ca3af"
-                            interval={0}
-                            angle={isMobile ? -35 : -20}
-                            textAnchor="end"
-                            height={isMobile ? 84 : 70}
-                          />
-                          <YAxis stroke="#9ca3af" allowDecimals={false} />
-                          <Tooltip />
-                          <Legend />
-                          <Bar
-                            dataKey="monthA"
-                            name={compareMonthA ? dayjs(`${compareMonthA}-01`).format("MM/YYYY") : "Mes A"}
-                            fill="#60a5fa"
-                          />
-                          <Bar
-                            dataKey="monthB"
-                            name={compareMonthB ? dayjs(`${compareMonthB}-01`).format("MM/YYYY") : "Mes B"}
-                            fill="#f59e0b"
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
+                    <div
+                      style={{
+                        overflowX: isMobile ? "auto" : undefined,
+                        WebkitOverflowScrolling: "touch",
+                        width: "100%",
+                      }}
+                    >
+                      <div style={{ height: isMobile ? 280 : 300, minWidth: comparisonBarMinWidthPx ?? "100%" }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={itemComparisonByMonth}
+                            margin={{ left: 4, right: 8, top: 8, bottom: isMobile ? 112 : 64 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                            <XAxis
+                              dataKey="name"
+                              stroke="#9ca3af"
+                              interval={0}
+                              angle={isMobile ? -42 : -20}
+                              textAnchor="end"
+                              height={isMobile ? 110 : 72}
+                              tick={{ fill: "#9ca3af", fontSize: isMobile ? 9 : 12 }}
+                            />
+                            <YAxis stroke="#9ca3af" allowDecimals={false} tick={{ fill: "#9ca3af", fontSize: 11 }} />
+                            <Tooltip />
+                            <Legend wrapperStyle={{ fontSize: isMobile ? 11 : undefined }} />
+                            <Bar
+                              dataKey="monthA"
+                              name={compareMonthA ? dayjs(`${compareMonthA}-01`).format("MM/YYYY") : "Mes A"}
+                              fill="#60a5fa"
+                            />
+                            <Bar
+                              dataKey="monthB"
+                              name={compareMonthB ? dayjs(`${compareMonthB}-01`).format("MM/YYYY") : "Mes B"}
+                              fill="#f59e0b"
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                   </Space>
                 </Card>

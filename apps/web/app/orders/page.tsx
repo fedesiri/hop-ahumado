@@ -338,11 +338,20 @@ function OrdersContent() {
         }}
       >
         <h1 style={{ margin: 0, color: "#ffffff" }}>Órdenes</h1>
-        <Link href="/orders/calculator" style={isMobile ? { width: "100%" } : undefined}>
-          <Button type="primary" block={isMobile}>
-            Nueva orden (cargar productos)
-          </Button>
-        </Link>
+        <Space
+          wrap={!isMobile}
+          direction={isMobile ? "vertical" : "horizontal"}
+          style={isMobile ? { width: "100%" } : undefined}
+        >
+          <Link href="/orders/calculator" style={isMobile ? { width: "100%" } : undefined}>
+            <Button type="primary" block={isMobile}>
+              Nueva orden (cargar productos)
+            </Button>
+          </Link>
+          <Link href="/orders/metrics" style={isMobile ? { width: "100%" } : undefined}>
+            <Button block={isMobile}>Métricas</Button>
+          </Link>
+        </Space>
       </div>
 
       <ScreenInfoPanel title="Dónde están los productos al armar un pedido">
