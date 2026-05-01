@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { CustomerInteraction } from "@prisma/client";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
@@ -11,11 +12,14 @@ type CustomerInteractionWithProfile = CustomerInteraction & {
 
 @Injectable()
 export class CustomerInteractionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async create(dto: CreateCustomerInteractionDto) {
     await this.validateProfileExists(dto.profileId);
-    return this.prisma.customerInteraction.create({
+    const interaction = await this.prisma.customerInteraction.create({
       data: {
         profileId: dto.profileId,
         channel: dto.channel ?? undefined,
@@ -33,6 +37,12 @@ export class CustomerInteractionService {
         },
       },
     });
+    this.eventEmitter.emit("crm.interaction_created", {
+      profileId: dto.profileId,
+      customerName: interaction.profile.customer.name,
+      interactionId: interaction.id,
+    });
+    return interaction;
   }
 
   async findAll(

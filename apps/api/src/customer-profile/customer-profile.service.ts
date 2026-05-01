@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { CustomerProfile } from "@prisma/client";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
@@ -12,7 +13,10 @@ type CustomerProfileWithRelations = CustomerProfile & {
 
 @Injectable()
 export class CustomerProfileService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   /** Crea un perfil mínimo si el cliente no tenía uno (p. ej. tras el primer pedido). Idempotente. */
   async ensureProfileForCustomer(customerId: string): Promise<CustomerProfile> {
@@ -35,10 +39,18 @@ export class CustomerProfileService {
       await this.validateUserExists(dto.responsibleId);
     }
     const data = this.mapCreateDtoToPrisma(dto);
-    return this.prisma.customerProfile.create({
+    const row = await this.prisma.customerProfile.create({
       data,
       include: { customer: true, responsible: true },
     });
+    if (dto.responsibleId) {
+      this.eventEmitter.emit("crm.opportunity_assigned", {
+        profileId: row.id,
+        customerName: row.customer.name,
+        assignedUserId: dto.responsibleId,
+      });
+    }
+    return row;
   }
 
   async findAll(
@@ -76,7 +88,7 @@ export class CustomerProfileService {
   }
 
   async update(id: string, dto: UpdateCustomerProfileDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
     if (dto.customerId !== undefined) {
       await this.validateCustomerExists(dto.customerId);
       await this.validateCustomerHasNoProfile(dto.customerId, id);
@@ -85,11 +97,22 @@ export class CustomerProfileService {
       await this.validateUserExists(dto.responsibleId);
     }
     const data = this.mapUpdateDtoToPrisma(dto);
-    return this.prisma.customerProfile.update({
+    const updated = await this.prisma.customerProfile.update({
       where: { id },
       data,
       include: { customer: true, responsible: true },
     });
+    const assignedNew =
+      dto.responsibleId !== undefined && !!dto.responsibleId && dto.responsibleId !== existing.responsibleId;
+    if (assignedNew && dto.responsibleId) {
+      this.eventEmitter.emit("crm.opportunity_assigned", {
+        profileId: id,
+        customerName: updated.customer.name,
+        opportunityId: undefined,
+        assignedUserId: dto.responsibleId,
+      });
+    }
+    return updated;
   }
 
   async remove(id: string) {

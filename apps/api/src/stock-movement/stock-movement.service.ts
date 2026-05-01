@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { StockMovement, StockMovementType } from "@prisma/client";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { InventoryService } from "../inventory/inventory.service";
@@ -19,7 +20,53 @@ export class StockMovementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  private notifyStockObservers(
+    product: { id: string; name: string },
+    priorTotalStock: number,
+    resultingStock: number,
+    dto: CreateStockMovementDto,
+  ): void {
+    if (dto.type === StockMovementType.TRANSFER) return;
+
+    const lowThreshold = Number(process.env.STOCK_LOW_THRESHOLD_QUANTITY ?? 10);
+    const qtyAbs = dto.type === StockMovementType.ADJUSTMENT ? Math.abs(dto.quantity) : dto.quantity;
+
+    if (resultingStock <= 0) {
+      this.eventEmitter.emit("stock.out", {
+        productId: product.id,
+        productName: product.name,
+        quantity: resultingStock,
+      });
+    } else if (resultingStock <= lowThreshold) {
+      this.eventEmitter.emit("stock.low", {
+        productId: product.id,
+        productName: product.name,
+        quantity: resultingStock,
+      });
+    }
+
+    const absMin = Number(process.env.STOCK_ATYPICAL_MIN_ABSOLUTE ?? 100);
+    const fracMin = Number(process.env.STOCK_ATYPICAL_MIN_FRACTION_OF_STOCK ?? 0.35);
+    const largeAbsolute = qtyAbs >= absMin;
+    const largeVsPrior = priorTotalStock > 0 && qtyAbs / priorTotalStock >= fracMin;
+    const movable =
+      dto.type === StockMovementType.OUT ||
+      dto.type === StockMovementType.IN ||
+      dto.type === StockMovementType.ADJUSTMENT;
+    if (movable && (largeAbsolute || largeVsPrior)) {
+      this.eventEmitter.emit("stock.atypical_movement", {
+        productId: product.id,
+        productName: product.name,
+        movementQuantity: qtyAbs,
+        movementType: dto.type,
+        priorStock: priorTotalStock,
+        newStock: resultingStock,
+      });
+    }
+  }
 
   async create(dto: CreateStockMovementDto) {
     if (dto.type === StockMovementType.TRANSFER) {
@@ -43,7 +90,7 @@ export class StockMovementService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const movement = await this.prisma.$transaction(async (tx) => {
       const product = await tx.product.findUnique({
         where: { id: dto.productId },
         select: { id: true, name: true, stock: true },
@@ -51,6 +98,7 @@ export class StockMovementService {
       if (!product) {
         throw new BadRequestException(`Producto con id "${dto.productId}" no encontrado`);
       }
+      const priorTotalStock = product.stock;
 
       if (dto.type === StockMovementType.TRANSFER) {
         const fromId = dto.fromLocationId!;
@@ -77,8 +125,12 @@ export class StockMovementService {
           select: { stock: true },
         });
         return {
-          ...movement,
-          product: { ...movement.product, stock: p!.stock },
+          movement: {
+            ...movement,
+            product: { ...movement.product, stock: p!.stock },
+          },
+          priorTotalStock,
+          productMeta: { id: product.id, name: product.name },
         };
       }
 
@@ -119,10 +171,18 @@ export class StockMovementService {
         select: { stock: true },
       });
       return {
-        ...movement,
-        product: { ...movement.product, stock: p!.stock },
+        movement: {
+          ...movement,
+          product: { ...movement.product, stock: p!.stock },
+        },
+        priorTotalStock,
+        productMeta: { id: product.id, name: product.name },
       };
     });
+
+    const m = movement.movement as StockMovementWithProduct & { product: { stock: number } };
+    this.notifyStockObservers(movement.productMeta, movement.priorTotalStock, m.product.stock, dto);
+    return m;
   }
 
   async findAll(

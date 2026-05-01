@@ -556,6 +556,22 @@ export interface UpdateOrderRequest {
   items?: CreateOrderItemRequest[];
 }
 
+/** Fila API `GET /notifications` (campo `id` = NotificationRecipient para marcar leído). */
+export interface UserNotificationRow {
+  id: string;
+  readAt: string | null;
+  notificationId: string;
+  eventType: string;
+  message: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+}
+
+export interface NotificationsListResponse extends PaginatedResponse<UserNotificationRow> {
+  unreadCount: number;
+}
+
 // Context types for line selection
 export interface LineContext {
   selectedLine: BusinessLine | null;
