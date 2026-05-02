@@ -4,7 +4,7 @@ import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import dayjs from "@/lib/dayjs";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
-import type { Expense, Order, Product, TreasuryBaseline } from "@/lib/types";
+import { OrderPaymentStatus, type Expense, type Order, type Product, type TreasuryBaseline } from "@/lib/types";
 import {
   AlertOutlined,
   ApiOutlined,
@@ -148,14 +148,15 @@ export function Dashboard() {
       setRawExpenses(allExpenses);
 
       const lowStock = productsRes.data.filter(
-        (p) => p.stock < 10 && !isPromoGiftComboName(p.name),
+        (p) => p.stock < 12 && !isPromoGiftComboName(p.name),
       );
       const todayStart = startOfLocalDay(new Date());
       const recentOrders = allOrders
         .filter((order) => {
-          if (order.isDelivered) return false;
           if (!order.deliveryDate) return false;
-          return startOfLocalDay(new Date(order.deliveryDate)).getTime() >= todayStart.getTime();
+          if (startOfLocalDay(new Date(order.deliveryDate)).getTime() < todayStart.getTime()) return false;
+          if (order.isDelivered && order.paymentStatus === OrderPaymentStatus.PAID) return false;
+          return true;
         })
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 5);
@@ -388,7 +389,7 @@ export function Dashboard() {
                   />
                 ) : (
                   <Empty
-                    description="No hay entregas pendientes con fecha hoy o futura"
+                    description="No hay entregas pendientes (sin entregar o entregadas e impagas) con fecha de entrega hoy o futura"
                     style={{ color: "#9ca3af" }}
                   />
                 )}
