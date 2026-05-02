@@ -1,11 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCustomerOpportunityDto } from "./dto/create-customer-opportunity.dto";
 import { UpdateCustomerOpportunityDto } from "./dto/update-customer-opportunity.dto";
 
 @Injectable()
 export class CustomerOpportunityService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async create(dto: CreateCustomerOpportunityDto) {
     await this.validateProfileExists(dto.customerProfileId);
@@ -15,7 +19,7 @@ export class CustomerOpportunityService {
     if (existing) {
       throw new BadRequestException(`Ya existe una oportunidad para el perfil con id "${dto.customerProfileId}"`);
     }
-    return this.prisma.customerOpportunity.create({
+    const row = await this.prisma.customerOpportunity.create({
       data: {
         customerProfileId: dto.customerProfileId,
         stage: dto.stage ?? undefined,
@@ -23,8 +27,17 @@ export class CustomerOpportunityService {
         expectedClosingDate: dto.expectedClosingDate ? new Date(dto.expectedClosingDate) : undefined,
         notes: dto.notes ?? undefined,
       },
-      include: { customerProfile: { include: { customer: true } } },
+      include: {
+        customerProfile: { include: { customer: true, responsible: true } },
+      },
     });
+    this.eventEmitter.emit("crm.opportunity_assigned", {
+      profileId: row.customerProfileId,
+      customerName: row.customerProfile.customer.name,
+      opportunityId: row.id,
+      assignedUserId: row.customerProfile.responsibleId,
+    });
+    return row;
   }
 
   async findByProfileId(profileId: string) {

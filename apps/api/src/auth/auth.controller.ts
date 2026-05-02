@@ -1,6 +1,7 @@
 import { Controller, Get, Req, UnauthorizedException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { firebaseAdmin } from "./firebase-admin";
+import { upsertAppUserFromFirebase } from "./resolve-request-user";
 
 function getBearerToken(header: string | undefined) {
   if (!header) return undefined;
@@ -23,17 +24,7 @@ export class AuthController {
     if (!idToken) throw new UnauthorizedException("Missing bearer token");
 
     const decoded = await firebaseAdmin.auth().verifyIdToken(idToken, true);
-    const email = decoded.email;
-    if (!email) throw new UnauthorizedException("Sesión inválida");
-
-    const name = decoded.name ?? email.split("@")[0];
-
-    // Aseguramos que el usuario exista en DB para que el frontend tenga un id estable.
-    const user = await this.prisma.user.upsert({
-      where: { email },
-      update: { name },
-      create: { email, name },
-    });
+    const user = await upsertAppUserFromFirebase(this.prisma, decoded);
 
     return {
       ok: true,

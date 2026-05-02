@@ -6,6 +6,7 @@ import { Flower2 } from "lucide-react";
 import React, { useState } from "react";
 import { AppSidebar, ToggleSidebarButton } from "./app-sidebar";
 import { UserMenu } from "./auth/user-menu";
+import { NotificationsBell } from "./notifications-bell";
 
 const { Header, Content } = Layout;
 
@@ -88,6 +89,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <NotificationsBell />
             <UserMenu />
           </div>
         </Header>

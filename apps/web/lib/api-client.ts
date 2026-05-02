@@ -26,6 +26,7 @@ import type {
   DistributorSuggestedOrderResponse,
   Expense,
   HealthResponse,
+  NotificationsListResponse,
   Order,
   PaginatedResponse,
   Price,
@@ -621,6 +622,21 @@ export class ApiClient {
 
   async deleteOrder(id: string): Promise<void> {
     return this.request(`/orders/${id}`, { method: "DELETE" });
+  }
+
+  // Notifications
+  async getNotifications(page = 1, limit = 20, unreadOnly?: boolean): Promise<NotificationsListResponse> {
+    return this.request(`/notifications${this.buildParams({ page, limit, unreadOnly })}`);
+  }
+
+  async markNotificationRead(recipientId: string): Promise<{ ok: boolean }> {
+    return this.request(`/notifications/${encodeURIComponent(recipientId)}/read`, {
+      method: "PATCH",
+    });
+  }
+
+  async markAllNotificationsRead(): Promise<{ updated: number }> {
+    return this.request(`/notifications/read-all`, { method: "PATCH" });
   }
 }
 

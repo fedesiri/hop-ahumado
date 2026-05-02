@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
+import { EventEmitterModule } from "@nestjs/event-emitter";
+import { ScheduleModule } from "@nestjs/schedule";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { AuthModule } from "./auth/auth.module";
@@ -7,13 +9,14 @@ import { FirebaseAuthGuard } from "./auth/firebase-auth.guard";
 import { CategoryModule } from "./category/category.module";
 import { CostModule } from "./cost/cost.module";
 import { CrmModule } from "./crm/crm.module";
-import { DistributorSuggestedOrderModule } from "./distributor-suggested-order/distributor-suggested-order.module";
 import { CustomerInteractionModule } from "./customer-interaction/customer-interaction.module";
 import { CustomerOpportunityModule } from "./customer-opportunity/customer-opportunity.module";
 import { CustomerProfileModule } from "./customer-profile/customer-profile.module";
 import { CustomerModule } from "./customer/customer.module";
+import { DistributorSuggestedOrderModule } from "./distributor-suggested-order/distributor-suggested-order.module";
 import { ExpenseModule } from "./expense/expense.module";
 import { InventoryModule } from "./inventory/inventory.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 import { OrderModule } from "./order/order.module";
 import { PriceModule } from "./price/price.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -26,6 +29,8 @@ import { UserModule } from "./user/user.module";
 
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     PrismaModule,
     InventoryModule,
     AuthModule,
@@ -46,6 +51,7 @@ import { UserModule } from "./user/user.module";
     StockLocationModule,
     RecipeItemModule,
     TreasuryModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

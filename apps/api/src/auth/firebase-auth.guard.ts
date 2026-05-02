@@ -1,6 +1,9 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import type { Request } from "express";
+import type { DecodedIdToken } from "firebase-admin/auth";
 import { firebaseAdmin } from "./firebase-admin";
+
+export type FirebaseRequest = Request & { firebaseUser?: DecodedIdToken };
 
 function getBearerToken(header: string | undefined) {
   if (!header) return undefined;
@@ -29,7 +32,7 @@ export class FirebaseAuthGuard implements CanActivate {
     if (!idToken) throw new UnauthorizedException("Missing bearer token");
 
     const decoded = await firebaseAdmin.auth().verifyIdToken(idToken, true);
-    (request as Request & { firebaseUser?: unknown }).firebaseUser = decoded;
+    (request as FirebaseRequest).firebaseUser = decoded;
     return true;
   }
 }
