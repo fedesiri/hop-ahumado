@@ -221,6 +221,7 @@ export interface Price {
   description?: string | null;
   createdAt: string;
   updatedAt: string;
+  deactivatedAt?: string | null;
   product?: Product;
 }
 
@@ -459,6 +460,21 @@ export interface CreatePriceRequest {
 export interface UpdatePriceRequest {
   value?: number;
   description?: string;
+}
+
+/** Archiva el precio actual y crea uno nuevo (misma lista/description). */
+export interface ReplacePriceRequest {
+  value: number;
+}
+
+export interface BulkReplacePriceRequest {
+  priceIds: string[];
+  value: number;
+}
+
+export interface BulkReplacePriceResponse {
+  count: number;
+  prices: Price[];
 }
 
 export interface CreateCostRequest {

@@ -28,6 +28,8 @@ import type {
   HealthResponse,
   NotificationsListResponse,
   Order,
+  BulkReplacePriceRequest,
+  BulkReplacePriceResponse,
   PaginatedResponse,
   Price,
   Product,
@@ -35,6 +37,7 @@ import type {
   BulkReplaceCostRequest,
   BulkReplaceCostResponse,
   ReplaceCostRequest,
+  ReplacePriceRequest,
   StockBalanceRow,
   StockLocation,
   StockMovement,
@@ -372,13 +375,22 @@ export class ApiClient {
   }
 
   // Prices
-  async getPrices(page = 1, limit = 10, productId?: string, activeOnly = false): Promise<PaginatedResponse<Price>> {
+  async getPrices(
+    page = 1,
+    limit = 10,
+    productId?: string,
+    activeOnly = false,
+    search?: string,
+    listType?: "mayorista" | "minorista" | "fabrica",
+  ): Promise<PaginatedResponse<Price>> {
     return this.request(
       `/prices${this.buildParams({
         page,
         limit,
         productId,
         activeOnly: activeOnly ? "true" : undefined,
+        search: search?.trim() ? search.trim() : undefined,
+        listType,
       })}`,
     );
   }
@@ -397,6 +409,20 @@ export class ApiClient {
   async updatePrice(id: string, data: UpdatePriceRequest): Promise<Price> {
     return this.request(`/prices/${id}`, {
       method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async replacePrice(id: string, data: ReplacePriceRequest): Promise<Price> {
+    return this.request(`/prices/${id}/replace`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async bulkReplacePrices(data: BulkReplacePriceRequest): Promise<BulkReplacePriceResponse> {
+    return this.request("/prices/bulk-replace", {
+      method: "POST",
       body: JSON.stringify(data),
     });
   }
