@@ -32,6 +32,9 @@ import type {
   Price,
   Product,
   RecipeItem,
+  BulkReplaceCostRequest,
+  BulkReplaceCostResponse,
+  ReplaceCostRequest,
   StockBalanceRow,
   StockLocation,
   StockMovement,
@@ -403,13 +406,20 @@ export class ApiClient {
   }
 
   // Costs
-  async getCosts(page = 1, limit = 10, productId?: string, activeOnly = false): Promise<PaginatedResponse<Cost>> {
+  async getCosts(
+    page = 1,
+    limit = 10,
+    productId?: string,
+    activeOnly = false,
+    search?: string,
+  ): Promise<PaginatedResponse<Cost>> {
     return this.request(
       `/costs${this.buildParams({
         page,
         limit,
         productId,
         activeOnly: activeOnly ? "true" : undefined,
+        search: search?.trim() ? search.trim() : undefined,
       })}`,
     );
   }
@@ -428,6 +438,22 @@ export class ApiClient {
   async updateCost(id: string, data: UpdateCostRequest): Promise<Cost> {
     return this.request(`/costs/${id}`, {
       method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  /** Archiva el costo actual y crea uno nuevo para el mismo producto (historial preservado). */
+  async replaceCost(id: string, data: ReplaceCostRequest): Promise<Cost> {
+    return this.request(`/costs/${id}/replace`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  /** Mismo valor nuevo para varios productos: archiva cada costo seleccionado y crea uno activo por producto. */
+  async bulkReplaceCosts(data: BulkReplaceCostRequest): Promise<BulkReplaceCostResponse> {
+    return this.request("/costs/bulk-replace", {
+      method: "POST",
       body: JSON.stringify(data),
     });
   }
