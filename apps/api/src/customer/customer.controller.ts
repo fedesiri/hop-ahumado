@@ -1,7 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { PaginationQueryDto, toLimit, toPage } from "../common/pagination";
+import { toLimit, toPage } from "../common/pagination";
 import { CustomerService } from "./customer.service";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
+import { GetCustomersQueryDto } from "./dto/get-customers-query.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
 
 @Controller("customers")
@@ -14,8 +15,8 @@ export class CustomerController {
   }
 
   @Get()
-  findAll(@Query() query: PaginationQueryDto) {
-    return this.customerService.findAll(toPage(query), toLimit(query));
+  findAll(@Query() query: GetCustomersQueryDto) {
+    return this.customerService.findAll(toPage(query), toLimit(query), query.search);
   }
 
   @Get(":id")

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Customer } from "@prisma/client";
+import { Customer, Prisma } from "@prisma/client";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
@@ -18,15 +18,36 @@ export class CustomerService {
   async findAll(
     page: number = PAGINATION.defaultPage,
     limit: number = PAGINATION.defaultLimit,
+    search?: string,
   ): Promise<PaginatedResponse<Customer>> {
     const skip = (page - 1) * limit;
+    const searchTrim = search?.trim();
+    const where: Prisma.CustomerWhereInput = searchTrim
+      ? {
+          OR: [
+            { name: { contains: searchTrim, mode: "insensitive" } },
+            {
+              profile: {
+                is: {
+                  OR: [
+                    { contactName: { contains: searchTrim, mode: "insensitive" } },
+                    { email: { contains: searchTrim, mode: "insensitive" } },
+                    { phone: { contains: searchTrim, mode: "insensitive" } },
+                  ],
+                },
+              },
+            },
+          ],
+        }
+      : {};
     const [data, total] = await Promise.all([
       this.prisma.customer.findMany({
+        where,
         orderBy: { name: "asc" },
         skip,
         take: limit,
       }),
-      this.prisma.customer.count(),
+      this.prisma.customer.count({ where }),
     ]);
     return buildPaginatedResponse(data, total, page, limit);
   }

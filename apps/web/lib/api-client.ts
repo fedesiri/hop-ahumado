@@ -191,8 +191,9 @@ export class ApiClient {
   }
 
   // Customers
-  async getCustomers(page = 1, limit = 10): Promise<PaginatedResponse<Customer>> {
-    return this.request(`/customers${this.buildParams({ page, limit })}`);
+  async getCustomers(page = 1, limit = 10, search?: string): Promise<PaginatedResponse<Customer>> {
+    const q = search?.trim();
+    return this.request(`/customers${this.buildParams({ page, limit, search: q || undefined })}`);
   }
 
   async getCustomer(id: string): Promise<Customer> {

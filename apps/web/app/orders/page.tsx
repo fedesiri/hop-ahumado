@@ -10,7 +10,7 @@ import { LineProvider } from "@/lib/line-context";
 import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
 import { buildOrderClipboardText } from "@/lib/order-clipboard";
 import { formatPaymentMethodsOnly, orderPaymentStatusLabel } from "@/lib/order-labels";
-import { OrderPaymentStatus, type Customer, type Order, type OrderItem, type User } from "@/lib/types";
+import { OrderPaymentStatus, type Order, type OrderItem, type User } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import {
@@ -32,7 +32,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function OrdersPage() {
   return (
@@ -48,7 +48,9 @@ function OrdersContent() {
   const { message, modal } = App.useApp();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [orders, setOrders] = useState<Order[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerFilterOptions, setCustomerFilterOptions] = useState<{ label: string; value: string }[]>([]);
+  const [customerFilterLoading, setCustomerFilterLoading] = useState(false);
+  const customerSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
@@ -65,9 +67,22 @@ function OrdersContent() {
   const [filterPaymentStatus, setFilterPaymentStatus] = useState<OrderPaymentStatus | undefined>(undefined);
   const [filterDelivered, setFilterDelivered] = useState<"true" | "false" | undefined>(undefined);
 
+  const loadCustomerFilterOptions = async (search: string) => {
+    try {
+      setCustomerFilterLoading(true);
+      const trimmed = search.trim();
+      const res = await apiClient.getCustomers(1, 50, trimmed || undefined);
+      setCustomerFilterOptions(res.data.map((c) => ({ label: c.name, value: c.id })));
+    } catch (error) {
+      message.error("Error al buscar clientes");
+      console.error(error);
+    } finally {
+      setCustomerFilterLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchOrders();
-    fetchRelatedData();
+    void fetchOrders();
   }, [
     pagination.page,
     pagination.limit,
@@ -79,6 +94,41 @@ function OrdersContent() {
     filterPaymentStatus,
     filterDelivered,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (customerSearchTimerRef.current) clearTimeout(customerSearchTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const usersRes = await apiClient.getUsers(1, 100);
+        setUsers(usersRes.data);
+      } catch (error) {
+        message.error("Error al cargar usuarios para filtros de órdenes");
+        console.error(error);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!filterCustomerId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const c = await apiClient.getCustomer(filterCustomerId);
+        if (cancelled) return;
+        setCustomerFilterOptions((prev) => (prev.some((o) => o.value === c.id) ? prev : [{ label: c.name, value: c.id }, ...prev]));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [filterCustomerId]);
 
   const fetchOrders = async () => {
     try {
@@ -102,17 +152,6 @@ function OrdersContent() {
       console.error(error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchRelatedData = async () => {
-    try {
-      const [customersRes, usersRes] = await Promise.all([apiClient.getCustomers(1, 100), apiClient.getUsers(1, 100)]);
-      setCustomers(customersRes.data);
-      setUsers(usersRes.data);
-    } catch (error) {
-      message.error("Error al cargar datos para filtros de órdenes");
-      console.error(error);
     }
   };
 
@@ -371,18 +410,24 @@ function OrdersContent() {
             <Select
               allowClear
               showSearch
-              placeholder="Filtrar por cliente"
+              filterOption={false}
+              loading={customerFilterLoading}
+              placeholder="Filtrar por cliente (buscar)"
               style={{ width: "100%" }}
               popupMatchSelectWidth={false}
               dropdownStyle={{ maxWidth: "min(100vw - 32px, 360px)" }}
-              optionFilterProp="label"
-              filterOption={(input, option) =>
-                String(option?.label ?? "")
-                  .toLowerCase()
-                  .includes(input.trim().toLowerCase())
-              }
               value={filterCustomerId}
-              options={customers.map((c) => ({ label: c.name, value: c.id }))}
+              options={customerFilterOptions}
+              onDropdownVisibleChange={(open) => {
+                if (open) void loadCustomerFilterOptions("");
+              }}
+              onSearch={(value) => {
+                if (customerSearchTimerRef.current) clearTimeout(customerSearchTimerRef.current);
+                customerSearchTimerRef.current = setTimeout(() => {
+                  customerSearchTimerRef.current = null;
+                  void loadCustomerFilterOptions(value);
+                }, 300);
+              }}
               onChange={(value) => {
                 setPagination((prev) => ({ ...prev, page: 1 }));
                 setFilterCustomerId(value || undefined);
