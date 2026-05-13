@@ -221,6 +221,7 @@ export interface Price {
   description?: string | null;
   createdAt: string;
   updatedAt: string;
+  deactivatedAt?: string | null;
   product?: Product;
 }
 
@@ -230,6 +231,8 @@ export interface Cost {
   value: number;
   createdAt: string;
   updatedAt: string;
+  /** Presente cuando el backend devuelve registros históricos (costo archivado). */
+  deactivatedAt?: string | null;
   product?: Product;
 }
 
@@ -459,6 +462,21 @@ export interface UpdatePriceRequest {
   description?: string;
 }
 
+/** Archiva el precio actual y crea uno nuevo (misma lista/description). */
+export interface ReplacePriceRequest {
+  value: number;
+}
+
+export interface BulkReplacePriceRequest {
+  priceIds: string[];
+  value: number;
+}
+
+export interface BulkReplacePriceResponse {
+  count: number;
+  prices: Price[];
+}
+
 export interface CreateCostRequest {
   productId: string;
   value: number;
@@ -472,6 +490,22 @@ export interface CreateExpenseRequest {
 
 export interface UpdateCostRequest {
   value?: number;
+}
+
+/** Reemplaza un costo activo: archiva el registro anterior y crea uno nuevo para el mismo producto. */
+export interface ReplaceCostRequest {
+  value: number;
+}
+
+/** Archiva los costos seleccionados y aplica el mismo valor nuevo por producto. */
+export interface BulkReplaceCostRequest {
+  costIds: string[];
+  value: number;
+}
+
+export interface BulkReplaceCostResponse {
+  count: number;
+  costs: Cost[];
 }
 
 export interface CreateStockMovementRequest {

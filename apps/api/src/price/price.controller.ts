@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { toLimit, toPage } from "../common/pagination";
+import { BulkReplacePriceDto } from "./dto/bulk-replace-price.dto";
 import { CreatePriceDto } from "./dto/create-price.dto";
 import { GetPricesQueryDto } from "./dto/get-prices-query.dto";
+import { ReplacePriceDto } from "./dto/replace-price.dto";
 import { UpdatePriceDto } from "./dto/update-price.dto";
 import { PriceService } from "./price.service";
 
@@ -14,10 +16,27 @@ export class PriceController {
     return this.priceService.create(dto);
   }
 
+  @Post("bulk-replace")
+  bulkReplace(@Body() dto: BulkReplacePriceDto) {
+    return this.priceService.bulkReplace(dto);
+  }
+
+  @Post(":id/replace")
+  replace(@Param("id") id: string, @Body() dto: ReplacePriceDto) {
+    return this.priceService.replace(id, dto);
+  }
+
   @Get()
   findAll(@Query() query: GetPricesQueryDto) {
     const active = query.activeOnly === "true";
-    return this.priceService.findAll(toPage(query), toLimit(query), query.productId, active);
+    return this.priceService.findAll(
+      toPage(query),
+      toLimit(query),
+      query.productId,
+      active,
+      query.search,
+      query.listType?.trim() || undefined,
+    );
   }
 
   @Get(":id")

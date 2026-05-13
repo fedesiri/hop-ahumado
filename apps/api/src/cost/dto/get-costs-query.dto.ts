@@ -9,4 +9,9 @@ export class GetCostsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   activeOnly?: string;
+
+  /** Filtra por nombre de producto, SKU o código de barras (coincidencia parcial, sin distinguir mayúsculas). */
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
