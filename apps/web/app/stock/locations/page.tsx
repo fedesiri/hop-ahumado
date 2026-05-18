@@ -2,36 +2,13 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
+import { LocationStockModal } from "@/components/stock/location-stock-modal";
 import { apiClient } from "@/lib/api-client";
-import { formatQuantity } from "@/lib/format-currency";
 import { LineProvider } from "@/lib/line-context";
 import type { StockBalanceRow, StockLocation } from "@/lib/types";
-import { ProductUnit } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, SwapOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Checkbox,
-  Empty,
-  Form,
-  Input,
-  Modal,
-  Popconfirm,
-  Select,
-  Space,
-  Spin,
-  Table,
-  Tag,
-} from "antd";
+import { App, Button, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Spin, Table, Tag } from "antd";
 import { useCallback, useEffect, useState } from "react";
-
-const UNIT_SHORT_LABEL: Record<ProductUnit, string> = {
-  [ProductUnit.UNIT]: "un",
-  [ProductUnit.KG]: "kg",
-  [ProductUnit.G]: "gr",
-  [ProductUnit.L]: "l",
-  [ProductUnit.ML]: "ml",
-};
 
 export default function StockLocationsPage() {
   return (
@@ -76,6 +53,12 @@ function StockLocationsContent() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const closeView = () => {
+    setViewModalOpen(false);
+    setViewingLocation(null);
+    setViewBalances([]);
+  };
 
   const openView = async (loc: StockLocation) => {
     setViewingLocation(loc);
@@ -180,8 +163,6 @@ function StockLocationsContent() {
     }
   };
 
-  const nonzeroBalances = viewBalances.filter((r) => Math.abs(Number(r.quantity)) > 1e-6);
-
   return (
     <div>
       <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -202,8 +183,8 @@ function StockLocationsContent() {
             ej. 10,5 kg).
           </p>
           <p style={{ margin: 0 }}>
-            Podés <strong>traspasar todo el stock</strong> para consolidar depósitos. Solo podés eliminar una
-            ubicación si no tiene stock.
+            Podés <strong>traspasar todo el stock</strong> para consolidar depósitos. Solo podés eliminar una ubicación
+            si no tiene stock.
           </p>
         </div>
       </ScreenInfoPanel>
@@ -384,62 +365,13 @@ function StockLocationsContent() {
         </Form>
       </Modal>
 
-      <Modal
-        title={viewingLocation ? `Stock en «${viewingLocation.name}»` : "Stock por ubicación"}
+      <LocationStockModal
         open={viewModalOpen}
-        onCancel={() => {
-          setViewModalOpen(false);
-          setViewingLocation(null);
-          setViewBalances([]);
-        }}
-        footer={[
-          <Button
-            key="close"
-            type="primary"
-            onClick={() => {
-              setViewModalOpen(false);
-              setViewingLocation(null);
-              setViewBalances([]);
-            }}
-          >
-            Cerrar
-          </Button>,
-        ]}
-        width={720}
-      >
-        {viewLoading ? (
-          <Spin />
-        ) : nonzeroBalances.length === 0 ? (
-          <Empty description="No hay stock en esta ubicación (cantidades en cero o sin registros)" />
-        ) : (
-          <Table
-            size="small"
-            rowKey="id"
-            pagination={false}
-            dataSource={nonzeroBalances}
-            columns={[
-              {
-                title: "Producto",
-                key: "product",
-                render: (_: unknown, row: StockBalanceRow) => row.product?.name ?? row.productId,
-              },
-              {
-                title: "Cantidad",
-                key: "qty",
-                align: "right" as const,
-                render: (_: unknown, row: StockBalanceRow) => {
-                  const u = row.product?.unit ?? ProductUnit.UNIT;
-                  return (
-                    <span>
-                      {formatQuantity(row.quantity)} {UNIT_SHORT_LABEL[u] ?? ""}
-                    </span>
-                  );
-                },
-              },
-            ]}
-          />
-        )}
-      </Modal>
+        locationName={viewingLocation?.name ?? null}
+        loading={viewLoading}
+        balances={viewBalances}
+        onClose={closeView}
+      />
     </div>
   );
 }
