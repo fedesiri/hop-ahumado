@@ -15,7 +15,7 @@ export class StockMovementController {
 
   @Get()
   findAll(@Query() query: GetStockMovementsQueryDto) {
-    return this.stockMovementService.findAll(toPage(query), toLimit(query), query.productId);
+    return this.stockMovementService.findAll(toPage(query), toLimit(query), query.productId, query.businessLineId);
   }
 
   @Get(":id")

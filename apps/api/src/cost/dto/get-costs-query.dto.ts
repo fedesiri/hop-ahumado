@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from "class-validator";
+import { IsOptional, IsString, IsUUID } from "class-validator";
 import { PaginationQueryDto } from "../../common/pagination";
 
 export class GetCostsQueryDto extends PaginationQueryDto {
@@ -10,8 +10,11 @@ export class GetCostsQueryDto extends PaginationQueryDto {
   @IsString()
   activeOnly?: string;
 
-  /** Filtra por nombre de producto, SKU o código de barras (coincidencia parcial, sin distinguir mayúsculas). */
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsUUID("4", { message: "businessLineId debe ser un UUID válido" })
+  businessLineId?: string;
 }

@@ -17,7 +17,7 @@ export class ProductService {
 
   async create(dto: CreateProductDto) {
     if (dto.categoryId) {
-      await this.validateCategoryExists(dto.categoryId);
+      await this.validateCategoryExists(dto.categoryId, dto.businessLineId);
     }
     const data = this.mapCreateDtoToPrisma(dto);
     return this.prisma.$transaction(async (tx) => {
@@ -42,6 +42,7 @@ export class ProductService {
     limit: number = PAGINATION.defaultLimit,
     search?: string,
     categoryId?: string,
+    businessLineId?: string,
   ): Promise<PaginatedResponse<ProductWithCategory>> {
     const where: any = {};
 
@@ -71,6 +72,10 @@ export class ProductService {
 
     if (categoryId) {
       where.categoryId = categoryId;
+    }
+
+    if (businessLineId) {
+      where.businessLineId = businessLineId;
     }
 
     const skip = (page - 1) * limit;
@@ -150,17 +155,21 @@ export class ProductService {
     });
   }
 
-  private async validateCategoryExists(categoryId: string) {
+  private async validateCategoryExists(categoryId: string, businessLineId?: string) {
     const category = await this.prisma.category.findUnique({
       where: { id: categoryId },
     });
     if (!category) {
       throw new BadRequestException(`Categoría con id "${categoryId}" no encontrada`);
     }
+    if (businessLineId && category.businessLineId !== businessLineId) {
+      throw new BadRequestException(`La categoría no pertenece a la línea de negocio indicada`);
+    }
   }
 
   private mapCreateDtoToPrisma(dto: CreateProductDto) {
     return {
+      businessLineId: dto.businessLineId,
       name: dto.name,
       description: dto.description ?? undefined,
       categoryId: dto.categoryId ?? undefined,

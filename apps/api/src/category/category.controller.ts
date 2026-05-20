@@ -1,7 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { PaginationQueryDto, toLimit, toPage } from "../common/pagination";
+import { toLimit, toPage } from "../common/pagination";
 import { CategoryService } from "./category.service";
 import { CreateCategoryDto } from "./dto/create-category.dto";
+import { GetCategoriesQueryDto } from "./dto/get-categories-query.dto";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
 
 @Controller("categories")
@@ -14,8 +15,8 @@ export class CategoryController {
   }
 
   @Get()
-  findAll(@Query() query: PaginationQueryDto) {
-    return this.categoryService.findAll(toPage(query), toLimit(query));
+  findAll(@Query() query: GetCategoriesQueryDto) {
+    return this.categoryService.findAll(toPage(query), toLimit(query), query.businessLineId);
   }
 
   @Get(":id")

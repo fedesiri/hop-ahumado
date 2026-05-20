@@ -36,6 +36,7 @@ export class PriceController {
       active,
       query.search,
       query.listType?.trim() || undefined,
+      query.businessLineId,
     );
   }
 

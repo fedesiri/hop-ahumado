@@ -6,6 +6,7 @@ import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { AuthModule } from "./auth/auth.module";
 import { FirebaseAuthGuard } from "./auth/firebase-auth.guard";
+import { BusinessLineModule } from "./business-line/business-line.module";
 import { CategoryModule } from "./category/category.module";
 import { CostModule } from "./cost/cost.module";
 import { CrmModule } from "./crm/crm.module";
@@ -34,6 +35,7 @@ import { UserModule } from "./user/user.module";
     PrismaModule,
     InventoryModule,
     AuthModule,
+    BusinessLineModule,
     CategoryModule,
     ProductModule,
     UserModule,

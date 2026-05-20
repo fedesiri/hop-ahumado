@@ -7,6 +7,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model BusinessLine {
+  id         String   @id @default(uuid())
+  name       String
+  slug       String   @unique
+  createdAt  DateTime @default(now())
+
+  products   Product[]
+  expenses   Expense[]
+  categories Category[]
+  baselines  TreasuryBaseline[]
+}
+
 enum PaymentMethod {
   CASH
   CARD
@@ -132,10 +144,12 @@ model CustomerOpportunity {
 }
 
 model Category {
-  id   String @id @default(uuid())
-  name String
+  id             String @id @default(uuid())
+  name           String
+  businessLineId String
 
-  products Product[]
+  businessLine BusinessLine @relation(fields: [businessLineId], references: [id])
+  products     Product[]
 }
 
 model StockLocation {
@@ -174,7 +188,9 @@ model Product {
   stock            Float       @default(0)
   deactivationDate DateTime?
   createdAt        DateTime    @default(now())
+  businessLineId   String
 
+  businessLine   BusinessLine    @relation(fields: [businessLineId], references: [id])
   category       Category?       @relation(fields: [categoryId], references: [id])
   prices         Price[]
   costs          Cost[]
@@ -183,6 +199,8 @@ model Product {
   usedInRecipes  RecipeItem[]    @relation("recipe_ingredient")
   stockMovements StockMovement[]
   stockBalances  StockBalance[]
+
+  @@index([businessLineId])
 }
 
 model Price {
@@ -261,23 +279,30 @@ model Payment {
 }
 
 model Expense {
-  id          String        @id @default(uuid())
-  amount      Decimal
-  method      PaymentMethod
-  description String?
-  createdAt   DateTime      @default(now())
+  id             String        @id @default(uuid())
+  amount         Decimal
+  method         PaymentMethod
+  description    String?
+  createdAt      DateTime      @default(now())
+  businessLineId String
 
   // Se usa para agrupar splits (p.ej. efectivo + tarjeta) dentro de un mismo egreso.
-  groupId String @default(uuid())
+  groupId      String       @default(uuid())
+  businessLine BusinessLine @relation(fields: [businessLineId], references: [id])
+
+  @@index([businessLineId])
 }
 
-// Una sola fila: saldos iniciales de caja y desde cuándo sumar órdenes/gastos al movimiento del dashboard.
+// Una fila por línea de negocio: saldos iniciales de caja y desde cuándo sumar órdenes/gastos.
 model TreasuryBaseline {
-  id          String   @id @default("singleton")
-  openingCash Decimal  @default(0)
-  openingCard Decimal  @default(0)
-  deltaSince  DateTime
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(uuid())
+  openingCash    Decimal  @default(0)
+  openingCard    Decimal  @default(0)
+  deltaSince     DateTime
+  updatedAt      DateTime @updatedAt
+  businessLineId String   @unique
+
+  businessLine BusinessLine @relation(fields: [businessLineId], references: [id])
 }
 
 model StockMovement {

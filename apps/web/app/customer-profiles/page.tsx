@@ -4,7 +4,6 @@ import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import type { Dayjs } from "@/lib/dayjs";
 import dayjs from "@/lib/dayjs";
-import { LineProvider } from "@/lib/line-context";
 import type {
   CreateCustomerProfileRequest,
   Customer,
@@ -18,11 +17,9 @@ import { useEffect, useState } from "react";
 
 export default function CustomerProfilesPage() {
   return (
-    <LineProvider>
-      <AppLayout>
+    <AppLayout>
         <CustomerProfilesContent />
       </AppLayout>
-    </LineProvider>
   );
 }
 

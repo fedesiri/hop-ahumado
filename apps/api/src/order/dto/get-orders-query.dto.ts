@@ -1,8 +1,12 @@
-import { IsIn, IsNumberString, IsOptional, IsString } from "class-validator";
+import { IsIn, IsNumberString, IsOptional, IsString, IsUUID } from "class-validator";
 import { OrderPaymentStatus } from "../order-payment-status.enum";
 import { PaginationQueryDto } from "../../common/pagination";
 
 export class GetOrdersQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @IsUUID("4", { message: "businessLineId debe ser un UUID válido" })
+  businessLineId?: string;
+
   @IsOptional()
   @IsString()
   customerId?: string;

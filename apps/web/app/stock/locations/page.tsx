@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { LocationStockModal } from "@/components/stock/location-stock-modal";
 import { apiClient } from "@/lib/api-client";
-import { LineProvider } from "@/lib/line-context";
+import { useLineContext } from "@/lib/line-context";
 import type { StockBalanceRow, StockLocation } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, SwapOutlined } from "@ant-design/icons";
 import { App, Button, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Spin, Table, Tag } from "antd";
@@ -12,16 +12,15 @@ import { useCallback, useEffect, useState } from "react";
 
 export default function StockLocationsPage() {
   return (
-    <LineProvider>
-      <AppLayout>
-        <StockLocationsContent />
-      </AppLayout>
-    </LineProvider>
+    <AppLayout>
+      <StockLocationsContent />
+    </AppLayout>
   );
 }
 
 function StockLocationsContent() {
   const { message } = App.useApp();
+  const { selectedLineId } = useLineContext();
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -66,7 +65,7 @@ function StockLocationsContent() {
     setViewLoading(true);
     setViewBalances([]);
     try {
-      const rows = await apiClient.getStockBalancesAtLocation(loc.id);
+      const rows = await apiClient.getStockBalancesAtLocation(loc.id, selectedLineId ?? undefined);
       setViewBalances(rows);
     } catch {
       message.error("No se pudo cargar el stock de la ubicación");

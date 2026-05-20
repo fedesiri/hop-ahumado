@@ -25,21 +25,25 @@ export class CostService {
     productId?: string,
     activeOnly = false,
     search?: string,
+    businessLineId?: string,
   ): Promise<PaginatedResponse<Cost & { product: { id: string; name: string } }>> {
     const where: Prisma.CostWhereInput = {};
     if (productId) where.productId = productId;
     if (activeOnly) where.deactivatedAt = null;
 
+    const productFilter: Prisma.ProductWhereInput = {};
+    if (businessLineId) productFilter.businessLineId = businessLineId;
+
     const trimmed = search?.trim();
     if (trimmed) {
-      where.product = {
-        OR: [
-          { name: { contains: trimmed, mode: "insensitive" } },
-          { sku: { contains: trimmed, mode: "insensitive" } },
-          { barcode: { contains: trimmed, mode: "insensitive" } },
-        ],
-      };
+      productFilter.OR = [
+        { name: { contains: trimmed, mode: "insensitive" } },
+        { sku: { contains: trimmed, mode: "insensitive" } },
+        { barcode: { contains: trimmed, mode: "insensitive" } },
+      ];
     }
+
+    if (Object.keys(productFilter).length > 0) where.product = productFilter;
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
       this.prisma.cost.findMany({

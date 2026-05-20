@@ -6,7 +6,7 @@ import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import type { Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
-import { LineProvider } from "@/lib/line-context";
+import { useLineContext } from "@/lib/line-context";
 import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
 import { buildOrderClipboardText } from "@/lib/order-clipboard";
 import { formatPaymentMethodsOnly, orderPaymentStatusLabel } from "@/lib/order-labels";
@@ -36,16 +36,15 @@ import { useEffect, useRef, useState } from "react";
 
 export default function OrdersPage() {
   return (
-    <LineProvider>
-      <AppLayout>
-        <OrdersContent />
-      </AppLayout>
-    </LineProvider>
+    <AppLayout>
+      <OrdersContent />
+    </AppLayout>
   );
 }
 
 function OrdersContent() {
   const { message, modal } = App.useApp();
+  const { selectedLineId } = useLineContext();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [orders, setOrders] = useState<Order[]>([]);
   const [customerFilterOptions, setCustomerFilterOptions] = useState<{ label: string; value: string }[]>([]);
@@ -93,6 +92,7 @@ function OrdersContent() {
     filterMaxTotal,
     filterPaymentStatus,
     filterDelivered,
+    selectedLineId,
   ]);
 
   useEffect(() => {
@@ -144,6 +144,7 @@ function OrdersContent() {
         filterMaxTotal,
         filterPaymentStatus,
         filterDelivered,
+        selectedLineId ?? undefined,
       );
       setOrders(response.data);
       setMeta(response.meta);

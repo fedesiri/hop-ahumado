@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { CreateStockLocationDto } from "./dto/create-stock-location.dto";
 import { TransferAllStockDto } from "./dto/transfer-all-stock.dto";
 import { UpdateStockLocationDto } from "./dto/update-stock-location.dto";
@@ -20,8 +20,8 @@ export class StockLocationController {
 
   /** Debe ir antes de @Patch(':id') para no capturar "balances" como id. */
   @Get(":id/balances")
-  balances(@Param("id") id: string) {
-    return this.stockLocationService.balancesAtLocation(id);
+  balances(@Param("id") id: string, @Query("businessLineId") businessLineId?: string) {
+    return this.stockLocationService.balancesAtLocation(id, businessLineId);
   }
 
   @Post(":id/transfer-all")

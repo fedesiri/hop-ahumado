@@ -29,7 +29,7 @@ export class CostController {
   @Get()
   findAll(@Query() query: GetCostsQueryDto) {
     const active = query.activeOnly === "true";
-    return this.costService.findAll(toPage(query), toLimit(query), query.productId, active, query.search);
+    return this.costService.findAll(toPage(query), toLimit(query), query.productId, active, query.search, query.businessLineId);
   }
 
   @Get(":id")

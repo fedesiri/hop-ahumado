@@ -2,7 +2,6 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
-import { LineProvider } from "@/lib/line-context";
 import type { CreateCustomerRequest, Customer, PaginationMeta, UpdateCustomerRequest } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, Empty, Form, Input, Modal, Space, Spin, Table } from "antd";
@@ -10,11 +9,9 @@ import { useEffect, useState } from "react";
 
 export default function CustomersPage() {
   return (
-    <LineProvider>
-      <AppLayout>
-        <CustomersContent />
-      </AppLayout>
-    </LineProvider>
+    <AppLayout>
+      <CustomersContent />
+    </AppLayout>
   );
 }
 

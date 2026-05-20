@@ -6,6 +6,7 @@ import { Flower2 } from "lucide-react";
 import React, { useState } from "react";
 import { AppSidebar, ToggleSidebarButton } from "./app-sidebar";
 import { UserMenu } from "./auth/user-menu";
+import { BusinessLineSelector } from "./business-line-selector";
 import { NotificationsBell } from "./notifications-bell";
 
 const { Header, Content } = Layout;
@@ -83,12 +84,13 @@ export function AppLayout({ children }: AppLayoutProps) {
                   textOverflow: "ellipsis",
                 }}
               >
-                Hop Ahumado
+                Hop - Alumo
               </h1>
             )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <BusinessLineSelector />
             <NotificationsBell />
             <UserMenu />
           </div>

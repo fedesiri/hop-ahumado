@@ -11,22 +11,28 @@ export class CategoryService {
 
   async create(dto: CreateCategoryDto) {
     return this.prisma.category.create({
-      data: { name: dto.name },
+      data: { name: dto.name, businessLineId: dto.businessLineId },
     });
   }
 
   async findAll(
     page: number = PAGINATION.defaultPage,
     limit: number = PAGINATION.defaultLimit,
+    businessLineId?: string,
   ): Promise<PaginatedResponse<Category>> {
+    const where: any = {};
+    if (businessLineId) {
+      where.businessLineId = businessLineId;
+    }
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
       this.prisma.category.findMany({
+        where,
         orderBy: { name: "asc" },
         skip,
         take: limit,
       }),
-      this.prisma.category.count(),
+      this.prisma.category.count({ where }),
     ]);
     return buildPaginatedResponse(data, total, page, limit);
   }

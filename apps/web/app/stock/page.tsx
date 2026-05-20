@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
-import { LineProvider } from "@/lib/line-context";
+import { useLineContext } from "@/lib/line-context";
 import type { Cost, PaginationMeta, Product, StockLocation, StockMovement, StockMovementType } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
@@ -18,16 +18,15 @@ function roundMoney(value: number): number {
 
 export default function StockPage() {
   return (
-    <LineProvider>
-      <AppLayout>
-        <StockContent />
-      </AppLayout>
-    </LineProvider>
+    <AppLayout>
+      <StockContent />
+    </AppLayout>
   );
 }
 
 function StockContent() {
   const { message } = App.useApp();
+  const { selectedLineId } = useLineContext();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -56,7 +55,7 @@ function StockContent() {
         setLocations([]);
       }
     })();
-  }, [pagination.page, pagination.limit]);
+  }, [pagination.page, pagination.limit, selectedLineId]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -67,7 +66,7 @@ function StockContent() {
   const fetchMovements = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.getStockMovements(pagination.page, pagination.limit);
+      const response = await apiClient.getStockMovements(pagination.page, pagination.limit, undefined, selectedLineId ?? undefined);
       setMovements(response.data);
       setMeta(response.meta);
     } catch (error) {
@@ -80,10 +79,10 @@ function StockContent() {
 
   const fetchProducts = async () => {
     try {
-      const response = await apiClient.getProducts(1, 100);
+      const response = await apiClient.getProducts(1, 100, false, undefined, undefined, selectedLineId ?? undefined);
       setProducts(response.data);
-    } catch (error) {
-      console.error(error);
+    } catch {
+      // silent
     }
   };
 

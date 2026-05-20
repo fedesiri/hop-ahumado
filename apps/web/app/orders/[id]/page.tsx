@@ -3,7 +3,6 @@
 import { AppLayout } from "@/components/app-layout";
 import { OrderDetailView } from "@/components/orders/order-detail-view";
 import { apiClient } from "@/lib/api-client";
-import { LineProvider } from "@/lib/line-context";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { App, Button, Card, Spin } from "antd";
 import Link from "next/link";
@@ -17,11 +16,9 @@ interface OrderDetailPageProps {
 export default function OrderDetailPage({ params }: OrderDetailPageProps) {
   const { id } = use(params);
   return (
-    <LineProvider>
-      <AppLayout>
+    <AppLayout>
         <OrderDetailContent id={id} />
       </AppLayout>
-    </LineProvider>
   );
 }
 
