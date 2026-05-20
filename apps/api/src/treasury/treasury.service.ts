@@ -1,9 +1,7 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Decimal } from "@prisma/client/runtime/library";
 import { PrismaService } from "../prisma/prisma.service";
 import { UpdateTreasuryBaselineDto } from "./dto/update-treasury-baseline.dto";
-
-const SINGLETON_ID = "singleton";
 
 export type TreasuryBaselineResponse = {
   openingCash: number;
@@ -16,18 +14,12 @@ export type TreasuryBaselineResponse = {
 export class TreasuryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getBaseline(): Promise<TreasuryBaselineResponse> {
-    let row = await this.prisma.treasuryBaseline.findUnique({ where: { id: SINGLETON_ID } });
+  async getBaseline(businessLineId: string): Promise<TreasuryBaselineResponse> {
+    const row = await this.prisma.treasuryBaseline.findUnique({
+      where: { businessLineId },
+    });
     if (!row) {
-      const now = new Date();
-      row = await this.prisma.treasuryBaseline.create({
-        data: {
-          id: SINGLETON_ID,
-          openingCash: new Decimal(0),
-          openingCard: new Decimal(0),
-          deltaSince: now,
-        },
-      });
+      throw new NotFoundException(`No existe baseline para businessLineId "${businessLineId}"`);
     }
     return {
       openingCash: Number(row.openingCash),
@@ -43,12 +35,12 @@ export class TreasuryService {
       throw new BadRequestException("deltaSince inválido");
     }
     const row = await this.prisma.treasuryBaseline.upsert({
-      where: { id: SINGLETON_ID },
+      where: { businessLineId: dto.businessLineId },
       create: {
-        id: SINGLETON_ID,
         openingCash: new Decimal(dto.openingCash),
         openingCard: new Decimal(dto.openingCard),
         deltaSince,
+        businessLineId: dto.businessLineId,
       },
       update: {
         openingCash: new Decimal(dto.openingCash),

@@ -4,6 +4,7 @@ import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import dayjs from "@/lib/dayjs";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
+import { useLineContext } from "@/lib/line-context";
 import { OrderPaymentStatus, type Expense, type Order, type Product, type TreasuryBaseline } from "@/lib/types";
 import {
   AlertOutlined,
@@ -45,11 +46,23 @@ function isOnOrAfterCutoff(isoDate: string, cutoffIso: string): boolean {
   return new Date(isoDate).getTime() >= new Date(cutoffIso).getTime();
 }
 
-function sumPaymentsSince(orders: Order[], method: "CASH" | "CARD", sinceIso: string): number {
+function getLinePaymentRatio(order: Order, businessLineId: string): number {
+  const items = order.orderItems ?? [];
+  const lineSubtotal = items
+    .filter((item) => item.product?.businessLineId === businessLineId)
+    .reduce((s, item) => s + item.quantity * item.price, 0);
+  const total = Number(order.total || order.totalPrice || 0);
+  if (!total) return 0;
+  return Math.min(lineSubtotal / total, 1);
+}
+
+function sumPaymentsSince(orders: Order[], method: "CASH" | "CARD", sinceIso: string, businessLineId?: string): number {
   return orders.reduce((sum, order) => {
     if (!isOnOrAfterCutoff(order.createdAt, sinceIso)) return sum;
     const payments = order.payments ?? [];
-    return sum + payments.filter((p) => p.method === method).reduce((ps, p) => ps + Number(p.amount ?? 0), 0);
+    const lineTotal = payments.filter((p) => p.method === method).reduce((ps, p) => ps + Number(p.amount ?? 0), 0);
+    const ratio = businessLineId ? getLinePaymentRatio(order, businessLineId) : 1;
+    return sum + lineTotal * ratio;
   }, 0);
 }
 
@@ -61,6 +74,7 @@ function sumExpensesSince(expenses: Expense[], method: "CASH" | "CARD", sinceIso
 
 export function Dashboard() {
   const { message } = App.useApp();
+  const { selectedLineId } = useLineContext();
   const lowStockSectionRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
@@ -94,8 +108,8 @@ export function Dashboard() {
       };
     }
     const since = baseline.deltaSince;
-    const deltaCashIn = sumPaymentsSince(rawOrders, "CASH", since);
-    const deltaCardIn = sumPaymentsSince(rawOrders, "CARD", since);
+    const deltaCashIn = sumPaymentsSince(rawOrders, "CASH", since, selectedLineId ?? undefined);
+    const deltaCardIn = sumPaymentsSince(rawOrders, "CARD", since, selectedLineId ?? undefined);
     const deltaCashOut = sumExpensesSince(rawExpenses, "CASH", since);
     const deltaCardOut = sumExpensesSince(rawExpenses, "CARD", since);
     const balanceCash = baseline.openingCash + deltaCashIn - deltaCashOut;
@@ -109,7 +123,7 @@ export function Dashboard() {
       balanceCard,
       total: balanceCash + balanceCard,
     };
-  }, [baseline, rawOrders, rawExpenses]);
+  }, [baseline, rawOrders, rawExpenses, selectedLineId]);
 
   const fetchDashboardData = async () => {
     try {
@@ -117,30 +131,31 @@ export function Dashboard() {
       setApiConnected(null);
 
       const limit = 100;
+      const bId = selectedLineId ?? undefined;
       const [productsRes, customersRes, baselineRes] = await Promise.all([
-        apiClient.getProducts(1, 100),
+        apiClient.getProducts(1, 100, false, undefined, undefined, bId),
         apiClient.getCustomers(1, 50),
-        apiClient.getTreasuryBaseline().catch(() => null),
+        bId ? apiClient.getTreasuryBaseline(bId).catch(() => null) : Promise.resolve(null),
       ]);
 
       setApiConnected(true);
       if (baselineRes) setBaseline(baselineRes);
 
       let page = 1;
-      let ordersRes = await apiClient.getOrders(page, limit);
+      let ordersRes = await apiClient.getOrders(page, limit, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, bId);
       let allOrders = [...ordersRes.data];
       while (ordersRes.meta.totalPages > page) {
         page += 1;
-        ordersRes = await apiClient.getOrders(page, limit);
+        ordersRes = await apiClient.getOrders(page, limit, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, bId);
         allOrders = [...allOrders, ...ordersRes.data];
       }
 
       page = 1;
-      let expensesRes = await apiClient.getExpenses(page, limit);
+      let expensesRes = await apiClient.getExpenses(page, limit, bId);
       let allExpenses = [...expensesRes.data];
       while (expensesRes.meta.totalPages > page) {
         page += 1;
-        expensesRes = await apiClient.getExpenses(page, limit);
+        expensesRes = await apiClient.getExpenses(page, limit, bId);
         allExpenses = [...allExpenses, ...expensesRes.data];
       }
 
@@ -176,7 +191,8 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLineId]);
 
   useEffect(() => {
     if (cashFlowModalOpen && baseline) {
@@ -193,10 +209,15 @@ export function Dashboard() {
   };
 
   const saveBaseline = async () => {
+    if (!selectedLineId) {
+      message.error("Seleccioná una línea de negocio");
+      return;
+    }
     try {
       const v = await form.validateFields();
       setSavingBaseline(true);
       const updated = await apiClient.updateTreasuryBaseline({
+        businessLineId: selectedLineId,
         openingCash: Number(v.openingCash ?? 0),
         openingCard: Number(v.openingCard ?? 0),
         deltaSince: v.deltaSince.toDate().toISOString(),

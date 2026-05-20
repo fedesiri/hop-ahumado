@@ -3,7 +3,7 @@
 import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
-import { LineProvider } from "@/lib/line-context";
+import { useLineContext } from "@/lib/line-context";
 import {
   ProductUnit,
   type CreateCostRequest,
@@ -68,16 +68,15 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 export default function RecipesPage() {
   return (
-    <LineProvider>
-      <AppLayout>
-        <RecipesContent />
-      </AppLayout>
-    </LineProvider>
+    <AppLayout>
+      <RecipesContent />
+    </AppLayout>
   );
 }
 
 function RecipesContent() {
   const { message, modal } = App.useApp();
+  const { selectedLineId } = useLineContext();
   const [recipes, setRecipes] = useState<RecipeItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -94,18 +93,19 @@ function RecipesContent() {
   const ingredientBatchQuantity = Form.useWatch("ingredientBatchQuantity", form);
 
   const fetchProducts = useCallback(async () => {
+    const bId = selectedLineId ?? undefined;
     const limit = 100;
     const all: Product[] = [];
     let page = 1;
-    let res = await apiClient.getProducts(page, limit);
+    let res = await apiClient.getProducts(page, limit, false, undefined, undefined, bId);
     all.push(...res.data);
     while (res.meta.totalPages > page) {
       page += 1;
-      res = await apiClient.getProducts(page, limit);
+      res = await apiClient.getProducts(page, limit, false, undefined, undefined, bId);
       all.push(...res.data);
     }
     setProducts(all);
-  }, []);
+  }, [selectedLineId]);
 
   const fetchRecipes = useCallback(async () => {
     try {

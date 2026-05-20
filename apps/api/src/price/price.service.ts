@@ -30,6 +30,7 @@ export class PriceService {
     activeOnly = false,
     search?: string,
     listType?: string,
+    businessLineId?: string,
   ): Promise<PaginatedResponse<Price & { product: { id: string; name: string } }>> {
     const andParts: Prisma.PriceWhereInput[] = [];
     if (productId) {
@@ -38,17 +39,19 @@ export class PriceService {
     if (activeOnly) {
       andParts.push({ deactivatedAt: null });
     }
+
+    const productFilter: Prisma.ProductWhereInput = {};
+    if (businessLineId) productFilter.businessLineId = businessLineId;
     const trimmed = search?.trim();
     if (trimmed) {
-      andParts.push({
-        product: {
-          OR: [
-            { name: { contains: trimmed, mode: "insensitive" } },
-            { sku: { contains: trimmed, mode: "insensitive" } },
-            { barcode: { contains: trimmed, mode: "insensitive" } },
-          ],
-        },
-      });
+      productFilter.OR = [
+        { name: { contains: trimmed, mode: "insensitive" } },
+        { sku: { contains: trimmed, mode: "insensitive" } },
+        { barcode: { contains: trimmed, mode: "insensitive" } },
+      ];
+    }
+    if (Object.keys(productFilter).length > 0) {
+      andParts.push({ product: productFilter });
     }
 
     const lt = listType?.trim().toLowerCase();

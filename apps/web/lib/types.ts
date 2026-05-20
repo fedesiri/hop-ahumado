@@ -49,9 +49,17 @@ export enum ProductUnit {
 }
 
 // Entities
+export interface BusinessLineEntity {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+}
+
 export interface Category {
   id: string;
   name: string;
+  businessLineId: string;
 }
 
 export interface DistributorSuggestedOrderItem {
@@ -108,6 +116,7 @@ export interface StockLocation {
 
 export interface Product {
   id: string;
+  businessLineId: string;
   name: string;
   unit: ProductUnit;
   description?: string | null;
@@ -238,6 +247,7 @@ export interface Cost {
 
 export interface Expense {
   id: string;
+  businessLineId: string;
   amount: number;
   method: PaymentMethod;
   description?: string | null;
@@ -253,6 +263,7 @@ export interface TreasuryBaseline {
 }
 
 export interface UpdateTreasuryBaselineRequest {
+  businessLineId: string;
   openingCash: number;
   openingCard: number;
   deltaSince: string;
@@ -334,6 +345,7 @@ export interface Order {
 
 // API Request/Response types
 export interface CreateCategoryRequest {
+  businessLineId: string;
   name: string;
 }
 
@@ -342,6 +354,7 @@ export interface UpdateCategoryRequest {
 }
 
 export interface CreateProductRequest {
+  businessLineId: string;
   name: string;
   unit?: ProductUnit;
   description?: string;
@@ -483,6 +496,7 @@ export interface CreateCostRequest {
 }
 
 export interface CreateExpenseRequest {
+  businessLineId: string;
   description?: string;
   cashAmount?: number;
   cardAmount?: number;
@@ -609,5 +623,6 @@ export interface NotificationsListResponse extends PaginatedResponse<UserNotific
 // Context types for line selection
 export interface LineContext {
   selectedLine: BusinessLine | null;
+  selectedLineId: string | null;
   setSelectedLine: (line: BusinessLine | null) => void;
 }

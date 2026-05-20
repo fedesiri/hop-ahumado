@@ -4,6 +4,9 @@ import { IsIn, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from "cl
 const PRODUCT_UNITS = ["UNIT", "KG", "G", "L", "ML"] as const;
 
 export class CreateProductDto {
+  @IsUUID("4", { message: "businessLineId debe ser un UUID válido" })
+  businessLineId: string;
+
   @IsString()
   @MaxLength(255)
   name: string;

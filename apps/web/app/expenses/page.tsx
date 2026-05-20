@@ -3,11 +3,11 @@
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
-import { LineProvider } from "@/lib/line-context";
+import { useLineContext } from "@/lib/line-context";
 import type { CreateExpenseRequest, Expense } from "@/lib/types";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, Form, Input, InputNumber, Modal, Space, Spin, Table } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type ExpenseGroup = {
   groupId: string;
@@ -19,26 +19,22 @@ type ExpenseGroup = {
 
 export default function ExpensesPage() {
   return (
-    <LineProvider>
-      <AppLayout>
-        <ExpensesContent />
-      </AppLayout>
-    </LineProvider>
+    <AppLayout>
+      <ExpensesContent />
+    </AppLayout>
   );
 }
 
 function ExpensesContent() {
   const { message, modal } = App.useApp();
+  const { selectedLineId } = useLineContext();
   const [loading, setLoading] = useState(false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
 
   const groups: ExpenseGroup[] = useMemo(() => {
-    const byGroup = new Map<
-      string,
-      { description: string; createdAt: string; cashAmount: number; cardAmount: number }
-    >();
+    const byGroup = new Map<string, { description: string; createdAt: string; cashAmount: number; cardAmount: number }>();
 
     for (const e of expenses) {
       const group = byGroup.get(e.groupId) ?? {
@@ -47,11 +43,8 @@ function ExpensesContent() {
         cashAmount: 0,
         cardAmount: 0,
       };
-
       if (e.method === "CASH") group.cashAmount += Number(e.amount ?? 0);
       if (e.method === "CARD") group.cardAmount += Number(e.amount ?? 0);
-
-      // Mantener la descripción/fecha del primer registro del grupo
       byGroup.set(e.groupId, group);
     }
 
@@ -64,37 +57,33 @@ function ExpensesContent() {
     }));
   }, [expenses]);
 
-  const fetchAllExpenses = async () => {
-    const limit = 100; // máximo permitido por la API
+  const fetchAllExpenses = useCallback(async () => {
+    const bId = selectedLineId ?? undefined;
+    const limit = 100;
     let page = 1;
-    let res = await apiClient.getExpenses(page, limit);
+    let res = await apiClient.getExpenses(page, limit, bId);
     const all: Expense[] = [...res.data];
-
     while (res.meta.totalPages > page) {
       page += 1;
-      res = await apiClient.getExpenses(page, limit);
+      res = await apiClient.getExpenses(page, limit, bId);
       all.push(...res.data);
     }
-
     setExpenses(all);
-  };
+  }, [selectedLineId]);
 
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
         await fetchAllExpenses();
-      } catch (error) {
-        console.error(error);
+      } catch {
         message.error("Error al cargar egresos");
       } finally {
         setLoading(false);
       }
     };
-
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchAllExpenses, message]);
 
   const handleCreate = () => {
     form.resetFields();
@@ -102,8 +91,13 @@ function ExpensesContent() {
   };
 
   const handleSubmit = async (values: any) => {
+    if (!selectedLineId) {
+      message.error("Seleccioná una línea de negocio");
+      return;
+    }
     try {
       const data: CreateExpenseRequest = {
+        businessLineId: selectedLineId,
         description: values.description ?? undefined,
         cashAmount: values.cashAmount ?? 0,
         cardAmount: values.cardAmount ?? 0,
@@ -118,8 +112,7 @@ function ExpensesContent() {
       message.success("Egreso registrado");
       setModalOpen(false);
       await fetchAllExpenses();
-    } catch (error) {
-      console.error(error);
+    } catch {
       message.error("Error al registrar egreso");
     }
   };
@@ -135,8 +128,7 @@ function ExpensesContent() {
           await apiClient.deleteExpenseGroup(groupId);
           message.success("Egreso eliminado");
           await fetchAllExpenses();
-        } catch (error) {
-          console.error(error);
+        } catch {
           message.error("Error al eliminar egreso");
         }
       },
@@ -196,7 +188,7 @@ function ExpensesContent() {
     <div>
       <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between" }}>
         <h1 style={{ margin: 0, color: "#ffffff" }}>Egresos</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} disabled={!selectedLineId}>
           Nuevo egreso
         </Button>
       </div>

@@ -17,7 +17,14 @@ export class ProductController {
   @Get()
   findAll(@Query() query: GetProductsQueryDto) {
     const include = query.includeDeactivated === "true";
-    return this.productService.findAll(include, toPage(query), toLimit(query), query.search, query.categoryId);
+    return this.productService.findAll(
+      include,
+      toPage(query),
+      toLimit(query),
+      query.search,
+      query.categoryId,
+      query.businessLineId,
+    );
   }
 
   @Get(":id")

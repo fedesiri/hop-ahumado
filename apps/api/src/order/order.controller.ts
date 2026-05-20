@@ -29,6 +29,7 @@ export class OrderController {
       query.maxTotal ? Number(query.maxTotal) : undefined,
       query.paymentStatus,
       query.delivered,
+      query.businessLineId,
     );
   }
 

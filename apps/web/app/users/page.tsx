@@ -2,7 +2,6 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
-import { LineProvider } from "@/lib/line-context";
 import type { CreateUserRequest, HealthResponse, UpdateUserRequest, User } from "@/lib/types";
 import {
   CheckCircleOutlined,
@@ -16,11 +15,9 @@ import { useEffect, useState } from "react";
 
 export default function UsersPage() {
   return (
-    <LineProvider>
-      <AppLayout>
+    <AppLayout>
         <UsersContent />
       </AppLayout>
-    </LineProvider>
   );
 }
 

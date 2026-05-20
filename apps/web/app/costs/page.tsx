@@ -3,7 +3,7 @@
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
-import { LineProvider } from "@/lib/line-context";
+import { useLineContext } from "@/lib/line-context";
 import type { Cost, CreateCostRequest, Product, UpdateCostRequest } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined, SwapOutlined } from "@ant-design/icons";
 import {
@@ -26,16 +26,15 @@ import { useEffect, useMemo, useState } from "react";
 
 export default function CostsPage() {
   return (
-    <LineProvider>
-      <AppLayout>
-        <CostsContent />
-      </AppLayout>
-    </LineProvider>
+    <AppLayout>
+      <CostsContent />
+    </AppLayout>
   );
 }
 
 function CostsContent() {
   const { message, modal } = App.useApp();
+  const { selectedLineId } = useLineContext();
   const [costs, setCosts] = useState<Cost[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,7 +67,7 @@ function CostsContent() {
   useEffect(() => {
     fetchCosts();
     fetchProducts();
-  }, [pagination.page, pagination.limit, showActive, debouncedSearch]);
+  }, [pagination.page, pagination.limit, showActive, debouncedSearch, selectedLineId]);
 
   useEffect(() => {
     setSelectedCostIds([]);
@@ -83,6 +82,7 @@ function CostsContent() {
         undefined,
         showActive,
         debouncedSearch || undefined,
+        selectedLineId ?? undefined,
       );
       setCosts(response.data);
       setMeta(response.meta);
@@ -96,10 +96,10 @@ function CostsContent() {
 
   const fetchProducts = async () => {
     try {
-      const response = await apiClient.getProducts(1, 100);
+      const response = await apiClient.getProducts(1, 100, false, undefined, undefined, selectedLineId ?? undefined);
       setProducts(response.data);
-    } catch (error) {
-      console.error(error);
+    } catch {
+      // silent
     }
   };
 

@@ -1,5 +1,6 @@
 import { getAuthHeaders } from "@/lib/auth-fetch";
 import type {
+  BusinessLineEntity,
   Category,
   Cost,
   CreateCategoryRequest,
@@ -101,9 +102,14 @@ export class ApiClient {
     return this.request<HealthResponse>("/health");
   }
 
+  // Business Lines
+  async getBusinessLines(): Promise<BusinessLineEntity[]> {
+    return this.request("/business-lines");
+  }
+
   // Categories
-  async getCategories(page = 1, limit = 10): Promise<PaginatedResponse<Category>> {
-    return this.request(`/categories${this.buildParams({ page, limit })}`);
+  async getCategories(page = 1, limit = 10, businessLineId?: string): Promise<PaginatedResponse<Category>> {
+    return this.request(`/categories${this.buildParams({ page, limit, businessLineId })}`);
   }
 
   async getCategory(id: string): Promise<Category> {
@@ -135,6 +141,7 @@ export class ApiClient {
     includeDeactivated = false,
     search?: string,
     categoryId?: string,
+    businessLineId?: string,
   ): Promise<PaginatedResponse<Product>> {
     return this.request(
       `/products${this.buildParams({
@@ -143,6 +150,7 @@ export class ApiClient {
         includeDeactivated: includeDeactivated ? "true" : undefined,
         search,
         categoryId,
+        businessLineId,
       })}`,
     );
   }
@@ -383,6 +391,7 @@ export class ApiClient {
     activeOnly = false,
     search?: string,
     listType?: "mayorista" | "minorista" | "fabrica",
+    businessLineId?: string,
   ): Promise<PaginatedResponse<Price>> {
     return this.request(
       `/prices${this.buildParams({
@@ -392,6 +401,7 @@ export class ApiClient {
         activeOnly: activeOnly ? "true" : undefined,
         search: search?.trim() ? search.trim() : undefined,
         listType,
+        businessLineId,
       })}`,
     );
   }
@@ -439,6 +449,7 @@ export class ApiClient {
     productId?: string,
     activeOnly = false,
     search?: string,
+    businessLineId?: string,
   ): Promise<PaginatedResponse<Cost>> {
     return this.request(
       `/costs${this.buildParams({
@@ -447,6 +458,7 @@ export class ApiClient {
         productId,
         activeOnly: activeOnly ? "true" : undefined,
         search: search?.trim() ? search.trim() : undefined,
+        businessLineId,
       })}`,
     );
   }
@@ -490,8 +502,8 @@ export class ApiClient {
   }
 
   // Expenses (egresos monetarios)
-  async getExpenses(page = 1, limit = 10): Promise<PaginatedResponse<Expense>> {
-    return this.request(`/expenses${this.buildParams({ page, limit })}`);
+  async getExpenses(page = 1, limit = 10, businessLineId?: string): Promise<PaginatedResponse<Expense>> {
+    return this.request(`/expenses${this.buildParams({ page, limit, businessLineId })}`);
   }
 
   async createExpense(data: CreateExpenseRequest): Promise<Expense[]> {
@@ -505,8 +517,8 @@ export class ApiClient {
     return this.request(`/expenses/group/${groupId}`, { method: "DELETE" });
   }
 
-  async getTreasuryBaseline(): Promise<TreasuryBaseline> {
-    return this.request<TreasuryBaseline>("/treasury/baseline");
+  async getTreasuryBaseline(businessLineId: string): Promise<TreasuryBaseline> {
+    return this.request<TreasuryBaseline>(`/treasury/baseline${this.buildParams({ businessLineId })}`);
   }
 
   async updateTreasuryBaseline(data: UpdateTreasuryBaselineRequest): Promise<TreasuryBaseline> {
@@ -528,8 +540,8 @@ export class ApiClient {
     });
   }
 
-  async getStockBalancesAtLocation(locationId: string): Promise<StockBalanceRow[]> {
-    return this.request(`/stock-locations/${locationId}/balances`);
+  async getStockBalancesAtLocation(locationId: string, businessLineId?: string): Promise<StockBalanceRow[]> {
+    return this.request(`/stock-locations/${locationId}/balances${this.buildParams({ businessLineId })}`);
   }
 
   async updateStockLocation(id: string, data: UpdateStockLocationRequest): Promise<StockLocation> {
@@ -554,8 +566,8 @@ export class ApiClient {
   }
 
   // Stock Movements
-  async getStockMovements(page = 1, limit = 10, productId?: string): Promise<PaginatedResponse<StockMovement>> {
-    return this.request(`/stock-movements${this.buildParams({ page, limit, productId })}`);
+  async getStockMovements(page = 1, limit = 10, productId?: string, businessLineId?: string): Promise<PaginatedResponse<StockMovement>> {
+    return this.request(`/stock-movements${this.buildParams({ page, limit, productId, businessLineId })}`);
   }
 
   async getDistributorSuggestedOrder(params?: {
@@ -624,6 +636,7 @@ export class ApiClient {
     maxTotal?: number,
     paymentStatus?: string,
     delivered?: "true" | "false",
+    businessLineId?: string,
   ): Promise<PaginatedResponse<Order>> {
     return this.request(
       `/orders${this.buildParams({
@@ -637,6 +650,7 @@ export class ApiClient {
         maxTotal,
         paymentStatus,
         delivered,
+        businessLineId,
       })}`,
     );
   }

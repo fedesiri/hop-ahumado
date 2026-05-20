@@ -151,7 +151,7 @@ export function AppSidebar({ collapsed = false, onCollapsedChange, isMobile = fa
             overflow: "hidden",
           }}
         >
-          {collapsed ? "HA" : "Hop Ahumado"}
+          {collapsed ? "H·A" : "Hop - Alumo"}
         </div>
         <div
           className="app-sidebar-menu-scroll"

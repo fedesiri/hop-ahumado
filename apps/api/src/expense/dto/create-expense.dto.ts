@@ -1,6 +1,9 @@
-import { IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsNumber, IsOptional, IsString, IsUUID, Min } from "class-validator";
 
 export class CreateExpenseDto {
+  @IsUUID("4", { message: "businessLineId debe ser un UUID válido" })
+  businessLineId: string;
+
   @IsOptional()
   @IsString()
   description?: string;

@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
-import { LineProvider } from "@/lib/line-context";
+import { useLineContext } from "@/lib/line-context";
 import { PRICE_TYPE_LABELS, PRICE_TYPES, type PriceType } from "@/lib/order-calculator/price-types";
 import type { CreatePriceRequest, Price, Product, UpdatePriceRequest } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined, SwapOutlined } from "@ant-design/icons";
@@ -36,16 +36,15 @@ function formatPriceListLabel(text: string | null | undefined): string {
 
 export default function PricesPage() {
   return (
-    <LineProvider>
-      <AppLayout>
-        <PricesContent />
-      </AppLayout>
-    </LineProvider>
+    <AppLayout>
+      <PricesContent />
+    </AppLayout>
   );
 }
 
 function PricesContent() {
   const { message, modal } = App.useApp();
+  const { selectedLineId } = useLineContext();
   const [prices, setPrices] = useState<Price[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -86,7 +85,7 @@ function PricesContent() {
   useEffect(() => {
     fetchPrices();
     fetchProducts();
-  }, [pagination.page, pagination.limit, debouncedSearch, listTypeFilter]);
+  }, [pagination.page, pagination.limit, debouncedSearch, listTypeFilter, selectedLineId]);
 
   const fetchPrices = async () => {
     try {
@@ -98,6 +97,7 @@ function PricesContent() {
         true,
         debouncedSearch || undefined,
         listTypeFilter ? listTypeFilter : undefined,
+        selectedLineId ?? undefined,
       );
       setPrices(response.data);
       setMeta(response.meta);
@@ -111,10 +111,10 @@ function PricesContent() {
 
   const fetchProducts = async () => {
     try {
-      const response = await apiClient.getProducts(1, 100);
+      const response = await apiClient.getProducts(1, 100, false, undefined, undefined, selectedLineId ?? undefined);
       setProducts(response.data);
-    } catch (error) {
-      console.error(error);
+    } catch {
+      // silent
     }
   };
 

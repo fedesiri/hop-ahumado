@@ -6,7 +6,6 @@ import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import dayjs, { type Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
-import { LineProvider } from "@/lib/line-context";
 import { inferPriceTypeFromOrderLines, parsePriceListType, type PriceType } from "@/lib/order-calculator/price-types";
 import {
   expandOrderLineDemands,
@@ -26,11 +25,9 @@ interface OrderEditPageProps {
 export default function OrderEditPage({ params }: OrderEditPageProps) {
   const { id } = use(params);
   return (
-    <LineProvider>
-      <AppLayout>
+    <AppLayout>
         <OrderEditPageContent id={id} />
       </AppLayout>
-    </LineProvider>
   );
 }
 

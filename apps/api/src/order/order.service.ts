@@ -47,7 +47,11 @@ type OrderWithComputedFields = OrderWithRelations & {
 
 const ORDER_INCLUDE = {
   orderItems: {
-    include: { product: { select: { id: true, name: true, stock: true, category: { select: { id: true, name: true } } } } },
+    include: {
+      product: {
+        select: { id: true, name: true, stock: true, businessLineId: true, category: { select: { id: true, name: true } } },
+      },
+    },
   },
   payments: true,
   customer: { select: { id: true, name: true } },
@@ -139,13 +143,14 @@ export class OrderService {
     maxTotal?: number,
     paymentStatus?: OrderPaymentStatus,
     delivered?: "true" | "false",
+    businessLineId?: string,
   ): Promise<PaginatedResponse<OrderWithComputedFields>> {
     const skip = (page - 1) * limit;
     const tol = ORDER_PAYMENT_TOLERANCE;
 
     if (paymentStatus !== undefined) {
       const whereClause = this.sqlOrderListWhereClauses(
-        { customerId, userId, dateFrom, dateTo, minTotal, maxTotal, delivered },
+        { customerId, userId, dateFrom, dateTo, minTotal, maxTotal, delivered, businessLineId },
         this.sqlOrderPaymentStatusCondition(paymentStatus, tol),
       );
       return this.findAllWithPaymentStatusSql(page, limit, skip, whereClause);
@@ -159,6 +164,7 @@ export class OrderService {
       minTotal,
       maxTotal,
       delivered,
+      businessLineId,
     });
 
     const [data, total] = await Promise.all([
@@ -182,8 +188,12 @@ export class OrderService {
     minTotal?: number;
     maxTotal?: number;
     delivered?: "true" | "false";
+    businessLineId?: string;
   }): Prisma.OrderWhereInput {
     const where: Prisma.OrderWhereInput = {};
+    if (params.businessLineId) {
+      where.orderItems = { some: { product: { businessLineId: params.businessLineId } } };
+    }
     if (params.customerId) {
       where.customerId = params.customerId;
     }
@@ -263,10 +273,16 @@ export class OrderService {
       minTotal?: number;
       maxTotal?: number;
       delivered?: "true" | "false";
+      businessLineId?: string;
     },
     paymentCondition: Prisma.Sql,
   ): Prisma.Sql {
     const parts: Prisma.Sql[] = [];
+    if (params.businessLineId) {
+      parts.push(
+        Prisma.sql`EXISTS (SELECT 1 FROM "OrderItem" oi2 JOIN "Product" p ON p."id" = oi2."productId" WHERE oi2."orderId" = o."id" AND p."businessLineId" = ${params.businessLineId})`,
+      );
+    }
     if (params.customerId) {
       parts.push(Prisma.sql`o."customerId" = ${params.customerId}`);
     }

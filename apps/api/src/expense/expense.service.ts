@@ -41,6 +41,7 @@ export class ExpenseService {
             description: dto.description ?? null,
             createdAt: now,
             groupId,
+            businessLineId: dto.businessLineId,
           },
         });
         records.push(createdCash as ExpenseRecord);
@@ -54,6 +55,7 @@ export class ExpenseService {
             description: dto.description ?? null,
             createdAt: now,
             groupId,
+            businessLineId: dto.businessLineId,
           },
         });
         records.push(createdCard as ExpenseRecord);
@@ -68,16 +70,22 @@ export class ExpenseService {
   async findAll(
     page: number = PAGINATION.defaultPage,
     limit: number = PAGINATION.defaultLimit,
+    businessLineId?: string,
   ): Promise<PaginatedResponse<ExpenseRecord>> {
+    const where: any = {};
+    if (businessLineId) {
+      where.businessLineId = businessLineId;
+    }
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
       this.prisma.expense.findMany({
+        where,
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
       }),
-      this.prisma.expense.count(),
+      this.prisma.expense.count({ where }),
     ]);
 
     return buildPaginatedResponse(data as ExpenseRecord[], total, page, limit);

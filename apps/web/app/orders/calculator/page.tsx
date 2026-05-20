@@ -6,7 +6,6 @@ import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import dayjs, { type Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
-import { LineProvider } from "@/lib/line-context";
 import type { PriceType } from "@/lib/order-calculator/price-types";
 import {
   expandOrderLineDemands,
@@ -19,11 +18,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function OrderCalculatorPage() {
   return (
-    <LineProvider>
-      <AppLayout>
+    <AppLayout>
         <OrderCalculatorPageContent />
       </AppLayout>
-    </LineProvider>
   );
 }
 

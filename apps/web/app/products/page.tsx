@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatQuantity } from "@/lib/format-currency";
-import { LineProvider } from "@/lib/line-context";
+import { useLineContext } from "@/lib/line-context";
 import {
   ProductUnit,
   type Category,
@@ -33,7 +33,7 @@ import {
   Table,
   Tag,
 } from "antd";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
   { label: "Unidad", value: ProductUnit.UNIT },
@@ -53,16 +53,15 @@ const UNIT_SHORT_LABEL: Record<ProductUnit, string> = {
 
 export default function ProductsPage() {
   return (
-    <LineProvider>
-      <AppLayout>
-        <ProductsContent />
-      </AppLayout>
-    </LineProvider>
+    <AppLayout>
+      <ProductsContent />
+    </AppLayout>
   );
 }
 
 function ProductsContent() {
   const { message, modal } = App.useApp();
+  const { selectedLineId } = useLineContext();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
@@ -76,12 +75,7 @@ function ProductsContent() {
   const [searchInput, setSearchInput] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>(undefined);
 
-  useEffect(() => {
-    fetchProducts();
-    fetchCategories();
-  }, [pagination.page, pagination.limit, showDeactivated, search, categoryFilter]);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
       const response = await apiClient.getProducts(
@@ -90,25 +84,30 @@ function ProductsContent() {
         showDeactivated,
         search || undefined,
         categoryFilter,
+        selectedLineId ?? undefined,
       );
       setProducts(response.data);
       setMeta(response.meta);
-    } catch (error) {
+    } catch {
       message.error("Error al cargar productos");
-      console.error(error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page, pagination.limit, showDeactivated, search, categoryFilter, selectedLineId, message]);
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
-      const response = await apiClient.getCategories(1, 100);
+      const response = await apiClient.getCategories(1, 100, selectedLineId ?? undefined);
       setCategories(response.data);
-    } catch (error) {
-      console.error(error);
+    } catch {
+      // silent
     }
-  };
+  }, [selectedLineId]);
+
+  useEffect(() => {
+    fetchProducts();
+    fetchCategories();
+  }, [fetchProducts, fetchCategories]);
 
   const handleCreate = () => {
     setEditingId(null);
@@ -168,8 +167,13 @@ function ProductsContent() {
   };
 
   const handleSubmit = async (values: any) => {
+    if (!selectedLineId && !editingId) {
+      message.error("Seleccioná una línea de negocio");
+      return;
+    }
     try {
       const data: CreateProductRequest = {
+        businessLineId: selectedLineId!,
         name: values.name,
         unit: values.unit,
         description: values.description,
@@ -273,7 +277,7 @@ function ProductsContent() {
     <div>
       <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between" }}>
         <h1 style={{ margin: 0, color: "#ffffff" }}>Productos</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} disabled={!selectedLineId}>
           Nuevo Producto
         </Button>
       </div>

@@ -189,8 +189,11 @@ export class StockMovementService {
     page: number = PAGINATION.defaultPage,
     limit: number = PAGINATION.defaultLimit,
     productId?: string,
+    businessLineId?: string,
   ): Promise<PaginatedResponse<StockMovementWithProduct>> {
-    const where = productId ? { productId } : undefined;
+    const where: any = {};
+    if (productId) where.productId = productId;
+    if (businessLineId) where.product = { businessLineId };
     const skip = (page - 1) * limit;
     const include = {
       product: { select: { id: true, name: true, stock: true } },

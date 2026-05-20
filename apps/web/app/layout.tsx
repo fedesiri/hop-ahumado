@@ -3,6 +3,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth-context";
 import "@/lib/dayjs";
+import { LineProvider } from "@/lib/line-context";
 import "@ant-design/v5-patch-for-react-19";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
@@ -12,8 +13,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Hop Ahumado - Gestión de Negocios",
-  description: "Sistema de gestión para Hop Ahumado - Carnes ahumadas y Cerveza artesanal",
+  title: "Hop - Alumo | Gestión de Negocios",
+  description: "Sistema de gestión para Hop - Alumo: Cerveza artesanal y Carnes ahumadas",
   generator: "v0.app",
   icons: {
     icon: [
@@ -48,7 +49,11 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`} style={{ backgroundColor: "#0a0a0a" }}>
         <AntdProvider>
           <AuthProvider>
-            <RequireAuth>{children}</RequireAuth>
+            <RequireAuth>
+              <LineProvider>
+                {children}
+              </LineProvider>
+            </RequireAuth>
             <Toaster richColors position="top-center" />
             <Analytics />
           </AuthProvider>

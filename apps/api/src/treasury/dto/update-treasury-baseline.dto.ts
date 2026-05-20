@@ -1,7 +1,10 @@
 import { Type } from "class-transformer";
-import { IsDateString, IsNumber, Min } from "class-validator";
+import { IsDateString, IsNumber, IsUUID, Min } from "class-validator";
 
 export class UpdateTreasuryBaselineDto {
+  @IsUUID("4", { message: "businessLineId debe ser un UUID válido" })
+  businessLineId!: string;
+
   @Type(() => Number)
   @IsNumber()
   @Min(0)

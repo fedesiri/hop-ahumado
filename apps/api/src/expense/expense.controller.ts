@@ -15,7 +15,7 @@ export class ExpenseController {
 
   @Get()
   findAll(@Query() query: GetExpensesQueryDto) {
-    return this.expenseService.findAll(toPage(query), toLimit(query));
+    return this.expenseService.findAll(toPage(query), toLimit(query), query.businessLineId);
   }
 
   @Delete("group/:groupId")

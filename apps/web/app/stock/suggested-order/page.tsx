@@ -3,7 +3,6 @@
 import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
-import { LineProvider } from "@/lib/line-context";
 import type { DistributorSuggestedOrderItem, DistributorSuggestedOrderResponse } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CopyOutlined, ShoppingCartOutlined } from "@ant-design/icons";
@@ -22,11 +21,9 @@ function formatCostDate(iso: string | null) {
 
 export default function SuggestedOrderPage() {
   return (
-    <LineProvider>
-      <AppLayout>
+    <AppLayout>
         <SuggestedOrderContent />
       </AppLayout>
-    </LineProvider>
   );
 }
 

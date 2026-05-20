@@ -5,7 +5,7 @@ import { apiClient } from "@/lib/api-client";
 import type { Dayjs } from "@/lib/dayjs";
 import dayjs from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
-import { LineProvider } from "@/lib/line-context";
+import { useLineContext } from "@/lib/line-context";
 import type { Order } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { App, Button, Card, DatePicker, Select, Space, Spin } from "antd";
@@ -56,16 +56,15 @@ function ordersInPreset(orders: Order[], preset: PeriodPreset, customRange: [Day
 
 export default function OrdersMetricsPage() {
   return (
-    <LineProvider>
-      <AppLayout>
-        <OrdersMetricsContent />
-      </AppLayout>
-    </LineProvider>
+    <AppLayout>
+      <OrdersMetricsContent />
+    </AppLayout>
   );
 }
 
 function OrdersMetricsContent() {
   const { message } = App.useApp();
+  const { selectedLineId } = useLineContext();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [metricsOrders, setMetricsOrders] = useState<Order[]>([]);
   const [metricsLoading, setMetricsLoading] = useState(false);
@@ -80,16 +79,16 @@ function OrdersMetricsContent() {
       const all: Order[] = [];
       let page = 1;
       const limit = 100;
+      const bId = selectedLineId ?? undefined;
       while (true) {
-        const response = await apiClient.getOrders(page, limit);
+        const response = await apiClient.getOrders(page, limit, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, bId);
         all.push(...response.data);
         if (page >= response.meta.totalPages || response.data.length === 0) break;
         page += 1;
       }
       setMetricsOrders(all);
-    } catch (error) {
+    } catch {
       message.error("Error al cargar métricas globales de órdenes");
-      console.error(error);
     } finally {
       setMetricsLoading(false);
     }
@@ -97,7 +96,8 @@ function OrdersMetricsContent() {
 
   useEffect(() => {
     void fetchAllOrdersForMetrics();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLineId]);
 
   const monthOptions = useMemo(() => {
     const uniq = new Set<string>();
