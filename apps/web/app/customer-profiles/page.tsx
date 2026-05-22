@@ -12,7 +12,7 @@ import type {
   User,
 } from "@/lib/types";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table } from "antd";
+import { App, Button, Col, DatePicker, Empty, Form, Input, Modal, Row, Select, Space, Spin, Table } from "antd";
 import { useEffect, useState } from "react";
 
 export default function CustomerProfilesPage() {
@@ -234,7 +234,8 @@ function CustomerProfilesContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
-        width={600}
+        width={680}
+        styles={{ body: { maxHeight: "70vh", overflowY: "auto", paddingRight: 4 } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="customerId" label="Cliente" rules={[{ required: true, message: "El cliente es requerido" }]}>
@@ -244,44 +245,65 @@ function CustomerProfilesContent() {
             />
           </Form.Item>
 
-          <Form.Item name="contactName" label="Nombre del contacto">
-            <Input placeholder="Persona de contacto" />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col xs={24} sm={14}>
+              <Form.Item name="contactName" label="Nombre del contacto">
+                <Input placeholder="Persona de contacto" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={10}>
+              <Form.Item name="phone" label="Teléfono">
+                <Input placeholder="Teléfono" />
+              </Form.Item>
+            </Col>
+          </Row>
 
-          <Form.Item name="phone" label="Teléfono">
-            <Input placeholder="Teléfono" />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col xs={24} sm={14}>
+              <Form.Item name="email" label="Email">
+                <Input type="email" placeholder="Email" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={10}>
+              <Form.Item name="customerType" label="Tipo de cliente">
+                <Input placeholder="Tipo de cliente" />
+              </Form.Item>
+            </Col>
+          </Row>
 
-          <Form.Item name="email" label="Email">
-            <Input type="email" placeholder="Email" />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col xs={24} sm={8}>
+              <Form.Item name="status" label="Estado">
+                <Input placeholder="Estado" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8}>
+              <Form.Item name="source" label="Fuente">
+                <Input placeholder="Fuente del cliente" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8}>
+              <Form.Item name="responsibleId" label="Responsable">
+                <Select
+                  placeholder="Responsable"
+                  options={users.map((u) => ({ label: u.name, value: u.id }))}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
 
-          <Form.Item name="customerType" label="Tipo de Cliente">
-            <Input placeholder="Tipo de cliente" />
-          </Form.Item>
-
-          <Form.Item name="status" label="Estado">
-            <Input placeholder="Estado" />
-          </Form.Item>
-
-          <Form.Item name="source" label="Fuente">
-            <Input placeholder="Fuente del cliente" />
-          </Form.Item>
-
-          <Form.Item name="responsibleId" label="Responsable">
-            <Select
-              placeholder="Selecciona un responsable"
-              options={users.map((u) => ({ label: u.name, value: u.id }))}
-            />
-          </Form.Item>
-
-          <Form.Item name="generalNotes" label="Notas generales">
-            <Input.TextArea rows={2} placeholder="Notas" />
-          </Form.Item>
-
-          <Form.Item name="nextFollowUpAt" label="Próximo seguimiento">
-            <DatePicker style={{ width: "100%" }} placeholder="Próximo seguimiento" />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col xs={24} sm={12}>
+              <Form.Item name="nextFollowUpAt" label="Próximo seguimiento">
+                <DatePicker style={{ width: "100%" }} placeholder="Fecha de seguimiento" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="generalNotes" label="Notas generales">
+                <Input.TextArea rows={1} placeholder="Notas" />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Modal>
     </div>

@@ -365,75 +365,93 @@ function ProductsContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
+        width={680}
+        styles={{ body: { maxHeight: "70vh", overflowY: "auto", paddingRight: 4 } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "El nombre es requerido" }]}>
-            <Input placeholder="Nombre del producto" />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col xs={24} sm={16}>
+              <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "El nombre es requerido" }]}>
+                <Input placeholder="Nombre del producto" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8}>
+              <Form.Item name="unit" label="Unidad" initialValue={ProductUnit.UNIT}>
+                <Select placeholder="Unidad" options={PRODUCT_UNIT_OPTIONS} />
+              </Form.Item>
+            </Col>
+          </Row>
 
-          <Form.Item name="unit" label="Unidad de medida" initialValue={ProductUnit.UNIT}>
-            <Select placeholder="Seleccioná unidad" options={PRODUCT_UNIT_OPTIONS} />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col xs={24} sm={12}>
+              <Form.Item name="categoryId" label="Categoría">
+                <Select
+                  placeholder="Selecciona una categoría"
+                  options={categories.map((c) => ({ label: c.name, value: c.id }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="stock"
+                label="Stock inicial"
+                extra="Unidades, kg o l según la unidad elegida."
+              >
+                <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 12 o 10,5" style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col xs={24} sm={12}>
+              <Form.Item name="sku" label="SKU">
+                <Input placeholder="SKU" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="barcode" label="Código de Barras">
+                <Input placeholder="Código de barras" />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Form.Item name="description" label="Descripción">
-            <Input.TextArea placeholder="Descripción" rows={3} />
-          </Form.Item>
-
-          <Form.Item name="categoryId" label="Categoría">
-            <Select
-              placeholder="Selecciona una categoría"
-              options={categories.map((c) => ({ label: c.name, value: c.id }))}
-            />
-          </Form.Item>
-
-          <Form.Item name="sku" label="SKU">
-            <Input placeholder="SKU" />
-          </Form.Item>
-
-          <Form.Item name="barcode" label="Código de Barras">
-            <Input placeholder="Código de barras" />
-          </Form.Item>
-
-          <Form.Item
-            name="stock"
-            label="Stock inicial (disponible)"
-            extra="Número según la unidad que uses para este ítem: unidades enteras o kg/l con decimales. Debe coincidir con recetas y movimientos de stock."
-          >
-            <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 12 o 10,5" style={{ width: "100%" }} />
+            <Input.TextArea placeholder="Descripción (opcional)" rows={2} />
           </Form.Item>
 
           {!editingId && (
-            <div style={{ marginTop: 16, padding: 12, borderRadius: 8, border: "1px solid #2d3748" }}>
+            <div style={{ marginTop: 8, padding: 12, borderRadius: 8, border: "1px solid #2d3748" }}>
               <div style={{ marginBottom: 12, color: "#ffffff", fontWeight: 700 }}>Costo y precios</div>
 
               <Form.Item
                 name="costValue"
-                label="Costo del producto (por unidad)"
+                label="Costo por unidad"
                 rules={[{ required: true, message: "El costo es requerido" }]}
               >
                 <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1200" style={{ width: "100%" }} />
               </Form.Item>
 
-              <Row gutter={12}>
-                <Col xs={24} sm={12}>
-                  <Form.Item name="priceMayorista" label="Precio mayorista (opcional)">
+              <Row gutter={16}>
+                <Col xs={24} sm={8}>
+                  <Form.Item name="priceMayorista" label="Mayorista">
                     <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1500" style={{ width: "100%" }} />
                   </Form.Item>
                 </Col>
-                <Col xs={24} sm={12}>
-                  <Form.Item name="priceMinorista" label="Precio minorista (opcional)">
+                <Col xs={24} sm={8}>
+                  <Form.Item name="priceMinorista" label="Minorista">
                     <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1800" style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <Form.Item name="priceFabrica" label="Fábrica">
+                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1300" style={{ width: "100%" }} />
                   </Form.Item>
                 </Col>
               </Row>
 
-              <Form.Item name="priceFabrica" label="Precio fábrica (opcional)">
-                <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1300" style={{ width: "100%" }} />
-              </Form.Item>
-
               <ScreenInfoPanel
                 title="Sobre costos y precios en este formulario"
-                style={{ marginBottom: 0, marginTop: 8 }}
+                style={{ marginBottom: 0, marginTop: 4 }}
               >
                 <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
                   Si dejás algún precio vacío, podés cargarlo después en la pantalla de <strong>Precios</strong>.
