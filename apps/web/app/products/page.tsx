@@ -365,11 +365,20 @@ function ProductsContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
-        width={680}
-        styles={{ body: { maxHeight: "70vh", overflowY: "auto", paddingRight: 4 } }}
+        width="min(92vw, 760px)"
+        centered
+        classNames={{ body: "app-panel-scroll" }}
+        styles={{
+          body: {
+            maxHeight: "calc(100vh - 200px)",
+            overflowY: "auto",
+            paddingRight: 8,
+            paddingTop: 16,
+          },
+        }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Row gutter={16}>
+          <Row gutter={[16, 0]}>
             <Col xs={24} sm={16}>
               <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "El nombre es requerido" }]}>
                 <Input placeholder="Nombre del producto" />
@@ -382,7 +391,7 @@ function ProductsContent() {
             </Col>
           </Row>
 
-          <Row gutter={16}>
+          <Row gutter={[16, 0]}>
             <Col xs={24} sm={12}>
               <Form.Item name="categoryId" label="Categoría">
                 <Select
@@ -402,7 +411,7 @@ function ProductsContent() {
             </Col>
           </Row>
 
-          <Row gutter={16}>
+          <Row gutter={[16, 0]}>
             <Col xs={24} sm={12}>
               <Form.Item name="sku" label="SKU">
                 <Input placeholder="SKU" />
@@ -420,18 +429,33 @@ function ProductsContent() {
           </Form.Item>
 
           {!editingId && (
-            <div style={{ marginTop: 8, padding: 12, borderRadius: 8, border: "1px solid #2d3748" }}>
-              <div style={{ marginBottom: 12, color: "#ffffff", fontWeight: 700 }}>Costo y precios</div>
+            <div
+              style={{
+                marginTop: 4,
+                marginBottom: 8,
+                padding: "16px 16px 4px",
+                borderRadius: 8,
+                border: "1px solid #2d3748",
+                background: "rgba(255,255,255,0.02)",
+              }}
+            >
+              <div style={{ marginBottom: 16, color: "#ffffff", fontWeight: 600, fontSize: 13, letterSpacing: "0.02em" }}>
+                Costo y precios
+              </div>
 
-              <Form.Item
-                name="costValue"
-                label="Costo por unidad"
-                rules={[{ required: true, message: "El costo es requerido" }]}
-              >
-                <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1200" style={{ width: "100%" }} />
-              </Form.Item>
+              <Row gutter={[16, 0]}>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    name="costValue"
+                    label="Costo por unidad"
+                    rules={[{ required: true, message: "El costo es requerido" }]}
+                  >
+                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1200" style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-              <Row gutter={16}>
+              <Row gutter={[16, 0]}>
                 <Col xs={24} sm={8}>
                   <Form.Item name="priceMayorista" label="Mayorista">
                     <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1500" style={{ width: "100%" }} />
@@ -451,7 +475,7 @@ function ProductsContent() {
 
               <ScreenInfoPanel
                 title="Sobre costos y precios en este formulario"
-                style={{ marginBottom: 0, marginTop: 4 }}
+                style={{ marginBottom: 12, marginTop: 0 }}
               >
                 <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
                   Si dejás algún precio vacío, podés cargarlo después en la pantalla de <strong>Precios</strong>.

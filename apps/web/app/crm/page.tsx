@@ -427,7 +427,17 @@ function CrmContent() {
         }}
         onOk={() => form.submit()}
         okText={editingRecord ? "Guardar" : "Crear"}
-        width={500}
+        width="min(92vw, 680px)"
+        centered
+        classNames={{ body: "app-panel-scroll" }}
+        styles={{
+          body: {
+            maxHeight: "calc(100vh - 200px)",
+            overflowY: "auto",
+            paddingRight: 8,
+            paddingTop: 16,
+          },
+        }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="customerType" label="Tipo de cliente" initialValue={editingRecord ? undefined : "Empresa"}>
