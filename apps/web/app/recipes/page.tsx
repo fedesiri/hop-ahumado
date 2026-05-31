@@ -80,6 +80,7 @@ function RecipesContent() {
   const [recipes, setRecipes] = useState<RecipeItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -216,6 +217,7 @@ function RecipesContent() {
     batchQuantity?: number;
     ingredientBatchQuantity?: number;
   }) => {
+    setSubmitting(true);
     try {
       if (!selectedProductId) {
         message.error("Seleccioná un producto final");
@@ -260,6 +262,8 @@ function RecipesContent() {
       fetchRecipes();
     } catch (error) {
       message.error(getErrorMessage(error, "Error al guardar ítem de receta"));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -272,6 +276,7 @@ function RecipesContent() {
     priceMinorista?: number;
     priceFabrica?: number;
   }) => {
+    setSubmitting(true);
     try {
       const productData: CreateProductRequest = {
         name: values.name,
@@ -306,6 +311,8 @@ function RecipesContent() {
       message.success("Producto creado y listo para usar en recetas");
     } catch (error) {
       message.error(getErrorMessage(error, "Error al crear producto"));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -523,6 +530,7 @@ function RecipesContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
+        okButtonProps={{ loading: submitting, disabled: submitting }}
         width={480}
       >
         <ScreenInfoPanel
@@ -628,6 +636,7 @@ function RecipesContent() {
         open={productModalOpen}
         onOk={() => productForm.submit()}
         onCancel={() => setProductModalOpen(false)}
+        okButtonProps={{ loading: submitting, disabled: submitting }}
         width={560}
         zIndex={1300}
       >

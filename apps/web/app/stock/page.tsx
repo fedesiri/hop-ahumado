@@ -33,6 +33,7 @@ function StockContent() {
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [costsByProductId, setCostsByProductId] = useState<Record<string, Cost>>({});
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
   const selectedMovementType = Form.useWatch("type", form);
@@ -227,6 +228,7 @@ function StockContent() {
         return;
       }
 
+      setSubmitting(true);
       await Promise.all(
         validRows.map((r) =>
           apiClient.createStockMovement({
@@ -263,6 +265,8 @@ function StockContent() {
       fetchMovements();
     } catch (error) {
       message.error("Error al registrar movimiento");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -434,6 +438,7 @@ function StockContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
+        okButtonProps={{ loading: submitting, disabled: submitting }}
         width={isMobile ? "calc(100vw - 24px)" : 520}
         styles={{ body: { maxHeight: isMobile ? "75vh" : undefined, overflowY: "auto" } }}
       >

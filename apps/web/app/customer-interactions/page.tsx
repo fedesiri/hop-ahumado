@@ -28,6 +28,7 @@ function CustomerInteractionsContent() {
   const [interactions, setInteractions] = useState<CustomerInteraction[]>([]);
   const [profiles, setProfiles] = useState<CustomerProfile[]>([]);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form] = Form.useForm();
@@ -105,6 +106,7 @@ function CustomerInteractionsContent() {
     notes?: string;
     nextStep?: string;
   }) => {
+    setSubmitting(true);
     try {
       const data: CreateCustomerInteractionRequest = {
         profileId: values.profileId,
@@ -125,6 +127,8 @@ function CustomerInteractionsContent() {
       fetchInteractions();
     } catch (error) {
       message.error("Error al guardar interacción");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -207,6 +211,7 @@ function CustomerInteractionsContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
+        okButtonProps={{ loading: submitting, disabled: submitting }}
         width={600}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>

@@ -29,6 +29,7 @@ function ExpensesContent() {
   const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
@@ -95,25 +96,28 @@ function ExpensesContent() {
       message.error("Seleccioná una línea de negocio");
       return;
     }
+    const data: CreateExpenseRequest = {
+      businessLineId: selectedLineId,
+      description: values.description ?? undefined,
+      cashAmount: values.cashAmount ?? 0,
+      cardAmount: values.cardAmount ?? 0,
+    };
+
+    if ((data.cashAmount ?? 0) <= 0 && (data.cardAmount ?? 0) <= 0) {
+      message.error("Debe ingresar un monto mayor a 0");
+      return;
+    }
+
+    setSubmitting(true);
     try {
-      const data: CreateExpenseRequest = {
-        businessLineId: selectedLineId,
-        description: values.description ?? undefined,
-        cashAmount: values.cashAmount ?? 0,
-        cardAmount: values.cardAmount ?? 0,
-      };
-
-      if ((data.cashAmount ?? 0) <= 0 && (data.cardAmount ?? 0) <= 0) {
-        message.error("Debe ingresar un monto mayor a 0");
-        return;
-      }
-
       await apiClient.createExpense(data);
       message.success("Egreso registrado");
       setModalOpen(false);
       await fetchAllExpenses();
     } catch {
       message.error("Error al registrar egreso");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -209,7 +213,7 @@ function ExpensesContent() {
         </div>
       )}
 
-      <Modal title="Nuevo egreso" open={modalOpen} onOk={() => form.submit()} onCancel={() => setModalOpen(false)}>
+      <Modal title="Nuevo egreso" open={modalOpen} onOk={() => form.submit()} onCancel={() => setModalOpen(false)} okButtonProps={{ loading: submitting, disabled: submitting }}>
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="description" label="Descripción">
             <Input placeholder="Ej. Productos - pallet / Transporte" />

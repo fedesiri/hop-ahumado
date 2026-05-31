@@ -65,6 +65,7 @@ function ProductsContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form] = Form.useForm();
@@ -171,6 +172,7 @@ function ProductsContent() {
       message.error("Seleccioná una línea de negocio");
       return;
     }
+    setSubmitting(true);
     try {
       const data: CreateProductRequest = {
         businessLineId: selectedLineId!,
@@ -216,6 +218,8 @@ function ProductsContent() {
       fetchProducts();
     } catch (error) {
       message.error("Error al guardar producto");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -365,6 +369,7 @@ function ProductsContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
+        okButtonProps={{ loading: submitting, disabled: submitting }}
         width="min(92vw, 760px)"
         centered
         classNames={{ body: "app-panel-scroll" }}

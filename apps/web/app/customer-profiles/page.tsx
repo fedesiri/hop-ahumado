@@ -29,6 +29,7 @@ function CustomerProfilesContent() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form] = Form.useForm();
@@ -127,6 +128,7 @@ function CustomerProfilesContent() {
     generalNotes?: string;
     nextFollowUpAt?: Dayjs;
   }) => {
+    setSubmitting(true);
     try {
       const data: CreateCustomerProfileRequest = {
         customerId: values.customerId,
@@ -152,6 +154,8 @@ function CustomerProfilesContent() {
       fetchProfiles();
     } catch (error) {
       message.error("Error al guardar perfil");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -234,6 +238,7 @@ function CustomerProfilesContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
+        okButtonProps={{ loading: submitting, disabled: submitting }}
         width={680}
         styles={{ body: { maxHeight: "70vh", overflowY: "auto", paddingRight: 4 } }}
       >

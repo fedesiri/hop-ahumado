@@ -21,6 +21,7 @@ function CategoriesContent() {
   const { selectedLineId } = useLineContext()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form] = Form.useForm()
@@ -76,6 +77,7 @@ function CategoriesContent() {
       message.error('Seleccioná una línea de negocio')
       return
     }
+    setSubmitting(true)
     try {
       if (editingId) {
         await apiClient.updateCategory(editingId, { name: values.name } as UpdateCategoryRequest)
@@ -89,6 +91,8 @@ function CategoriesContent() {
       fetchCategories()
     } catch {
       message.error('Error al guardar categoría')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -133,6 +137,7 @@ function CategoriesContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
+        okButtonProps={{ loading: submitting, disabled: submitting }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="name" label="Nombre" rules={[{ required: true, message: 'El nombre es requerido' }]}>

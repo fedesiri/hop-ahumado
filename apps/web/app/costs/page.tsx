@@ -38,6 +38,7 @@ function CostsContent() {
   const [costs, setCosts] = useState<Cost[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [replaceModalOpen, setReplaceModalOpen] = useState(false);
   const [replaceTarget, setReplaceTarget] = useState<Cost | null>(null);
@@ -172,6 +173,7 @@ function CostsContent() {
 
   const handleBulkReplaceSubmit = async (values: { value: number }) => {
     if (selectedCostIds.length === 0) return;
+    setSubmitting(true);
     try {
       const res = await apiClient.bulkReplaceCosts({
         costIds: selectedCostIds,
@@ -187,11 +189,14 @@ function CostsContent() {
       fetchCosts();
     } catch {
       message.error("Error al actualizar costos");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleReplaceSubmit = async (values: { value: number }) => {
     if (!replaceTarget) return;
+    setSubmitting(true);
     try {
       await apiClient.replaceCost(replaceTarget.id, { value: values.value });
       message.success("Costo actualizado: el anterior quedó archivado.");
@@ -200,6 +205,8 @@ function CostsContent() {
       fetchCosts();
     } catch {
       message.error("Error al actualizar costo");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -222,6 +229,7 @@ function CostsContent() {
   };
 
   const handleSubmit = async (values: any) => {
+    setSubmitting(true);
     try {
       const data: CreateCostRequest = {
         productId: values.productId,
@@ -239,6 +247,8 @@ function CostsContent() {
       fetchCosts();
     } catch (error) {
       message.error("Error al guardar costo");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -367,6 +377,7 @@ function CostsContent() {
         open={modalOpen}
         onOk={() => form.submit()}
         onCancel={() => setModalOpen(false)}
+        okButtonProps={{ loading: submitting, disabled: submitting }}
         forceRender
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
@@ -395,6 +406,7 @@ function CostsContent() {
           setReplaceModalOpen(false);
           setReplaceTarget(null);
         }}
+        okButtonProps={{ loading: submitting, disabled: submitting }}
         forceRender
       >
         {replaceTarget && (
@@ -429,7 +441,8 @@ function CostsContent() {
           setBulkPreviewRows(null);
         }}
         okButtonProps={{
-          disabled: bulkPreviewLoading || !bulkPreviewRows?.length,
+          loading: submitting,
+          disabled: submitting || bulkPreviewLoading || !bulkPreviewRows?.length,
         }}
         forceRender
         width={720}
