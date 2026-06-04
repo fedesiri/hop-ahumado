@@ -20,11 +20,13 @@ import { getPromoThresholdCategoryNames, validateOrderPromoPricing } from "./ord
 
 type OrderWithRelations = Order & {
   isConsignment: boolean;
+  cancelledAt: Date | null;
   orderItems: Array<{
     id: string;
     productId: string;
     quantity: number;
     price: Decimal | null;
+    originalQuantity: number | null;
     product: { id: string; name: string; category?: { id: string; name: string } | null };
   }>;
   payments: Array<{
@@ -106,6 +108,7 @@ export class OrderService {
               productId: i.productId,
               quantity: i.quantity,
               price: dto.isConsignment ? null : i.price,
+              originalQuantity: dto.isConsignment ? i.quantity : null,
             })),
           },
         },
@@ -240,19 +243,26 @@ export class OrderService {
 
   /** Condición SQL alineada con `computeOrderFields` (líneas vs pagos, tolerancia monetaria). */
   private sqlOrderPaymentStatusCondition(status: OrderPaymentStatus, tol: number): Prisma.Sql {
+    if (status === OrderPaymentStatus.CANCELLED) {
+      return Prisma.sql`(o."isConsignment" = true AND o."cancelledAt" IS NOT NULL)`;
+    }
     if (status === OrderPaymentStatus.PENDING_PRICING) {
       return Prisma.sql`(
         o."isConsignment" = true
+        AND o."cancelledAt" IS NULL
         AND EXISTS (
           SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NULL
         )
       )`;
     }
-    // For non-consignment statuses, exclude PENDING_PRICING orders.
+    // Exclude PENDING_PRICING and CANCELLED orders from the remaining statuses.
     const notPendingPricing = Prisma.sql`(
-      o."isConsignment" = false
-      OR NOT EXISTS (
-        SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NULL
+      o."cancelledAt" IS NULL
+      AND (
+        o."isConsignment" = false
+        OR NOT EXISTS (
+          SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NULL
+        )
       )
     )`;
     if (status === OrderPaymentStatus.UNPAID) {
@@ -549,6 +559,9 @@ export class OrderService {
         "No se puede registrar un pago en una orden de consignación con precios pendientes",
       );
     }
+    if (computed.paymentStatus === OrderPaymentStatus.CANCELLED) {
+      throw new BadRequestException("No se puede registrar un pago en una orden cancelada");
+    }
     if (computed.paidAmount + dto.amount > computed.totalPrice + ORDER_PAYMENT_TOLERANCE) {
       throw new BadRequestException(
         `El pago excede el saldo pendiente. Pendiente: ${computed.remainingAmount.toFixed(2)} | Intento: ${dto.amount.toFixed(2)}`,
@@ -605,11 +618,21 @@ export class OrderService {
     return this.enrichOrder(updatedOrder);
   }
 
-  async setConsignmentPrices(id: string, dto: { items: { orderItemId: string; price: number }[] }) {
-    const order = await this.prisma.order.findUnique({
+  async setConsignmentPrices(
+    id: string,
+    dto: {
+      items: {
+        orderItemId: string;
+        price: number;
+        quantitySold?: number;
+        unsoldDisposition?: "RETURN_TO_STOCK" | "KEEP_ON_CONSIGNMENT";
+      }[];
+    },
+  ) {
+    const order = (await this.prisma.order.findUnique({
       where: { id },
       include: ORDER_INCLUDE,
-    });
+    })) as OrderWithRelations | null;
     if (!order) {
       throw new NotFoundException(`Orden con id "${id}" no encontrada`);
     }
@@ -617,26 +640,71 @@ export class OrderService {
       throw new BadRequestException("Solo se pueden fijar precios en órdenes de consignación");
     }
 
-    const orderItemIds = new Set((order as OrderWithRelations).orderItems.map((i) => i.id));
-    for (const item of dto.items) {
-      if (!orderItemIds.has(item.orderItemId)) {
-        throw new BadRequestException(`El ítem "${item.orderItemId}" no pertenece a esta orden`);
+    const itemsMap = new Map(order.orderItems.map((i) => [i.id, i]));
+    for (const dtoItem of dto.items) {
+      if (!itemsMap.has(dtoItem.orderItemId)) {
+        throw new BadRequestException(`El ítem "${dtoItem.orderItemId}" no pertenece a esta orden`);
+      }
+      const existing = itemsMap.get(dtoItem.orderItemId)!;
+      const sold = dtoItem.quantitySold ?? Number(existing.quantity);
+      if (sold > Number(existing.quantity)) {
+        throw new BadRequestException(
+          `quantitySold (${sold}) no puede ser mayor a la cantidad del ítem (${existing.quantity})`,
+        );
+      }
+      const remaining = Number(existing.quantity) - sold;
+      if (remaining > 0 && !dtoItem.unsoldDisposition) {
+        throw new BadRequestException(
+          `Debe especificar unsoldDisposition cuando quantitySold es menor a la cantidad del ítem`,
+        );
       }
     }
 
+    const locationId = order.fulfillmentLocationId ?? (await this.inventory.getDefaultLocationId(this.prisma));
+
     const updatedOrder = await this.prisma.$transaction(async (tx) => {
-      for (const item of dto.items) {
+      for (const dtoItem of dto.items) {
+        const existing = itemsMap.get(dtoItem.orderItemId)!;
+        const sold = dtoItem.quantitySold ?? Number(existing.quantity);
+        const remaining = Number(existing.quantity) - sold;
+
         await tx.orderItem.update({
-          where: { id: item.orderItemId },
-          data: { price: item.price },
+          where: { id: dtoItem.orderItemId },
+          data: { quantity: sold, price: dtoItem.price },
         });
+
+        if (remaining > 0) {
+          if (dtoItem.unsoldDisposition === "KEEP_ON_CONSIGNMENT") {
+            await tx.orderItem.create({
+              data: {
+                orderId: id,
+                productId: existing.productId,
+                quantity: remaining,
+                price: null,
+                originalQuantity: existing.originalQuantity,
+              },
+            });
+          } else {
+            const targets = await this.stockTargetsForOrderLine(tx, existing.productId, remaining);
+            for (const t of targets) {
+              await this.inventory.applyBalanceDelta(tx, t.productId, locationId, t.quantity);
+              await tx.stockMovement.create({
+                data: {
+                  productId: t.productId,
+                  quantity: t.quantity,
+                  type: StockMovementType.IN,
+                  reason: `Devolución parcial consignación ${id.slice(0, 8)}`,
+                  locationId,
+                },
+              });
+            }
+          }
+        }
       }
 
       const reloaded = await tx.order.findUnique({
         where: { id },
-        include: {
-          orderItems: { select: { quantity: true, price: true } },
-        },
+        include: { orderItems: { select: { quantity: true, price: true } } },
       });
 
       const newTotal = (reloaded?.orderItems ?? []).reduce(
@@ -645,6 +713,86 @@ export class OrderService {
       );
 
       await tx.order.update({ where: { id }, data: { total: newTotal } });
+
+      return tx.order.findUnique({
+        where: { id },
+        include: ORDER_INCLUDE,
+      }) as Promise<OrderWithRelations>;
+    });
+
+    if (!updatedOrder) {
+      throw new NotFoundException(`Orden con id "${id}" no encontrada`);
+    }
+
+    return this.enrichOrder(updatedOrder);
+  }
+
+  async returnConsignment(id: string, dto: { items: { orderItemId: string; quantity: number }[] }) {
+    const order = (await this.prisma.order.findUnique({
+      where: { id },
+      include: ORDER_INCLUDE,
+    })) as OrderWithRelations | null;
+    if (!order) {
+      throw new NotFoundException(`Orden con id "${id}" no encontrada`);
+    }
+    if (!order.isConsignment) {
+      throw new BadRequestException("Solo se pueden registrar devoluciones en órdenes de consignación");
+    }
+
+    const itemsMap = new Map(order.orderItems.map((i) => [i.id, i]));
+    for (const dtoItem of dto.items) {
+      const existing = itemsMap.get(dtoItem.orderItemId);
+      if (!existing) {
+        throw new BadRequestException(`El ítem "${dtoItem.orderItemId}" no pertenece a esta orden`);
+      }
+      if (existing.price !== null) {
+        throw new BadRequestException(
+          `El ítem "${dtoItem.orderItemId}" ya fue cobrado y no puede devolverse`,
+        );
+      }
+      if (dtoItem.quantity > Number(existing.quantity)) {
+        throw new BadRequestException(
+          `La cantidad a devolver (${dtoItem.quantity}) supera la cantidad del ítem (${existing.quantity})`,
+        );
+      }
+    }
+
+    const locationId = order.fulfillmentLocationId ?? (await this.inventory.getDefaultLocationId(this.prisma));
+
+    const updatedOrder = await this.prisma.$transaction(async (tx) => {
+      for (const dtoItem of dto.items) {
+        const existing = itemsMap.get(dtoItem.orderItemId)!;
+        const targets = await this.stockTargetsForOrderLine(tx, existing.productId, dtoItem.quantity);
+        for (const t of targets) {
+          await this.inventory.applyBalanceDelta(tx, t.productId, locationId, t.quantity);
+          await tx.stockMovement.create({
+            data: {
+              productId: t.productId,
+              quantity: t.quantity,
+              type: StockMovementType.IN,
+              reason: `Devolución consignación ${id.slice(0, 8)}`,
+              locationId,
+            },
+          });
+        }
+
+        if (dtoItem.quantity === Number(existing.quantity)) {
+          await tx.orderItem.delete({ where: { id: dtoItem.orderItemId } });
+        } else {
+          await tx.orderItem.update({
+            where: { id: dtoItem.orderItemId },
+            data: { quantity: Number(existing.quantity) - dtoItem.quantity },
+          });
+        }
+      }
+
+      const remainingItems = await tx.orderItem.findMany({ where: { orderId: id } });
+      const hasPendingItems = remainingItems.some((i) => i.price === null);
+      const hasNoItems = remainingItems.length === 0;
+
+      if (hasNoItems || !hasPendingItems) {
+        await tx.order.update({ where: { id }, data: { cancelledAt: new Date() } });
+      }
 
       return tx.order.findUnique({
         where: { id },

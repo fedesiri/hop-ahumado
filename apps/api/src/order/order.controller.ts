@@ -3,6 +3,7 @@ import { toLimit, toPage } from "../common/pagination";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { GetOrdersQueryDto } from "./dto/get-orders-query.dto";
+import { ReturnConsignmentDto } from "./dto/return-consignment.dto";
 import { SetConsignmentPricesDto } from "./dto/set-consignment-prices.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
 import { UpdatePaymentDto } from "./dto/update-payment.dto";
@@ -42,6 +43,11 @@ export class OrderController {
   @Patch(":id/set-prices")
   setConsignmentPrices(@Param("id") id: string, @Body() dto: SetConsignmentPricesDto) {
     return this.orderService.setConsignmentPrices(id, dto);
+  }
+
+  @Post(":id/return")
+  returnConsignment(@Param("id") id: string, @Body() dto: ReturnConsignmentDto) {
+    return this.orderService.returnConsignment(id, dto);
   }
 
   @Patch(":id/payments/:paymentId")

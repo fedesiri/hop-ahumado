@@ -255,7 +255,9 @@ function OrdersContent() {
                   ? "gold"
                   : record.paymentStatus === OrderPaymentStatus.PENDING_PRICING
                     ? "orange"
-                    : "default"
+                    : record.paymentStatus === OrderPaymentStatus.CANCELLED
+                      ? "red"
+                      : "default"
             }
           >
             {orderPaymentStatusLabel(record.paymentStatus)}
@@ -517,6 +519,10 @@ function OrdersContent() {
                 {
                   value: OrderPaymentStatus.PENDING_PRICING,
                   label: orderPaymentStatusLabel(OrderPaymentStatus.PENDING_PRICING),
+                },
+                {
+                  value: OrderPaymentStatus.CANCELLED,
+                  label: orderPaymentStatusLabel(OrderPaymentStatus.CANCELLED),
                 },
               ]}
               onChange={(value) => {

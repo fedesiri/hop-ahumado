@@ -3,4 +3,5 @@ export enum OrderPaymentStatus {
   PARTIALLY_PAID = "PARTIALLY_PAID",
   PAID = "PAID",
   PENDING_PRICING = "PENDING_PRICING",
+  CANCELLED = "CANCELLED",
 }

@@ -32,6 +32,7 @@ export enum OrderPaymentStatus {
   PARTIALLY_PAID = "PARTIALLY_PAID",
   PAID = "PAID",
   PENDING_PRICING = "PENDING_PRICING",
+  CANCELLED = "CANCELLED",
 }
 
 export enum StockMovementType {
@@ -304,6 +305,7 @@ export interface OrderItem {
   productId: string;
   quantity: number;
   price: number | null;
+  originalQuantity?: number | null;
   createdAt: string;
   updatedAt: string;
   product?: Product;
@@ -324,6 +326,7 @@ export interface Order {
   userId?: string | null;
   deliveryDate?: string | null;
   deliveredAt?: string | null;
+  cancelledAt?: string | null;
   total: number;
   totalPrice: number;
   paidAmount: number;
@@ -595,7 +598,16 @@ export interface CreateOrderRequest {
 }
 
 export interface SetConsignmentPricesRequest {
-  items: { orderItemId: string; price: number }[];
+  items: {
+    orderItemId: string;
+    price: number;
+    quantitySold?: number;
+    unsoldDisposition?: "RETURN_TO_STOCK" | "KEEP_ON_CONSIGNMENT";
+  }[];
+}
+
+export interface ReturnConsignmentRequest {
+  items: { orderItemId: string; quantity: number }[];
 }
 
 export interface UpdateOrderRequest {

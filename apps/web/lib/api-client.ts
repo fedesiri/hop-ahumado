@@ -61,6 +61,7 @@ import type {
   UpdateUserRequest,
   User,
   SetConsignmentPricesRequest,
+  ReturnConsignmentRequest,
 } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -677,6 +678,13 @@ export class ApiClient {
   async setConsignmentPrices(orderId: string, data: SetConsignmentPricesRequest): Promise<Order> {
     return this.request(`/orders/${orderId}/set-prices`, {
       method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async returnConsignment(orderId: string, data: ReturnConsignmentRequest): Promise<Order> {
+    return this.request(`/orders/${orderId}/return`, {
+      method: "POST",
       body: JSON.stringify(data),
     });
   }

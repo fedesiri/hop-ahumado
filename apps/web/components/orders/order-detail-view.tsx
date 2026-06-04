@@ -13,6 +13,18 @@ type Props = {
   onOrderUpdated: (order: Order) => void;
 };
 
+type CobrarItem = {
+  orderItemId: string;
+  price: number | null;
+  quantitySold: number | null;
+  unsoldDisposition: "RETURN_TO_STOCK" | "KEEP_ON_CONSIGNMENT" | null;
+};
+
+type DevolverItem = {
+  orderItemId: string;
+  quantity: number | null;
+};
+
 export function OrderDetailView({ order, onOrderUpdated }: Props) {
   const { message } = App.useApp();
   const [paymentAmount, setPaymentAmount] = useState<number | null>(null);
@@ -20,12 +32,18 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
   const [addingPayment, setAddingPayment] = useState(false);
   const [updatingPaymentId, setUpdatingPaymentId] = useState<string | null>(null);
 
+  // Cobrar modal state
   const [cobrarModalOpen, setCobrarModalOpen] = useState(false);
-  const [cobrarItems, setCobrarItems] = useState<{ orderItemId: string; price: number | null }[]>([]);
+  const [cobrarItems, setCobrarItems] = useState<CobrarItem[]>([]);
   const [cobrarPaymentAmount, setCobrarPaymentAmount] = useState<number | null>(null);
   const [cobrarPaymentMethod, setCobrarPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [cobrarLoading, setCobrarLoading] = useState(false);
   const [cobrarPricesLoading, setCobrarPricesLoading] = useState(false);
+
+  // Devolver modal state
+  const [devolverModalOpen, setDevolverModalOpen] = useState(false);
+  const [devolverItems, setDevolverItems] = useState<DevolverItem[]>([]);
+  const [devolverLoading, setDevolverLoading] = useState(false);
 
   useEffect(() => {
     const r = Number(order.remainingAmount ?? 0);
@@ -33,8 +51,14 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
   }, [order.id, order.remainingAmount]);
 
   const openCobrarModal = async () => {
-    const emptyItems = (order.orderItems ?? []).map((i) => ({ orderItemId: i.id, price: null as number | null }));
-    setCobrarItems(emptyItems);
+    const pendingItems = (order.orderItems ?? []).filter((i) => i.price === null || i.price === undefined);
+    const initialItems: CobrarItem[] = pendingItems.map((i) => ({
+      orderItemId: i.id,
+      price: null,
+      quantitySold: Number(i.quantity),
+      unsoldDisposition: null,
+    }));
+    setCobrarItems(initialItems);
     setCobrarPaymentAmount(null);
     setCobrarPaymentMethod(PaymentMethod.CASH);
     setCobrarModalOpen(true);
@@ -54,9 +78,11 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
         }
       }
       setCobrarItems(
-        (order.orderItems ?? []).map((i) => ({
+        pendingItems.map((i) => ({
           orderItemId: i.id,
           price: priceByProductId.get(i.productId) ?? null,
+          quantitySold: Number(i.quantity),
+          unsoldDisposition: null,
         })),
       );
     } catch {
@@ -66,10 +92,11 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
     }
   };
 
-  const cobrarTotal = cobrarItems.reduce(
-    (sum, i) => sum + (i.price ?? 0) * Number((order.orderItems ?? []).find((oi) => oi.id === i.orderItemId)?.quantity ?? 0),
-    0,
-  );
+  const cobrarTotal = cobrarItems.reduce((sum, i) => {
+    const oi = (order.orderItems ?? []).find((oi) => oi.id === i.orderItemId);
+    const qty = i.quantitySold ?? Number(oi?.quantity ?? 0);
+    return sum + (i.price ?? 0) * qty;
+  }, 0);
 
   useEffect(() => {
     if (cobrarModalOpen && cobrarTotal > 0) {
@@ -83,12 +110,37 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       message.error("Ingresá el precio para todos los ítems antes de confirmar");
       return;
     }
+    for (const i of cobrarItems) {
+      const oi = (order.orderItems ?? []).find((oi) => oi.id === i.orderItemId);
+      const qty = i.quantitySold ?? Number(oi?.quantity ?? 0);
+      if (qty < Number(oi?.quantity ?? 0) && !i.unsoldDisposition) {
+        message.error("Seleccioná qué hacer con las unidades no vendidas de cada ítem");
+        return;
+      }
+    }
     setCobrarLoading(true);
     try {
       let updatedOrder = await apiClient.setConsignmentPrices(order.id, {
-        items: cobrarItems.map((i) => ({ orderItemId: i.orderItemId, price: i.price! })),
+        items: cobrarItems.map((i) => {
+          const oi = (order.orderItems ?? []).find((oi) => oi.id === i.orderItemId);
+          const sold = i.quantitySold ?? Number(oi?.quantity ?? 0);
+          const full = Number(oi?.quantity ?? 0);
+          const isPartial = sold < full;
+          return {
+            orderItemId: i.orderItemId,
+            price: i.price!,
+            ...(isPartial && {
+              quantitySold: sold,
+              unsoldDisposition: i.unsoldDisposition!,
+            }),
+          };
+        }),
       });
-      if (cobrarPaymentAmount && cobrarPaymentAmount > 0) {
+      if (
+        cobrarPaymentAmount &&
+        cobrarPaymentAmount > 0 &&
+        updatedOrder.paymentStatus !== OrderPaymentStatus.PENDING_PRICING
+      ) {
         updatedOrder = await apiClient.createOrderPayment(order.id, {
           amount: cobrarPaymentAmount,
           method: cobrarPaymentMethod,
@@ -96,7 +148,12 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       }
       onOrderUpdated(updatedOrder);
       setCobrarModalOpen(false);
-      message.success("Consignación cobrada");
+      const stillPending = updatedOrder.paymentStatus === OrderPaymentStatus.PENDING_PRICING;
+      message.success(
+        stillPending
+          ? "Precios fijados. Los ítems restantes quedan en consignación."
+          : "Consignación cobrada",
+      );
     } catch (error: unknown) {
       const msg =
         error && typeof error === "object" && "message" in error
@@ -105,6 +162,37 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       message.error(msg);
     } finally {
       setCobrarLoading(false);
+    }
+  };
+
+  const openDevolverModal = () => {
+    const pendingItems = (order.orderItems ?? []).filter((i) => i.price === null || i.price === undefined);
+    setDevolverItems(pendingItems.map((i) => ({ orderItemId: i.id, quantity: Number(i.quantity) })));
+    setDevolverModalOpen(true);
+  };
+
+  const handleDevolver = async () => {
+    const itemsToReturn = devolverItems.filter((i) => i.quantity && i.quantity > 0);
+    if (itemsToReturn.length === 0) {
+      message.error("Ingresá al menos una cantidad mayor a 0 para devolver");
+      return;
+    }
+    setDevolverLoading(true);
+    try {
+      const updated = await apiClient.returnConsignment(order.id, {
+        items: itemsToReturn.map((i) => ({ orderItemId: i.orderItemId, quantity: i.quantity! })),
+      });
+      onOrderUpdated(updated);
+      setDevolverModalOpen(false);
+      message.success("Devolución registrada");
+    } catch (error: unknown) {
+      const msg =
+        error && typeof error === "object" && "message" in error
+          ? String((error as { message: string }).message)
+          : "No se pudo registrar la devolución";
+      message.error(msg);
+    } finally {
+      setDevolverLoading(false);
     }
   };
 
@@ -149,6 +237,44 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
     }
   };
 
+  const isCancelled = order.paymentStatus === OrderPaymentStatus.CANCELLED;
+  const isPendingPricing = order.isConsignment && order.paymentStatus === OrderPaymentStatus.PENDING_PRICING;
+  const pendingOrderItems = (order.orderItems ?? []).filter((i) => i.price === null || i.price === undefined);
+
+  const itemColumns = [
+    { title: "Producto", dataIndex: ["product", "name"], key: "product" },
+    ...(order.isConsignment
+      ? [
+          {
+            title: "Consignado",
+            key: "originalQuantity",
+            render: (_: unknown, record: OrderItem) =>
+              record.originalQuantity != null ? formatQuantity(record.originalQuantity) : "—",
+          },
+        ]
+      : []),
+    {
+      title: "Cantidad",
+      dataIndex: "quantity",
+      key: "quantity",
+      render: (q: number) => formatQuantity(q),
+    },
+    {
+      title: "Precio",
+      dataIndex: "price",
+      key: "price",
+      render: (v: number | string | null) => (v === null || v === undefined ? "—" : formatCurrency(v)),
+    },
+    {
+      title: "Subtotal",
+      key: "subtotal",
+      render: (_: unknown, record: OrderItem) =>
+        record.price === null || record.price === undefined
+          ? "—"
+          : formatCurrency(Number(record.price) * Number(record.quantity)),
+    },
+  ];
+
   return (
     <div>
       <Card style={{ marginBottom: 16, background: "#1f2937" }}>
@@ -175,7 +301,9 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
                     ? "gold"
                     : order.paymentStatus === OrderPaymentStatus.PENDING_PRICING
                       ? "orange"
-                      : "default"
+                      : order.paymentStatus === OrderPaymentStatus.CANCELLED
+                        ? "red"
+                        : "default"
               }
             >
               {orderPaymentStatusLabel(order.paymentStatus)}
@@ -194,6 +322,14 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
           <Col xs={24} sm={12}>
             <strong>Creada:</strong> {new Date(order.createdAt).toLocaleDateString("es-AR")}
           </Col>
+          {isCancelled && order.cancelledAt && (
+            <Col xs={24} sm={12}>
+              <strong>Cancelada el:</strong>{" "}
+              <span style={{ color: "#ef4444" }}>
+                {new Date(order.cancelledAt).toLocaleDateString("es-AR")}
+              </span>
+            </Col>
+          )}
           <Col xs={24} sm={12}>
             <strong>Entrega programada:</strong>{" "}
             {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString("es-AR") : "—"}
@@ -219,29 +355,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       <h3 style={{ color: "#ffffff" }}>Ítems</h3>
       <AntTable
         style={{ marginBottom: 24 }}
-        columns={[
-          { title: "Producto", dataIndex: ["product", "name"], key: "product" },
-          {
-            title: "Cantidad",
-            dataIndex: "quantity",
-            key: "quantity",
-            render: (q: number) => formatQuantity(q),
-          },
-          {
-            title: "Precio",
-            dataIndex: "price",
-            key: "price",
-            render: (v: number | string | null) => (v === null || v === undefined ? "—" : formatCurrency(v)),
-          },
-          {
-            title: "Subtotal",
-            key: "subtotal",
-            render: (_: unknown, record: OrderItem) =>
-              record.price === null || record.price === undefined
-                ? "—"
-                : formatCurrency(Number(record.price) * Number(record.quantity)),
-          },
-        ]}
+        columns={itemColumns}
         dataSource={(order.orderItems || []) as OrderItem[]}
         rowKey="id"
         pagination={false}
@@ -249,14 +363,25 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
 
       <h3 style={{ color: "#ffffff" }}>Pagos</h3>
 
-      {order.isConsignment && order.paymentStatus === OrderPaymentStatus.PENDING_PRICING ? (
+      {isPendingPricing ? (
         <Card style={{ marginBottom: 16, background: "#1f2937" }}>
           <p style={{ color: "#9ca3af", marginBottom: 12 }}>
             Esta orden está pendiente de cobro. Ingresá los precios del día para cada ítem y registrá el pago.
           </p>
-          <Button type="primary" onClick={openCobrarModal}>
-            Cobrar consignación
-          </Button>
+          <Space wrap>
+            <Button type="primary" onClick={openCobrarModal}>
+              Cobrar consignación
+            </Button>
+            <Button onClick={openDevolverModal}>
+              Registrar devolución
+            </Button>
+          </Space>
+        </Card>
+      ) : isCancelled ? (
+        <Card style={{ marginBottom: 16, background: "#1f2937" }}>
+          <p style={{ color: "#9ca3af" }}>
+            Esta orden fue cancelada. No se pueden registrar pagos ni devoluciones.
+          </p>
         </Card>
       ) : (
         <Card style={{ marginBottom: 16, background: "#1f2937" }}>
@@ -326,6 +451,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
         locale={{ emptyText: "Sin pagos registrados" }}
       />
 
+      {/* Modal Cobrar consignación */}
       <Modal
         title="Cobrar consignación"
         open={cobrarModalOpen}
@@ -351,18 +477,66 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
           size="small"
           pagination={false}
           style={{ marginBottom: 16 }}
-          dataSource={(order.orderItems ?? []).map((oi) => ({
-            ...oi,
-            cobrarPrice: cobrarItems.find((c) => c.orderItemId === oi.id)?.price ?? null,
-          }))}
+          dataSource={pendingOrderItems.map((oi) => {
+            const ci = cobrarItems.find((c) => c.orderItemId === oi.id);
+            return { ...oi, cobrarPrice: ci?.price ?? null, cobrarQty: ci?.quantitySold ?? Number(oi.quantity), cobrarDisposition: ci?.unsoldDisposition ?? null };
+          })}
           rowKey="id"
           columns={[
             { title: "Producto", dataIndex: ["product", "name"], key: "product" },
             {
-              title: "Cantidad",
+              title: "Disponible",
               dataIndex: "quantity",
               key: "quantity",
               render: (q: number) => formatQuantity(q),
+            },
+            {
+              title: "Cant. vendida",
+              key: "cantVendida",
+              render: (_: unknown, record: OrderItem & { cobrarQty: number; cobrarDisposition: string | null }) => (
+                <InputNumber
+                  min={0}
+                  max={Number(record.quantity)}
+                  value={record.cobrarQty}
+                  onChange={(v) =>
+                    setCobrarItems((prev) =>
+                      prev.map((i) =>
+                        i.orderItemId === record.id
+                          ? { ...i, quantitySold: v ?? 0, unsoldDisposition: v === Number(record.quantity) ? null : i.unsoldDisposition }
+                          : i,
+                      ),
+                    )
+                  }
+                  style={{ width: 80 }}
+                />
+              ),
+            },
+            {
+              title: "Remanente",
+              key: "remanente",
+              render: (_: unknown, record: OrderItem & { cobrarQty: number; cobrarDisposition: string | null }) => {
+                const sold = record.cobrarQty;
+                const remaining = Number(record.quantity) - sold;
+                if (remaining <= 0) return <span style={{ color: "#6b7280" }}>—</span>;
+                return (
+                  <Select
+                    placeholder="¿Qué hacemos?"
+                    value={record.cobrarDisposition ?? undefined}
+                    style={{ width: 170 }}
+                    onChange={(v) =>
+                      setCobrarItems((prev) =>
+                        prev.map((i) =>
+                          i.orderItemId === record.id ? { ...i, unsoldDisposition: v as "RETURN_TO_STOCK" | "KEEP_ON_CONSIGNMENT" } : i,
+                        ),
+                      )
+                    }
+                    options={[
+                      { label: "Devolver al stock", value: "RETURN_TO_STOCK" },
+                      { label: "Dejar en consignación", value: "KEEP_ON_CONSIGNMENT" },
+                    ]}
+                  />
+                );
+              },
             },
             {
               title: "Precio unitario",
@@ -406,6 +580,61 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
         <p style={{ color: "#9ca3af", marginTop: 8, fontSize: 12 }}>
           Dejá el monto en blanco si querés fijar los precios sin registrar el pago todavía.
         </p>
+      </Modal>
+
+      {/* Modal Registrar devolución */}
+      <Modal
+        title="Registrar devolución"
+        open={devolverModalOpen}
+        onCancel={() => setDevolverModalOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setDevolverModalOpen(false)}>
+            Cancelar
+          </Button>,
+          <Button key="confirm" danger loading={devolverLoading} onClick={() => void handleDevolver()}>
+            Confirmar devolución
+          </Button>,
+        ]}
+      >
+        <p style={{ color: "#9ca3af", marginBottom: 16 }}>
+          Ingresá la cantidad que devuelve el cliente por cada ítem. El stock se reincorporará al inventario.
+        </p>
+        <AntTable
+          size="small"
+          pagination={false}
+          style={{ marginBottom: 16 }}
+          dataSource={pendingOrderItems.map((oi) => ({
+            ...oi,
+            devolverQty: devolverItems.find((d) => d.orderItemId === oi.id)?.quantity ?? Number(oi.quantity),
+          }))}
+          rowKey="id"
+          columns={[
+            { title: "Producto", dataIndex: ["product", "name"], key: "product" },
+            {
+              title: "En consignación",
+              dataIndex: "quantity",
+              key: "quantity",
+              render: (q: number) => formatQuantity(q),
+            },
+            {
+              title: "Cant. a devolver",
+              key: "cantDevolver",
+              render: (_: unknown, record: OrderItem & { devolverQty: number }) => (
+                <InputNumber
+                  min={0}
+                  max={Number(record.quantity)}
+                  value={record.devolverQty}
+                  onChange={(v) =>
+                    setDevolverItems((prev) =>
+                      prev.map((d) => (d.orderItemId === record.id ? { ...d, quantity: v ?? 0 } : d)),
+                    )
+                  }
+                  style={{ width: 100 }}
+                />
+              ),
+            },
+          ]}
+        />
       </Modal>
     </div>
   );

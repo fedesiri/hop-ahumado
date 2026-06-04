@@ -16,6 +16,7 @@ type ComputablePayment = {
 
 type ComputableOrder = {
   isConsignment?: boolean | null;
+  cancelledAt?: Date | null;
   deliveredAt?: Date | null;
   orderItems: ComputableOrderItem[];
   payments: ComputablePayment[];
@@ -35,6 +36,17 @@ function toNumber(value: DecimalLike): number {
 
 export function computeOrderFields(order: ComputableOrder): OrderComputedFields {
   const isDelivered = order.deliveredAt != null;
+
+  const isCancelled = (order.isConsignment ?? false) && order.cancelledAt != null;
+  if (isCancelled) {
+    return {
+      totalPrice: 0,
+      paidAmount: 0,
+      remainingAmount: 0,
+      paymentStatus: OrderPaymentStatus.CANCELLED,
+      isDelivered,
+    };
+  }
 
   const hasPendingPricing = (order.isConsignment ?? false) && order.orderItems.some((i) => i.price == null);
   if (hasPendingPricing) {

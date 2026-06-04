@@ -5,6 +5,7 @@ export function orderPaymentStatusLabel(status: OrderPaymentStatus | string): st
   if (status === OrderPaymentStatus.PARTIALLY_PAID) return "Pago parcial";
   if (status === OrderPaymentStatus.UNPAID) return "Impaga";
   if (status === OrderPaymentStatus.PENDING_PRICING) return "Pendiente de precio";
+  if (status === OrderPaymentStatus.CANCELLED) return "Cancelada";
   return String(status);
 }
 
