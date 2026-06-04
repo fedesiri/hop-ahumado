@@ -2,6 +2,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsNumber,
@@ -48,6 +49,10 @@ export class CreateOrderDto {
   @IsString()
   @MaxLength(2000, { message: "El comentario no puede superar los 2000 caracteres" })
   comment?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isConsignment?: boolean;
 
   @IsArray()
   @ArrayMinSize(1, { message: "La orden debe tener al menos un ítem" })

@@ -31,6 +31,7 @@ export enum OrderPaymentStatus {
   UNPAID = "UNPAID",
   PARTIALLY_PAID = "PARTIALLY_PAID",
   PAID = "PAID",
+  PENDING_PRICING = "PENDING_PRICING",
 }
 
 export enum StockMovementType {
@@ -302,7 +303,7 @@ export interface OrderItem {
   orderId: string;
   productId: string;
   quantity: number;
-  price: number;
+  price: number | null;
   createdAt: string;
   updatedAt: string;
   product?: Product;
@@ -329,6 +330,7 @@ export interface Order {
   remainingAmount: number;
   paymentStatus: OrderPaymentStatus;
   isDelivered: boolean;
+  isConsignment?: boolean;
   /** Observaciones del pedido (opcional). */
   comment?: string | null;
   /** Lista de precios usada al crear el pedido (órdenes anteriores a este campo: ausente). */
@@ -566,7 +568,7 @@ export interface UpdateRecipeItemRequest {
 export interface CreateOrderItemRequest {
   productId: string;
   quantity: number;
-  price: number;
+  price?: number;
 }
 
 export interface CreateOrderPaymentRequest {
@@ -588,7 +590,12 @@ export interface CreateOrderRequest {
   priceListType?: "mayorista" | "minorista" | "fabrica";
   /** Comentario u observaciones del pedido (opcional). */
   comment?: string;
+  isConsignment?: boolean;
   items: CreateOrderItemRequest[];
+}
+
+export interface SetConsignmentPricesRequest {
+  items: { orderItemId: string; price: number }[];
 }
 
 export interface UpdateOrderRequest {

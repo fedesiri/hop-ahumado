@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsNumber, IsUUID, Min } from "class-validator";
+import { IsNumber, IsOptional, IsUUID, Min } from "class-validator";
 
 export class CreateOrderItemDto {
   @IsUUID("4", { message: "productId debe ser un UUID válido" })
@@ -10,7 +10,8 @@ export class CreateOrderItemDto {
   @Min(0.0001, { message: "La cantidad debe ser mayor que 0" })
   quantity: number;
 
+  @IsOptional()
   @IsNumber()
   @Min(0, { message: "El precio debe ser mayor o igual a 0" })
-  price: number;
+  price?: number;
 }

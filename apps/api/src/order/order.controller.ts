@@ -3,6 +3,7 @@ import { toLimit, toPage } from "../common/pagination";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { GetOrdersQueryDto } from "./dto/get-orders-query.dto";
+import { SetConsignmentPricesDto } from "./dto/set-consignment-prices.dto";
 import { UpdateOrderDto } from "./dto/update-order.dto";
 import { UpdatePaymentDto } from "./dto/update-payment.dto";
 import { OrderService } from "./order.service";
@@ -38,12 +39,13 @@ export class OrderController {
     return this.orderService.findOne(id);
   }
 
+  @Patch(":id/set-prices")
+  setConsignmentPrices(@Param("id") id: string, @Body() dto: SetConsignmentPricesDto) {
+    return this.orderService.setConsignmentPrices(id, dto);
+  }
+
   @Patch(":id/payments/:paymentId")
-  updatePayment(
-    @Param("id") id: string,
-    @Param("paymentId") paymentId: string,
-    @Body() dto: UpdatePaymentDto,
-  ) {
+  updatePayment(@Param("id") id: string, @Param("paymentId") paymentId: string, @Body() dto: UpdatePaymentDto) {
     return this.orderService.updatePayment(id, paymentId, dto);
   }
 

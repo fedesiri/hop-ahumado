@@ -19,11 +19,12 @@ import { OrderPaymentStatus } from "./order-payment-status.enum";
 import { getPromoThresholdCategoryNames, validateOrderPromoPricing } from "./order-promo";
 
 type OrderWithRelations = Order & {
+  isConsignment: boolean;
   orderItems: Array<{
     id: string;
     productId: string;
     quantity: number;
-    price: Decimal;
+    price: Decimal | null;
     product: { id: string; name: string; category?: { id: string; name: string } | null };
   }>;
   payments: Array<{
@@ -49,7 +50,13 @@ const ORDER_INCLUDE = {
   orderItems: {
     include: {
       product: {
-        select: { id: true, name: true, stock: true, businessLineId: true, category: { select: { id: true, name: true } } },
+        select: {
+          id: true,
+          name: true,
+          stock: true,
+          businessLineId: true,
+          category: { select: { id: true, name: true } },
+        },
       },
     },
   },
@@ -73,7 +80,9 @@ export class OrderService {
     for (const item of dto.items) {
       await this.validateProductExists(item.productId);
     }
-    await this.validateOrderItemsTotalOrPromo(dto);
+    if (!dto.isConsignment) {
+      await this.validateOrderItemsTotalOrPromo(dto);
+    }
 
     const createdOrder = await this.prisma.$transaction(async (tx) => {
       const fulfillmentLocationId = dto.fulfillmentLocationId ?? (await this.inventory.getDefaultLocationId(tx));
@@ -83,7 +92,8 @@ export class OrderService {
           customerId: dto.customerId ?? undefined,
           userId: dto.userId ?? undefined,
           deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
-          total: dto.total,
+          total: dto.isConsignment ? 0 : dto.total,
+          isConsignment: dto.isConsignment ?? false,
           ...(dto.comment !== undefined && {
             comment: dto.comment.trim() ? dto.comment.trim() : null,
           }),
@@ -95,7 +105,7 @@ export class OrderService {
             create: dto.items.map((i) => ({
               productId: i.productId,
               quantity: i.quantity,
-              price: i.price,
+              price: dto.isConsignment ? null : i.price,
             })),
           },
         },
@@ -230,24 +240,44 @@ export class OrderService {
 
   /** Condición SQL alineada con `computeOrderFields` (líneas vs pagos, tolerancia monetaria). */
   private sqlOrderPaymentStatusCondition(status: OrderPaymentStatus, tol: number): Prisma.Sql {
+    if (status === OrderPaymentStatus.PENDING_PRICING) {
+      return Prisma.sql`(
+        o."isConsignment" = true
+        AND EXISTS (
+          SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NULL
+        )
+      )`;
+    }
+    // For non-consignment statuses, exclude PENDING_PRICING orders.
+    const notPendingPricing = Prisma.sql`(
+      o."isConsignment" = false
+      OR NOT EXISTS (
+        SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NULL
+      )
+    )`;
     if (status === OrderPaymentStatus.UNPAID) {
       return Prisma.sql`(
-        (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") < ${tol}
+        ${notPendingPricing}
+        AND (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") < ${tol}
       )`;
     }
     if (status === OrderPaymentStatus.PAID) {
       return Prisma.sql`(
-        ABS(
-          (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") -
+        ${notPendingPricing}
+        AND (
+          ABS(
+            (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") -
+            (SELECT COALESCE(SUM(oi."quantity" * oi."price"::float8), 0) FROM "OrderItem" oi WHERE oi."orderId" = o."id")
+          ) < ${tol}
+          OR
+          (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") >
           (SELECT COALESCE(SUM(oi."quantity" * oi."price"::float8), 0) FROM "OrderItem" oi WHERE oi."orderId" = o."id")
-        ) < ${tol}
-        OR
-        (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") >
-        (SELECT COALESCE(SUM(oi."quantity" * oi."price"::float8), 0) FROM "OrderItem" oi WHERE oi."orderId" = o."id")
+        )
       )`;
     }
     return Prisma.sql`(
-      (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") >= ${tol}
+      ${notPendingPricing}
+      AND (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") >= ${tol}
       AND NOT (
         (
           ABS(
@@ -514,6 +544,11 @@ export class OrderService {
     }
 
     const computed = computeOrderFields(order as OrderWithRelations);
+    if (computed.paymentStatus === OrderPaymentStatus.PENDING_PRICING) {
+      throw new BadRequestException(
+        "No se puede registrar un pago en una orden de consignación con precios pendientes",
+      );
+    }
     if (computed.paidAmount + dto.amount > computed.totalPrice + ORDER_PAYMENT_TOLERANCE) {
       throw new BadRequestException(
         `El pago excede el saldo pendiente. Pendiente: ${computed.remainingAmount.toFixed(2)} | Intento: ${dto.amount.toFixed(2)}`,
@@ -570,6 +605,60 @@ export class OrderService {
     return this.enrichOrder(updatedOrder);
   }
 
+  async setConsignmentPrices(id: string, dto: { items: { orderItemId: string; price: number }[] }) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: ORDER_INCLUDE,
+    });
+    if (!order) {
+      throw new NotFoundException(`Orden con id "${id}" no encontrada`);
+    }
+    if (!order.isConsignment) {
+      throw new BadRequestException("Solo se pueden fijar precios en órdenes de consignación");
+    }
+
+    const orderItemIds = new Set((order as OrderWithRelations).orderItems.map((i) => i.id));
+    for (const item of dto.items) {
+      if (!orderItemIds.has(item.orderItemId)) {
+        throw new BadRequestException(`El ítem "${item.orderItemId}" no pertenece a esta orden`);
+      }
+    }
+
+    const updatedOrder = await this.prisma.$transaction(async (tx) => {
+      for (const item of dto.items) {
+        await tx.orderItem.update({
+          where: { id: item.orderItemId },
+          data: { price: item.price },
+        });
+      }
+
+      const reloaded = await tx.order.findUnique({
+        where: { id },
+        include: {
+          orderItems: { select: { quantity: true, price: true } },
+        },
+      });
+
+      const newTotal = (reloaded?.orderItems ?? []).reduce(
+        (sum, i) => sum + Number(i.quantity) * Number(i.price ?? 0),
+        0,
+      );
+
+      await tx.order.update({ where: { id }, data: { total: newTotal } });
+
+      return tx.order.findUnique({
+        where: { id },
+        include: ORDER_INCLUDE,
+      }) as Promise<OrderWithRelations>;
+    });
+
+    if (!updatedOrder) {
+      throw new NotFoundException(`Orden con id "${id}" no encontrada`);
+    }
+
+    return this.enrichOrder(updatedOrder);
+  }
+
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.$transaction(async (tx) => {
@@ -612,7 +701,7 @@ export class OrderService {
    * Con `priceListType` valida lista y promo por umbral (combos); sin él mantiene la suma simple líneas = total.
    */
   private async validateOrderItemsTotalOrPromo(dto: {
-    items: { productId: string; quantity: number; price: number }[];
+    items: { productId: string; quantity: number; price?: number }[];
     total: number;
     priceListType?: "mayorista" | "minorista" | "fabrica";
   }) {
@@ -645,7 +734,7 @@ export class OrderService {
       });
       return;
     }
-    const itemsTotal = dto.items.reduce((sum, i) => sum + i.quantity * i.price, 0);
+    const itemsTotal = dto.items.reduce((sum, i) => sum + i.quantity * (i.price ?? 0), 0);
     if (Math.abs(itemsTotal - dto.total) > 0.01) {
       throw new BadRequestException(
         `El total (${dto.total}) no coincide con la suma de ítems (${itemsTotal.toFixed(2)})`,

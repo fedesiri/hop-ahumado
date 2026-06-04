@@ -102,7 +102,7 @@ export function effectiveUnitPriceForOrderLine(
   return promo;
 }
 
-type OrderLineIn = { productId: string; quantity: number; price: number };
+type OrderLineIn = { productId: string; quantity: number; price?: number };
 
 export function validateOrderPromoPricing(params: {
   priceListType: PriceListType;
@@ -137,7 +137,7 @@ export function validateOrderPromoPricing(params: {
     const expectedUnit = effectiveUnitPriceForOrderLine(p.name, prices, priceListType, promoActive);
     const expectedLine = line.quantity * expectedUnit;
     expectedTotal += expectedLine;
-    const unitSent = line.price;
+    const unitSent = line.price ?? 0;
     if (Math.abs(unitSent - expectedUnit) > eps) {
       throw new BadRequestException(
         `Precio de línea inválido para "${p.name}": enviado ${unitSent}, esperado ${expectedUnit} (lista${

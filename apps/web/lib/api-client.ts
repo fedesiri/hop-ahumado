@@ -60,6 +60,7 @@ import type {
   UpdateTreasuryBaselineRequest,
   UpdateUserRequest,
   User,
+  SetConsignmentPricesRequest,
 } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -668,6 +669,13 @@ export class ApiClient {
 
   async updateOrder(id: string, data: UpdateOrderRequest): Promise<Order> {
     return this.request(`/orders/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async setConsignmentPrices(orderId: string, data: SetConsignmentPricesRequest): Promise<Order> {
+    return this.request(`/orders/${orderId}/set-prices`, {
       method: "PATCH",
       body: JSON.stringify(data),
     });

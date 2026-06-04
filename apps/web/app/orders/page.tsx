@@ -120,7 +120,9 @@ function OrdersContent() {
       try {
         const c = await apiClient.getCustomer(filterCustomerId);
         if (cancelled) return;
-        setCustomerFilterOptions((prev) => (prev.some((o) => o.value === c.id) ? prev : [{ label: c.name, value: c.id }, ...prev]));
+        setCustomerFilterOptions((prev) =>
+          prev.some((o) => o.value === c.id) ? prev : [{ label: c.name, value: c.id }, ...prev],
+        );
       } catch {
         /* ignore */
       }
@@ -242,19 +244,24 @@ function OrdersContent() {
     {
       title: "Estado de pago",
       key: "paymentStatus",
-      width: 128,
+      width: 160,
       render: (_: unknown, record: Order) => (
-        <Tag
-          color={
-            record.paymentStatus === OrderPaymentStatus.PAID
-              ? "green"
-              : record.paymentStatus === OrderPaymentStatus.PARTIALLY_PAID
-                ? "gold"
-                : "default"
-          }
-        >
-          {orderPaymentStatusLabel(record.paymentStatus)}
-        </Tag>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          <Tag
+            color={
+              record.paymentStatus === OrderPaymentStatus.PAID
+                ? "green"
+                : record.paymentStatus === OrderPaymentStatus.PARTIALLY_PAID
+                  ? "gold"
+                  : record.paymentStatus === OrderPaymentStatus.PENDING_PRICING
+                    ? "orange"
+                    : "default"
+            }
+          >
+            {orderPaymentStatusLabel(record.paymentStatus)}
+          </Tag>
+          {record.isConsignment && <Tag color="purple">Consignación</Tag>}
+        </div>
       ),
     },
     {
@@ -507,6 +514,10 @@ function OrdersContent() {
                   label: orderPaymentStatusLabel(OrderPaymentStatus.PARTIALLY_PAID),
                 },
                 { value: OrderPaymentStatus.PAID, label: orderPaymentStatusLabel(OrderPaymentStatus.PAID) },
+                {
+                  value: OrderPaymentStatus.PENDING_PRICING,
+                  label: orderPaymentStatusLabel(OrderPaymentStatus.PENDING_PRICING),
+                },
               ]}
               onChange={(value) => {
                 setPagination((prev) => ({ ...prev, page: 1 }));

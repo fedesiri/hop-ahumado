@@ -40,19 +40,9 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
     setCobrarModalOpen(true);
     setCobrarPricesLoading(true);
     try {
-      const pricesRes = await apiClient.getPrices(1, 100, undefined, true);
-      const listType = order.priceListType?.trim().toLowerCase();
-      const priceByProductId = new Map<string, number>();
-      for (const p of pricesRes.data) {
-        const existing = priceByProductId.get(p.productId);
-        const desc = p.description?.trim().toLowerCase() ?? null;
-        const isMatch = listType ? desc === listType : true;
-        if (existing === undefined) {
-          priceByProductId.set(p.productId, Number(p.value));
-        } else if (isMatch) {
-          priceByProductId.set(p.productId, Number(p.value));
-        }
-      }
+      const listType = (order.priceListType as "mayorista" | "minorista" | "fabrica") ?? "mayorista";
+      const pricesRes = await apiClient.getPrices(1, 500, undefined, true, undefined, listType);
+      const priceByProductId = new Map(pricesRes.data.map((p) => [p.productId, Number(p.value)]));
       setCobrarItems(
         (order.orderItems ?? []).map((i) => ({
           orderItemId: i.id,

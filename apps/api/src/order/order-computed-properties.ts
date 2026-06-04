@@ -7,7 +7,7 @@ type DecimalLike = number | string | Decimal;
 
 type ComputableOrderItem = {
   quantity: number;
-  price: DecimalLike;
+  price: DecimalLike | null | undefined;
 };
 
 type ComputablePayment = {
@@ -15,6 +15,7 @@ type ComputablePayment = {
 };
 
 type ComputableOrder = {
+  isConsignment?: boolean | null;
   deliveredAt?: Date | null;
   orderItems: ComputableOrderItem[];
   payments: ComputablePayment[];
@@ -33,10 +34,25 @@ function toNumber(value: DecimalLike): number {
 }
 
 export function computeOrderFields(order: ComputableOrder): OrderComputedFields {
-  const totalPrice = order.orderItems.reduce((sum, item) => sum + toNumber(item.price) * Number(item.quantity), 0);
+  const isDelivered = order.deliveredAt != null;
+
+  const hasPendingPricing = (order.isConsignment ?? false) && order.orderItems.some((i) => i.price == null);
+  if (hasPendingPricing) {
+    return {
+      totalPrice: 0,
+      paidAmount: 0,
+      remainingAmount: 0,
+      paymentStatus: OrderPaymentStatus.PENDING_PRICING,
+      isDelivered,
+    };
+  }
+
+  const totalPrice = order.orderItems.reduce(
+    (sum, item) => sum + (item.price != null ? toNumber(item.price) : 0) * Number(item.quantity),
+    0,
+  );
   const paidAmount = order.payments.reduce((sum, payment) => sum + toNumber(payment.amount), 0);
   const remainingAmount = Math.max(totalPrice - paidAmount, 0);
-  const isDelivered = order.deliveredAt != null;
 
   let paymentStatus: OrderPaymentStatus = OrderPaymentStatus.PARTIALLY_PAID;
   if (Math.abs(paidAmount) < ORDER_MONEY_TOLERANCE) {

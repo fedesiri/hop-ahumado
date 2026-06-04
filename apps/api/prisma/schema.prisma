@@ -8,10 +8,10 @@ datasource db {
 }
 
 model BusinessLine {
-  id         String   @id @default(uuid())
-  name       String
-  slug       String   @unique
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
 
   products   Product[]
   expenses   Expense[]
@@ -249,6 +249,7 @@ model Order {
   comment               String?
   createdAt             DateTime  @default(now())
   fulfillmentLocationId String?
+  isConsignment         Boolean   @default(false)
 
   orderItems          OrderItem[]
   payments            Payment[]
@@ -258,11 +259,11 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(uuid())
+  id        String   @id @default(uuid())
   orderId   String
   productId String
   quantity  Float
-  price     Decimal
+  price     Decimal?
 
   order   Order   @relation(fields: [orderId], references: [id])
   product Product @relation(fields: [productId], references: [id])

@@ -13,14 +13,14 @@ import {
   type RecipeIngredientRow,
 } from "@/lib/order-calculator/stock-preview";
 import type { CreateOrderRequest, Customer, Price, Product, StockLocation } from "@/lib/types";
-import { Alert, App, Button, DatePicker, Input, Modal, Select, Spin } from "antd";
+import { Alert, App, Button, Checkbox, DatePicker, Input, Modal, Select, Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function OrderCalculatorPage() {
   return (
     <AppLayout>
-        <OrderCalculatorPageContent />
-      </AppLayout>
+      <OrderCalculatorPageContent />
+    </AppLayout>
   );
 }
 
@@ -47,6 +47,7 @@ function OrderCalculatorPageContent() {
   const [balanceByProductId, setBalanceByProductId] = useState<Record<string, number>>({});
   const [recipesByProductId, setRecipesByProductId] = useState<Record<string, RecipeIngredientRow[]>>({});
   const [stockPreviewReady, setStockPreviewReady] = useState(false);
+  const [isConsignment, setIsConsignment] = useState(false);
 
   const pricesByProductId = useMemo(() => {
     const map: Record<string, Price[]> = {};
@@ -212,13 +213,14 @@ function OrderCalculatorPageContent() {
         userId: user?.id,
         deliveryDate: (deliveryDate ?? dayjs().startOf("day")).toISOString(),
         fulfillmentLocationId: fulfillmentLocationId ?? undefined,
-        total,
+        total: isConsignment ? 0 : total,
         priceListType,
+        isConsignment: isConsignment || undefined,
         ...(orderComment.trim() ? { comment: orderComment.trim() } : {}),
         items: items.map((item) => ({
           productId: item.productId,
           quantity: Number(item.quantity),
-          price: Number(item.price),
+          price: isConsignment ? 0 : Number(item.price),
         })),
       };
       const createdOrder = await apiClient.createOrder(data);
@@ -233,6 +235,7 @@ function OrderCalculatorPageContent() {
       setCalculatorKey((prev) => prev + 1);
       setConfirmModalOpen(false);
       setPendingOrder(null);
+      setIsConsignment(false);
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "message" in err
@@ -268,6 +271,7 @@ function OrderCalculatorPageContent() {
         onCancel={() => {
           setConfirmModalOpen(false);
           setPendingOrder(null);
+          setIsConsignment(false);
         }}
         footer={[
           <Button
@@ -345,7 +349,7 @@ function OrderCalculatorPageContent() {
                 format="DD/MM/YYYY"
               />
             </div>
-            <div style={{ marginTop: 12, marginBottom: 28 }}>
+            <div style={{ marginTop: 12, marginBottom: 16 }}>
               <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
                 Comentario del pedido (opcional)
               </label>
@@ -358,6 +362,24 @@ function OrderCalculatorPageContent() {
                 showCount
               />
             </div>
+            <div style={{ marginBottom: 8 }}>
+              <Checkbox
+                checked={isConsignment}
+                onChange={(e) => setIsConsignment(e.target.checked)}
+                style={{ color: "#e5e7eb" }}
+              >
+                Es consignación (el precio se fija al momento de cobrar)
+              </Checkbox>
+            </div>
+            {isConsignment && (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message="Orden a consignación"
+                description="El stock se descuenta hoy. El precio se ingresa cuando vayas a cobrar esta orden."
+              />
+            )}
           </div>
         )}
       </Modal>
