@@ -603,8 +603,11 @@ function OrdersContent() {
             <Button onClick={() => setViewModalOpen(false)}>Cerrar</Button>
           </Space>
         }
-        width={isMobile ? "calc(100vw - 24px)" : 880}
-        styles={{ body: { maxHeight: isMobile ? "75vh" : undefined, overflowY: "auto" } }}
+        centered
+        zIndex={2000}
+        width={isMobile ? "calc(100vw - 24px)" : "min(1100px, calc(100vw - 280px))"}
+        styles={{ body: { maxHeight: isMobile ? "75vh" : "calc(85vh - 110px)", overflowY: "auto" } }}
+        classNames={{ body: "app-panel-scroll" }}
       >
         {modalLoading ? (
           <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>

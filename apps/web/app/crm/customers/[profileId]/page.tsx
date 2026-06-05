@@ -910,7 +910,11 @@ export default function CrmCustomerDetailPage() {
         onCancel={() => setEditProfileOpen(false)}
         onOk={() => profileForm.submit()}
         okText="Guardar"
-        width={500}
+        centered
+        zIndex={2000}
+        width={isMobile ? "calc(100vw - 24px)" : 560}
+        styles={{ body: { maxHeight: "calc(85vh - 110px)", overflowY: "auto" } }}
+        classNames={{ body: "app-panel-scroll" }}
         destroyOnClose
         afterOpenChange={(open) => {
           if (!open || !detail) return;
@@ -986,7 +990,11 @@ export default function CrmCustomerDetailPage() {
         onCancel={() => setEditOpportunityOpen(false)}
         onOk={() => opportunityForm.submit()}
         okText="Guardar"
-        width={500}
+        centered
+        zIndex={2000}
+        width={isMobile ? "calc(100vw - 24px)" : 560}
+        styles={{ body: { maxHeight: "calc(85vh - 110px)", overflowY: "auto" } }}
+        classNames={{ body: "app-panel-scroll" }}
         destroyOnClose
         afterOpenChange={(open) => {
           if (!open || !detail) return;
@@ -1026,7 +1034,11 @@ export default function CrmCustomerDetailPage() {
         onCancel={() => setAddInteractionOpen(false)}
         onOk={() => interactionForm.submit()}
         okText="Agregar"
-        width={500}
+        centered
+        zIndex={2000}
+        width={isMobile ? "calc(100vw - 24px)" : 560}
+        styles={{ body: { maxHeight: "calc(85vh - 110px)", overflowY: "auto" } }}
+        classNames={{ body: "app-panel-scroll" }}
         destroyOnClose
         afterOpenChange={(open) => {
           if (!open) return;
@@ -1058,9 +1070,12 @@ export default function CrmCustomerDetailPage() {
           setModalOrder(null);
         }}
         footer={<Button onClick={() => setViewOrderOpen(false)}>Cerrar</Button>}
-        width={isMobile ? "calc(100vw - 24px)" : 920}
+        centered
+        zIndex={2000}
+        width={isMobile ? "calc(100vw - 24px)" : "min(1100px, calc(100vw - 280px))"}
         destroyOnClose
-        styles={{ body: { maxHeight: "75vh", overflowY: "auto" } }}
+        styles={{ body: { maxHeight: "calc(85vh - 110px)", overflowY: "auto" } }}
+        classNames={{ body: "app-panel-scroll" }}
       >
         {modalOrderLoading ? (
           <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
