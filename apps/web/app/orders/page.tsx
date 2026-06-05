@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/app-layout";
 import { OrderDetailView } from "@/components/orders/order-detail-view";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
+import dayjs from "@/lib/dayjs";
 import type { Dayjs } from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
@@ -32,7 +33,8 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export default function OrdersPage() {
   return (
@@ -46,6 +48,8 @@ function OrdersContent() {
   const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<Order[]>([]);
   const [customerFilterOptions, setCustomerFilterOptions] = useState<{ label: string; value: string }[]>([]);
   const [customerFilterLoading, setCustomerFilterLoading] = useState(false);
@@ -58,13 +62,43 @@ function OrdersContent() {
   const [togglingDeliveryId, setTogglingDeliveryId] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
-  const [filterCustomerId, setFilterCustomerId] = useState<string | undefined>(undefined);
-  const [filterUserId, setFilterUserId] = useState<string | undefined>(undefined);
-  const [filterDateRange, setFilterDateRange] = useState<[Dayjs, Dayjs] | null>(null);
-  const [filterMinTotal, setFilterMinTotal] = useState<number | undefined>(undefined);
-  const [filterMaxTotal, setFilterMaxTotal] = useState<number | undefined>(undefined);
-  const [filterPaymentStatus, setFilterPaymentStatus] = useState<OrderPaymentStatus | undefined>(undefined);
-  const [filterDelivered, setFilterDelivered] = useState<"true" | "false" | undefined>(undefined);
+  const [filterCustomerId, setFilterCustomerId] = useState<string | undefined>(
+    () => searchParams.get("customerId") ?? undefined,
+  );
+  const [filterUserId, setFilterUserId] = useState<string | undefined>(
+    () => searchParams.get("userId") ?? undefined,
+  );
+  const [filterDateRange, setFilterDateRange] = useState<[Dayjs, Dayjs] | null>(() => {
+    const from = searchParams.get("dateFrom");
+    const to = searchParams.get("dateTo");
+    return from && to ? [dayjs(from), dayjs(to)] : null;
+  });
+  const [filterMinTotal, setFilterMinTotal] = useState<number | undefined>(() => {
+    const v = searchParams.get("minTotal");
+    return v ? Number(v) : undefined;
+  });
+  const [filterMaxTotal, setFilterMaxTotal] = useState<number | undefined>(() => {
+    const v = searchParams.get("maxTotal");
+    return v ? Number(v) : undefined;
+  });
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState<OrderPaymentStatus | undefined>(
+    () => (searchParams.get("paymentStatus") as OrderPaymentStatus) ?? undefined,
+  );
+  const [filterDelivered, setFilterDelivered] = useState<"true" | "false" | undefined>(
+    () => (searchParams.get("delivered") as "true" | "false") ?? undefined,
+  );
+
+  const updateParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (!value) params.delete(key);
+        else params.set(key, value);
+      }
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router],
+  );
 
   const loadCustomerFilterOptions = async (search: string) => {
     try {
@@ -441,6 +475,7 @@ function OrdersContent() {
               onChange={(value) => {
                 setPagination((prev) => ({ ...prev, page: 1 }));
                 setFilterCustomerId(value || undefined);
+                updateParams({ customerId: value || null });
               }}
             />
           </Col>
@@ -463,6 +498,7 @@ function OrdersContent() {
               onChange={(value) => {
                 setPagination((prev) => ({ ...prev, page: 1 }));
                 setFilterUserId(value || undefined);
+                updateParams({ userId: value || null });
               }}
             />
           </Col>
@@ -475,6 +511,11 @@ function OrdersContent() {
               onChange={(values) => {
                 setPagination((prev) => ({ ...prev, page: 1 }));
                 setFilterDateRange(values as [Dayjs, Dayjs] | null);
+                const v = values as [Dayjs, Dayjs] | null;
+                updateParams({
+                  dateFrom: v ? v[0].toISOString() : null,
+                  dateTo: v ? v[1].toISOString() : null,
+                });
               }}
             />
           </Col>
@@ -487,6 +528,7 @@ function OrdersContent() {
               onChange={(value) => {
                 setPagination((prev) => ({ ...prev, page: 1 }));
                 setFilterMinTotal(value ?? undefined);
+                updateParams({ minTotal: value != null ? String(value) : null });
               }}
             />
           </Col>
@@ -499,6 +541,7 @@ function OrdersContent() {
               onChange={(value) => {
                 setPagination((prev) => ({ ...prev, page: 1 }));
                 setFilterMaxTotal(value ?? undefined);
+                updateParams({ maxTotal: value != null ? String(value) : null });
               }}
             />
           </Col>
@@ -528,6 +571,7 @@ function OrdersContent() {
               onChange={(value) => {
                 setPagination((prev) => ({ ...prev, page: 1 }));
                 setFilterPaymentStatus(value);
+                updateParams({ paymentStatus: value ?? null });
               }}
             />
           </Col>
@@ -544,6 +588,7 @@ function OrdersContent() {
               onChange={(value) => {
                 setPagination((prev) => ({ ...prev, page: 1 }));
                 setFilterDelivered((value as "true" | "false") || undefined);
+                updateParams({ delivered: value || null });
               }}
             />
           </Col>

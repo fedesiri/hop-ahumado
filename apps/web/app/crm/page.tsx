@@ -14,8 +14,8 @@ import type { CreateCrmCustomerRequest, CrmCustomerListItem, PaginationMeta, Use
 import { formatStatusLabel } from "@/lib/utils";
 import { EditOutlined, EyeOutlined, FormOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag, Tooltip } from "antd";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export default function CrmPage() {
   return <CrmContent />;
@@ -24,6 +24,7 @@ export default function CrmPage() {
 function CrmContent() {
   const { message, modal } = App.useApp();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [list, setList] = useState<CrmCustomerListItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -34,11 +35,33 @@ function CrmContent() {
   const [creatingProfileForId, setCreatingProfileForId] = useState<string | null>(null);
   const [editingRecord, setEditingRecord] = useState<CrmCustomerListItem | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [search, setSearch] = useState<string | undefined>(undefined);
-  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
-  const [sourceFilter, setSourceFilter] = useState<string | undefined>(undefined);
-  const [customerTypeFilter, setCustomerTypeFilter] = useState<string | undefined>(undefined);
-  const [responsibleIdFilter, setResponsibleIdFilter] = useState<string | undefined>(undefined);
+  const [search, setSearch] = useState<string | undefined>(
+    () => searchParams.get("search") ?? undefined,
+  );
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(
+    () => searchParams.get("status") ?? undefined,
+  );
+  const [sourceFilter, setSourceFilter] = useState<string | undefined>(
+    () => searchParams.get("source") ?? undefined,
+  );
+  const [customerTypeFilter, setCustomerTypeFilter] = useState<string | undefined>(
+    () => searchParams.get("customerType") ?? undefined,
+  );
+  const [responsibleIdFilter, setResponsibleIdFilter] = useState<string | undefined>(
+    () => searchParams.get("responsibleId") ?? undefined,
+  );
+
+  const updateParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (!value) params.delete(key);
+        else params.set(key, value);
+      }
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router],
+  );
 
   /** false = abrir en modo crear (reset); objeto = valores al editar. Se aplica en afterOpenChange cuando el Form ya está montado. */
   const pendingModalFormRef = useRef<Record<string, unknown> | false | null>(null);
@@ -323,6 +346,7 @@ function CrmContent() {
               setPagination((prev) => ({ ...prev, page: 1 }));
               const v = e.target.value;
               setSearch(v === "" ? undefined : v);
+              updateParams({ search: v || null });
             }}
           />
           <Select
@@ -336,6 +360,7 @@ function CrmContent() {
             onChange={(v) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
               setCustomerTypeFilter(v);
+              updateParams({ customerType: v ?? null });
             }}
           />
           <Select
@@ -349,6 +374,7 @@ function CrmContent() {
             onChange={(v) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
               setStatusFilter(v);
+              updateParams({ status: v ?? null });
             }}
           />
           <Select
@@ -362,6 +388,7 @@ function CrmContent() {
             onChange={(v) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
               setSourceFilter(v);
+              updateParams({ source: v ?? null });
             }}
           />
           <Select
@@ -375,6 +402,7 @@ function CrmContent() {
             onChange={(v) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
               setResponsibleIdFilter(v);
+              updateParams({ responsibleId: v ?? null });
             }}
           />
         </Space>

@@ -22,7 +22,8 @@ import {
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function CostsPage() {
   return (
@@ -35,6 +36,8 @@ export default function CostsPage() {
 function CostsContent() {
   const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [costs, setCosts] = useState<Cost[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,11 +56,27 @@ function CostsContent() {
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
   const [showActive, setShowActive] = useState(true);
-  const [searchText, setSearchText] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [searchText, setSearchText] = useState(() => searchParams.get("search") ?? "");
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get("search") ?? "");
+
+  const updateParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (!value) params.delete(key);
+        else params.set(key, value);
+      }
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router],
+  );
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchText.trim()), 350);
+    const t = setTimeout(() => {
+      const trimmed = searchText.trim();
+      setDebouncedSearch(trimmed);
+      updateParams({ search: trimmed || null });
+    }, 350);
     return () => clearTimeout(t);
   }, [searchText]);
 

@@ -32,8 +32,8 @@ export class GetOrdersQueryDto extends PaginationQueryDto {
   maxTotal?: string;
 
   @IsOptional()
-  @IsIn([OrderPaymentStatus.UNPAID, OrderPaymentStatus.PARTIALLY_PAID, OrderPaymentStatus.PAID], {
-    message: "paymentStatus debe ser UNPAID, PARTIALLY_PAID o PAID",
+  @IsIn(Object.values(OrderPaymentStatus), {
+    message: `paymentStatus debe ser uno de: ${Object.values(OrderPaymentStatus).join(", ")}`,
   })
   paymentStatus?: OrderPaymentStatus;
 

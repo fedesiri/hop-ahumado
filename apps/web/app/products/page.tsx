@@ -33,6 +33,7 @@ import {
   Table,
   Tag,
 } from "antd";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
@@ -62,6 +63,8 @@ export default function ProductsPage() {
 function ProductsContent() {
   const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
@@ -71,10 +74,26 @@ function ProductsContent() {
   const [form] = Form.useForm();
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
-  const [showDeactivated, setShowDeactivated] = useState(false);
-  const [search, setSearch] = useState("");
-  const [searchInput, setSearchInput] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string | undefined>(undefined);
+  const [showDeactivated, setShowDeactivated] = useState(
+    () => searchParams.get("showDeactivated") === "true",
+  );
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
+  const [searchInput, setSearchInput] = useState(() => searchParams.get("search") ?? "");
+  const [categoryFilter, setCategoryFilter] = useState<string | undefined>(
+    () => searchParams.get("category") ?? undefined,
+  );
+
+  const updateParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (!value) params.delete(key);
+        else params.set(key, value);
+      }
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router],
+  );
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -316,7 +335,9 @@ function ProductsContent() {
             onChange={(e) => setSearchInput(e.target.value)}
             onSearch={(value) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
-              setSearch(value.trim());
+              const trimmed = value.trim();
+              setSearch(trimmed);
+              updateParams({ search: trimmed || null });
             }}
             style={{ minWidth: 240 }}
           />
@@ -329,13 +350,16 @@ function ProductsContent() {
             onChange={(value) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
               setCategoryFilter(value);
+              updateParams({ category: value ?? null });
             }}
           />
           <Button
             type={showDeactivated ? "primary" : "default"}
             onClick={() => {
               setPagination((prev) => ({ ...prev, page: 1 }));
-              setShowDeactivated(!showDeactivated);
+              const next = !showDeactivated;
+              setShowDeactivated(next);
+              updateParams({ showDeactivated: next ? "true" : null });
             }}
           >
             {showDeactivated ? "Mostrar activos" : "Mostrar desactivados"}

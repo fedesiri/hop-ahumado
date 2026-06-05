@@ -25,7 +25,8 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 function formatPriceListLabel(text: string | null | undefined): string {
   if (!text?.trim()) return "—";
@@ -45,6 +46,8 @@ export default function PricesPage() {
 function PricesContent() {
   const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [prices, setPrices] = useState<Price[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,12 +69,30 @@ function PricesContent() {
   const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
   /** Solo precios activos; alineado con la grilla de Costos (sin toggle en UI por ahora). */
   const showActive = true;
-  const [searchText, setSearchText] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [listTypeFilter, setListTypeFilter] = useState<"" | PriceType>("");
+  const [searchText, setSearchText] = useState(() => searchParams.get("search") ?? "");
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get("search") ?? "");
+  const [listTypeFilter, setListTypeFilter] = useState<"" | PriceType>(
+    () => (searchParams.get("listType") as PriceType) ?? "",
+  );
+
+  const updateParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (!value) params.delete(key);
+        else params.set(key, value);
+      }
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router],
+  );
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchText.trim()), 350);
+    const t = setTimeout(() => {
+      const trimmed = searchText.trim();
+      setDebouncedSearch(trimmed);
+      updateParams({ search: trimmed || null });
+    }, 350);
     return () => clearTimeout(t);
   }, [searchText]);
 
@@ -355,7 +376,11 @@ function PricesContent() {
             allowClear
             placeholder="Lista de precio"
             value={listTypeFilter === "" ? undefined : listTypeFilter}
-            onChange={(v) => setListTypeFilter((v ?? "") as "" | PriceType)}
+            onChange={(v) => {
+              const val = (v ?? "") as "" | PriceType;
+              setListTypeFilter(val);
+              updateParams({ listType: val || null });
+            }}
             style={{ minWidth: 200 }}
             options={PRICE_TYPES.map((t) => ({
               value: t,
