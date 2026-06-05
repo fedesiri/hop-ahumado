@@ -49,7 +49,7 @@ import {
 } from "antd";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 type DetailData = CustomerProfile & {
@@ -415,6 +415,55 @@ export default function CrmCustomerDetailPage() {
     const longest = itemComparisonByMonth.reduce((m, r) => Math.max(m, r.name?.length ?? 0), 6);
     return Math.min(900, Math.max(320, n * 64 + longest * 4 + 40));
   }, [isMobile, itemComparisonByMonth]);
+
+  const crmKpiAnalysis = useMemo(() => {
+    if (scopedOrders.length === 0) return null;
+    const avgTicket = totalPurchased / scopedOrders.length;
+    const activeMths = new Set(
+      scopedOrders.map((o) => dayjs(o.deliveredAt || o.deliveryDate || o.createdAt).format("YYYY-MM")),
+    ).size;
+    return { avgTicket, activeMths };
+  }, [scopedOrders, totalPurchased]);
+
+  const crmTopItemsAnalysis = useMemo(() => {
+    if (itemBarData.length === 0) return null;
+    const total = itemBarData.reduce((s, i) => s + i.value, 0);
+    const top3Total = itemBarData.slice(0, 3).reduce((s, i) => s + i.value, 0);
+    const top3Pct = total > 0 ? Math.round((top3Total / total) * 100) : 0;
+    return { top: itemBarData[0], top3Pct };
+  }, [itemBarData]);
+
+  const crmMonthlyAnalysis = useMemo(() => {
+    if (monthlyOrdersSeries.length === 0) return null;
+    const sorted = [...monthlyOrdersSeries].sort((a, b) => b.count - a.count);
+    const best = sorted[0];
+    const last3 = monthlyOrdersSeries.slice(-3);
+    const prev3 = monthlyOrdersSeries.slice(-6, -3);
+    let trend = "";
+    if (last3.length === 3 && prev3.length >= 2) {
+      const lastAvg = last3.reduce((s, m) => s + m.count, 0) / 3;
+      const prevAvg = prev3.reduce((s, m) => s + m.count, 0) / prev3.length;
+      if (lastAvg > prevAvg * 1.1) trend = "La tendencia reciente es al alza.";
+      else if (lastAvg < prevAvg * 0.9) trend = "La tendencia reciente es a la baja.";
+      else trend = "La tendencia reciente es estable.";
+    }
+    return { best, trend };
+  }, [monthlyOrdersSeries]);
+
+  const crmComparisonAnalysis = useMemo(() => {
+    if (!monthlyComparisonKpis || itemComparisonByMonth.length === 0) return null;
+    const grew = [...itemComparisonByMonth].sort((a, b) => b.monthA - b.monthB - (a.monthA - a.monthB))[0];
+    const fell = [...itemComparisonByMonth].sort((a, b) => a.monthA - a.monthB - (b.monthA - b.monthB))[0];
+    const pct =
+      monthlyComparisonKpis.monthBCount > 0
+        ? Math.round(
+            ((monthlyComparisonKpis.monthACount - monthlyComparisonKpis.monthBCount) /
+              monthlyComparisonKpis.monthBCount) *
+              100,
+          )
+        : null;
+    return { grew, fell, pct };
+  }, [monthlyComparisonKpis, itemComparisonByMonth]);
   const orderHistoryColumns = useMemo(() => {
     if (isMobile) {
       return [
@@ -750,6 +799,17 @@ export default function CrmCustomerDetailPage() {
                         </div>
                       </div>
                     </Space>
+                    {crmKpiAnalysis ? (
+                      <CrmAnalysisBlock>
+                        Ticket promedio de <strong>{formatCurrency(crmKpiAnalysis.avgTicket)}</strong> por pedido.
+                        Compró en <strong>{crmKpiAnalysis.activeMths}</strong> mes
+                        {crmKpiAnalysis.activeMths !== 1 ? "es" : ""} distintos
+                        {scopedOrders.length > 0
+                          ? ` con un total de ${scopedDistinctItemsCount} producto${scopedDistinctItemsCount !== 1 ? "s" : ""} diferente${scopedDistinctItemsCount !== 1 ? "s" : ""}`
+                          : ""}
+                        .
+                      </CrmAnalysisBlock>
+                    ) : null}
                   </Space>
                 </Card>
 
@@ -780,6 +840,15 @@ export default function CrmCustomerDetailPage() {
                       </ResponsiveContainer>
                     </div>
                   </div>
+                  {crmTopItemsAnalysis ? (
+                    <CrmAnalysisBlock>
+                      Su producto preferido es <strong>{crmTopItemsAnalysis.top.name}</strong> con{" "}
+                      <strong>{crmTopItemsAnalysis.top.value}</strong> unidades acumuladas.
+                      {itemBarData.length >= 3
+                        ? ` Los 3 primeros productos representan el ${crmTopItemsAnalysis.top3Pct}% del total pedido.`
+                        : ""}
+                    </CrmAnalysisBlock>
+                  ) : null}
                 </Card>
 
                 <Card title="Pedidos por mes (últimos 12 meses con pedidos)">
@@ -807,6 +876,14 @@ export default function CrmCustomerDetailPage() {
                       </ResponsiveContainer>
                     </div>
                   </div>
+                  {crmMonthlyAnalysis ? (
+                    <CrmAnalysisBlock>
+                      El mes más activo fue <strong>{crmMonthlyAnalysis.best.month}</strong> con{" "}
+                      <strong>{crmMonthlyAnalysis.best.count}</strong> pedido
+                      {crmMonthlyAnalysis.best.count !== 1 ? "s" : ""}.
+                      {crmMonthlyAnalysis.trend ? ` ${crmMonthlyAnalysis.trend}` : ""}
+                    </CrmAnalysisBlock>
+                  ) : null}
                 </Card>
 
                 <Card title="Comparación de meses (ítems pedidos)">
@@ -883,6 +960,33 @@ export default function CrmCustomerDetailPage() {
                         </ResponsiveContainer>
                       </div>
                     </div>
+                    {crmComparisonAnalysis ? (
+                      <CrmAnalysisBlock>
+                        {monthlyComparisonKpis && monthlyComparisonKpis.delta !== 0 ? (
+                          <>
+                            <strong>{compareMonthALabel}</strong>{" "}
+                            {monthlyComparisonKpis.delta > 0 ? "tuvo más pedidos que" : "tuvo menos pedidos que"}{" "}
+                            <strong>{compareMonthBLabel}</strong>
+                            {crmComparisonAnalysis.pct != null
+                              ? ` (${crmComparisonAnalysis.pct >= 0 ? "+" : ""}${crmComparisonAnalysis.pct}%)`
+                              : ""}
+                            .{" "}
+                          </>
+                        ) : null}
+                        {crmComparisonAnalysis.grew && crmComparisonAnalysis.grew.monthA > crmComparisonAnalysis.grew.monthB ? (
+                          <>
+                            Mayor crecimiento: <strong>{crmComparisonAnalysis.grew.name}</strong> (
+                            {crmComparisonAnalysis.grew.monthB} → {crmComparisonAnalysis.grew.monthA} un.).{" "}
+                          </>
+                        ) : null}
+                        {crmComparisonAnalysis.fell && crmComparisonAnalysis.fell.monthB > crmComparisonAnalysis.fell.monthA ? (
+                          <>
+                            Mayor caída: <strong>{crmComparisonAnalysis.fell.name}</strong> (
+                            {crmComparisonAnalysis.fell.monthB} → {crmComparisonAnalysis.fell.monthA} un.).
+                          </>
+                        ) : null}
+                      </CrmAnalysisBlock>
+                    ) : null}
                   </Space>
                 </Card>
 
@@ -1093,6 +1197,25 @@ export default function CrmCustomerDetailPage() {
           />
         ) : null}
       </Modal>
+    </div>
+  );
+}
+
+function CrmAnalysisBlock({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        background: "#0f172a",
+        border: "1px solid #1e293b",
+        borderRadius: 8,
+        padding: "10px 14px",
+        color: "#94a3b8",
+        fontSize: 13,
+        marginTop: 12,
+        lineHeight: 1.7,
+      }}
+    >
+      {children}
     </div>
   );
 }

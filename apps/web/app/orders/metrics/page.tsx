@@ -10,7 +10,7 @@ import type { Order } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { App, Button, Card, DatePicker, Select, Space, Spin } from "antd";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 type PeriodPreset = "all" | "last3m" | "last12m" | "thisYear" | "custom";
@@ -245,8 +245,59 @@ function OrdersMetricsContent() {
     return Math.min(900, Math.max(320, n * 64 + longest * 4 + 40));
   }, [isMobile, itemComparisonByMonth]);
 
+  const kpiAnalysis = useMemo(() => {
+    if (filteredOrders.length === 0) return null;
+    return `${filteredOrders.length} orden${filteredOrders.length !== 1 ? "es" : ""} en el período, con una facturación total de ${formatCurrency(metricsTotalAmount)} y un ticket promedio de ${formatCurrency(metricsAvgTicket)}.`;
+  }, [filteredOrders.length, metricsTotalAmount, metricsAvgTicket]);
+
+  const monthlyAnalysis = useMemo(() => {
+    if (monthlyOrdersSeries.length === 0) return null;
+    const sorted = [...monthlyOrdersSeries].sort((a, b) => b.orders - a.orders);
+    const best = sorted[0];
+    const worst = sorted[sorted.length - 1];
+    const last3 = monthlyOrdersSeries.slice(-3);
+    const prev3 = monthlyOrdersSeries.slice(-6, -3);
+    let trend = "";
+    if (last3.length === 3 && prev3.length >= 2) {
+      const lastAvg = last3.reduce((s, m) => s + m.orders, 0) / 3;
+      const prevAvg = prev3.reduce((s, m) => s + m.orders, 0) / prev3.length;
+      if (lastAvg > prevAvg * 1.1) trend = "La tendencia de los últimos 3 meses es al alza.";
+      else if (lastAvg < prevAvg * 0.9) trend = "La tendencia de los últimos 3 meses es a la baja.";
+      else trend = "La tendencia de los últimos 3 meses es estable.";
+    }
+    return { best, worst, trend };
+  }, [monthlyOrdersSeries]);
+
+  const topItemsAnalysis = useMemo(() => {
+    if (topItemsSeries.length === 0) return null;
+    const total = topItemsSeries.reduce((s, i) => s + i.units, 0);
+    const top3Total = topItemsSeries.slice(0, 3).reduce((s, i) => s + i.units, 0);
+    const top3Pct = total > 0 ? Math.round((top3Total / total) * 100) : 0;
+    return { top: topItemsSeries[0], top3Pct, total };
+  }, [topItemsSeries]);
+
+  const comparisonAnalysis = useMemo(() => {
+    if (!comparisonKpis || itemComparisonByMonth.length === 0) return null;
+    const grew = [...itemComparisonByMonth].sort(
+      (a, b) => b.monthAUnits - b.monthBUnits - (a.monthAUnits - a.monthBUnits),
+    )[0];
+    const fell = [...itemComparisonByMonth].sort(
+      (a, b) => a.monthAUnits - a.monthBUnits - (b.monthAUnits - b.monthBUnits),
+    )[0];
+    const pctCount =
+      comparisonKpis.bCount > 0
+        ? Math.round(((comparisonKpis.aCount - comparisonKpis.bCount) / comparisonKpis.bCount) * 100)
+        : null;
+    const pctAmt =
+      comparisonKpis.bAmt > 0
+        ? Math.round(((comparisonKpis.aAmt - comparisonKpis.bAmt) / comparisonKpis.bAmt) * 100)
+        : null;
+    return { grew, fell, pctCount, pctAmt };
+  }, [comparisonKpis, itemComparisonByMonth]);
+
   return (
     <div style={{ width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box" }}>
+
       <div
         style={{
           marginBottom: "24px",
@@ -331,6 +382,7 @@ function OrdersMetricsContent() {
                 </div>
               </div>
             </Space>
+            {kpiAnalysis ? <AnalysisBlock>{kpiAnalysis}</AnalysisBlock> : null}
           </Card>
 
           <Card title={`Pedidos por mes (período: ${periodLabel})`}>
@@ -352,6 +404,15 @@ function OrdersMetricsContent() {
                 </ResponsiveContainer>
               </div>
             </div>
+            {monthlyAnalysis ? (
+              <AnalysisBlock>
+                El mes con más pedidos fue <strong>{monthlyAnalysis.best.month}</strong> con{" "}
+                <strong>{monthlyAnalysis.best.orders}</strong> órdenes. El mes con menos actividad fue{" "}
+                <strong>{monthlyAnalysis.worst.month}</strong> con{" "}
+                <strong>{monthlyAnalysis.worst.orders}</strong> orden{monthlyAnalysis.worst.orders !== 1 ? "es" : ""}.
+                {monthlyAnalysis.trend ? ` ${monthlyAnalysis.trend}` : ""}
+              </AnalysisBlock>
+            ) : null}
           </Card>
 
           <Card title="Ítems más pedidos (unidades), período seleccionado">
@@ -375,6 +436,15 @@ function OrdersMetricsContent() {
                 </ResponsiveContainer>
               </div>
             </div>
+            {topItemsAnalysis ? (
+              <AnalysisBlock>
+                El producto más demandado es <strong>{topItemsAnalysis.top.name}</strong> con{" "}
+                <strong>{topItemsAnalysis.top.units}</strong> unidades.
+                {topItemsSeries.length >= 3
+                  ? ` Los 3 primeros productos concentran el ${topItemsAnalysis.top3Pct}% del total de unidades pedidas.`
+                  : ""}
+              </AnalysisBlock>
+            ) : null}
           </Card>
 
           <Card title="Comparar dos meses (unidades por ítem)">
@@ -412,10 +482,16 @@ function OrdersMetricsContent() {
                   <div style={{ color: comparisonKpis.deltaCount >= 0 ? "#22c55e" : "#f87171" }}>
                     Δ pedidos: {comparisonKpis.deltaCount >= 0 ? "+" : ""}
                     {comparisonKpis.deltaCount}
+                    {comparisonAnalysis?.pctCount != null
+                      ? ` (${comparisonAnalysis.pctCount >= 0 ? "+" : ""}${comparisonAnalysis.pctCount}%)`
+                      : ""}
                   </div>
                   <div style={{ color: comparisonKpis.deltaAmt >= 0 ? "#22c55e" : "#f87171" }}>
                     Δ facturación: {comparisonKpis.deltaAmt >= 0 ? "+" : ""}
                     {formatCurrency(comparisonKpis.deltaAmt)}
+                    {comparisonAnalysis?.pctAmt != null
+                      ? ` (${comparisonAnalysis.pctAmt >= 0 ? "+" : ""}${comparisonAnalysis.pctAmt}%)`
+                      : ""}
                   </div>
                 </Space>
               ) : null}
@@ -447,10 +523,55 @@ function OrdersMetricsContent() {
                   </ResponsiveContainer>
                 </div>
               </div>
+              {comparisonAnalysis ? (
+                <AnalysisBlock>
+                  {comparisonKpis && comparisonKpis.deltaCount !== 0 ? (
+                    <>
+                      <strong>{compareMonthALabel}</strong>{" "}
+                      {comparisonKpis.deltaCount > 0 ? "superó" : "estuvo por debajo de"}{" "}
+                      <strong>{compareMonthBLabel}</strong> en pedidos
+                      {comparisonAnalysis.pctCount != null
+                        ? ` (${comparisonAnalysis.pctCount >= 0 ? "+" : ""}${comparisonAnalysis.pctCount}%)`
+                        : ""}.{" "}
+                    </>
+                  ) : null}
+                  {comparisonAnalysis.grew && comparisonAnalysis.grew.monthAUnits > comparisonAnalysis.grew.monthBUnits ? (
+                    <>
+                      El producto con mayor crecimiento fue <strong>{comparisonAnalysis.grew.name}</strong> (
+                      {comparisonAnalysis.grew.monthBUnits} → {comparisonAnalysis.grew.monthAUnits} un.).{" "}
+                    </>
+                  ) : null}
+                  {comparisonAnalysis.fell && comparisonAnalysis.fell.monthBUnits > comparisonAnalysis.fell.monthAUnits ? (
+                    <>
+                      El que más cayó fue <strong>{comparisonAnalysis.fell.name}</strong> (
+                      {comparisonAnalysis.fell.monthBUnits} → {comparisonAnalysis.fell.monthAUnits} un.).
+                    </>
+                  ) : null}
+                </AnalysisBlock>
+              ) : null}
             </Space>
           </Card>
         </Space>
       </Spin>
+    </div>
+  );
+}
+
+function AnalysisBlock({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        background: "#0f172a",
+        border: "1px solid #1e293b",
+        borderRadius: 8,
+        padding: "10px 14px",
+        color: "#94a3b8",
+        fontSize: 13,
+        marginTop: 12,
+        lineHeight: 1.7,
+      }}
+    >
+      {children}
     </div>
   );
 }
