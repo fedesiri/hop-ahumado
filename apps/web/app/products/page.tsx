@@ -15,26 +15,10 @@ import {
   type Product,
   type UpdateProductRequest,
 } from "@/lib/types";
-import { DeleteOutlined, EditOutlined, PlusOutlined, UndoOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Card,
-  Col,
-  Empty,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Row,
-  Select,
-  Space,
-  Spin,
-  Table,
-  Tag,
-} from "antd";
+import { toast } from "@/lib/toast";
+import { Edit2, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
   { label: "Unidad", value: ProductUnit.UNIT },
@@ -61,7 +45,6 @@ export default function ProductsPage() {
 }
 
 function ProductsContent() {
-  const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -69,9 +52,12 @@ function ProductsContent() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form] = Form.useForm();
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState("");
+  const [reactivateId, setReactivateId] = useState<string | null>(null);
+  const [reactivateTarget, setReactivateTarget] = useState("");
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
   const [showDeactivated, setShowDeactivated] = useState(
@@ -79,9 +65,23 @@ function ProductsContent() {
   );
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const [searchInput, setSearchInput] = useState(() => searchParams.get("search") ?? "");
-  const [categoryFilter, setCategoryFilter] = useState<string | undefined>(
-    () => searchParams.get("category") ?? undefined,
+  const [categoryFilter, setCategoryFilter] = useState<string>(
+    () => searchParams.get("category") ?? "",
   );
+
+  const [fname, setFname] = useState("");
+  const [funit, setFunit] = useState<ProductUnit>(ProductUnit.UNIT);
+  const [fcategoryId, setFcategoryId] = useState("");
+  const [fsku, setFsku] = useState("");
+  const [fbarcode, setFbarcode] = useState("");
+  const [fdescription, setFdescription] = useState("");
+  const [fnameErr, setFnameErr] = useState(false);
+  const [fstock, setFstock] = useState("");
+  const [fcostValue, setFcostValue] = useState("");
+  const [fpriceMayorista, setFpriceMayorista] = useState("");
+  const [fpriceMinorista, setFpriceMinorista] = useState("");
+  const [fpriceFabrica, setFpriceFabrica] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -103,17 +103,17 @@ function ProductsContent() {
         pagination.limit,
         showDeactivated,
         search || undefined,
-        categoryFilter,
+        categoryFilter || undefined,
         selectedLineId ?? undefined,
       );
       setProducts(response.data);
       setMeta(response.meta);
     } catch {
-      message.error("Error al cargar productos");
+      toast.error("Error al cargar productos");
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, showDeactivated, search, categoryFilter, selectedLineId, message]);
+  }, [pagination.page, pagination.limit, showDeactivated, search, categoryFilter, selectedLineId]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -129,391 +129,472 @@ function ProductsContent() {
     fetchCategories();
   }, [fetchProducts, fetchCategories]);
 
-  const handleCreate = () => {
+  useEffect(() => {
+    if (drawerOpen) setTimeout(() => nameInputRef.current?.focus(), 80);
+  }, [drawerOpen]);
+
+  const resetForm = () => {
+    setFname(""); setFunit(ProductUnit.UNIT); setFcategoryId("");
+    setFsku(""); setFbarcode(""); setFdescription(""); setFnameErr(false);
+    setFstock(""); setFcostValue(""); setFpriceMayorista(""); setFpriceMinorista(""); setFpriceFabrica("");
+  };
+
+  const openCreate = () => {
+    if (!selectedLineId) { toast.error("Seleccioná una línea de negocio"); return; }
     setEditingId(null);
-    form.resetFields();
-    setModalOpen(true);
+    resetForm();
+    setDrawerOpen(true);
   };
 
-  const handleEdit = (record: Product) => {
+  const openEdit = (record: Product) => {
     setEditingId(record.id);
-    form.setFieldsValue({
-      name: record.name,
-      unit: record.unit,
-      description: record.description,
-      categoryId: record.categoryId,
-      sku: record.sku,
-      barcode: record.barcode,
-      stock: record.stock,
-    });
-    setModalOpen(true);
+    setFname(record.name);
+    setFunit(record.unit);
+    setFcategoryId(record.categoryId ?? "");
+    setFsku(record.sku ?? "");
+    setFbarcode(record.barcode ?? "");
+    setFdescription(record.description ?? "");
+    setFnameErr(false);
+    setFstock(String(record.stock ?? ""));
+    setFcostValue(""); setFpriceMayorista(""); setFpriceMinorista(""); setFpriceFabrica("");
+    setDrawerOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    modal.confirm({
-      title: "Confirmar eliminacion",
-      content: "Estas seguro de que deseas eliminar este producto?",
-      okText: "Si",
-      cancelText: "No",
-      onOk: async () => {
-        try {
-          await apiClient.deleteProduct(id);
-          message.success("Producto eliminado");
-          fetchProducts();
-        } catch (error) {
-          message.error("Error al eliminar producto");
-        }
-      },
-    });
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setEditingId(null);
+    resetForm();
   };
 
-  const handleReactivate = (id: string) => {
-    modal.confirm({
-      title: "Reactivar producto",
-      content:
-        "Vuelve al listado de activos y a las ventas. Las cantidades en stock que tenía al desactivarse se conservan; podés editarlas después si hace falta.",
-      okText: "Reactivar",
-      cancelText: "Cancelar",
-      onOk: async () => {
-        try {
-          await apiClient.updateProduct(id, { deactivationDate: null });
-          message.success("Producto reactivado");
-          fetchProducts();
-        } catch (error) {
-          message.error("Error al reactivar producto");
-        }
-      },
-    });
-  };
-
-  const handleSubmit = async (values: any) => {
-    if (!selectedLineId && !editingId) {
-      message.error("Seleccioná una línea de negocio");
-      return;
-    }
+  const handleSubmit = async () => {
+    const trimmedName = fname.trim();
+    if (!trimmedName) { setFnameErr(true); nameInputRef.current?.focus(); return; }
+    if (!selectedLineId && !editingId) { toast.error("Seleccioná una línea de negocio"); return; }
     setSubmitting(true);
     try {
       const data: CreateProductRequest = {
         businessLineId: selectedLineId!,
-        name: values.name,
-        unit: values.unit,
-        description: values.description,
-        categoryId: values.categoryId,
-        sku: values.sku,
-        barcode: values.barcode,
-        stock: values.stock != null && values.stock !== "" ? Number(values.stock) : 0,
+        name: trimmedName,
+        unit: funit,
+        description: fdescription || undefined,
+        categoryId: fcategoryId || undefined,
+        sku: fsku || undefined,
+        barcode: fbarcode || undefined,
+        stock: fstock ? Number(fstock) : 0,
       };
 
       if (editingId) {
         await apiClient.updateProduct(editingId, data as UpdateProductRequest);
-        message.success("Producto actualizado");
+        toast.success("Producto actualizado");
       } else {
         const created = await apiClient.createProduct(data);
 
-        // Costo: para que el producto sea utilizable en cálculos/costos asociados.
-        const costValue = values.costValue as number | undefined;
+        const costValue = fcostValue ? Number(fcostValue) : undefined;
         if (typeof costValue === "number" && Number.isFinite(costValue)) {
           const costData: CreateCostRequest = { productId: created.id, value: costValue };
           await apiClient.createCost(costData);
         }
 
-        // Precios: opcionales (mayorista/minorista/fabrica).
-        const priceFields: { field: string; description: "mayorista" | "minorista" | "fabrica" }[] = [
-          { field: "priceMayorista", description: "mayorista" },
-          { field: "priceMinorista", description: "minorista" },
-          { field: "priceFabrica", description: "fabrica" },
+        const priceFields: { val: string; description: "mayorista" | "minorista" | "fabrica" }[] = [
+          { val: fpriceMayorista, description: "mayorista" },
+          { val: fpriceMinorista, description: "minorista" },
+          { val: fpriceFabrica, description: "fabrica" },
         ];
-
         for (const pf of priceFields) {
-          const raw = values[pf.field] as number | undefined;
+          const raw = pf.val ? Number(pf.val) : undefined;
           if (typeof raw !== "number" || !Number.isFinite(raw)) continue;
           const priceData: CreatePriceRequest = { productId: created.id, value: raw, description: pf.description };
           await apiClient.createPrice(priceData);
         }
 
-        message.success("Producto creado");
+        toast.success("Producto creado");
       }
-      setModalOpen(false);
+      closeDrawer();
       fetchProducts();
-    } catch (error) {
-      message.error("Error al guardar producto");
+    } catch {
+      toast.error("Error al guardar producto");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const columns = [
-    {
-      title: "Nombre",
-      dataIndex: "name",
-      key: "name",
-    },
-    {
-      title: "SKU",
-      dataIndex: "sku",
-      key: "sku",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Categoría",
-      dataIndex: ["category", "name"],
-      key: "category",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Stock",
-      dataIndex: "stock",
-      key: "stock",
-      render: (stock: number, record: Product) => {
-        const n = Number(stock);
-        return (
-          <Tag color={n < 5 ? "red" : n < 10 ? "orange" : "green"}>
-            {formatQuantity(stock)} {UNIT_SHORT_LABEL[record.unit] ?? ""}
-          </Tag>
-        );
-      },
-    },
-    {
-      title: "Acciones",
-      key: "actions",
-      width: showDeactivated ? 160 : 120,
-      render: (_: any, record: Product) => (
-        <Space>
-          <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-          {showDeactivated ? (
-            <Button
-              type="default"
-              size="small"
-              title="Reactivar"
-              icon={<UndoOutlined />}
-              onClick={() => handleReactivate(record.id)}
-            />
-          ) : (
-            <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
-          )}
-        </Space>
-      ),
-    },
-  ];
+  const stockColor = (stock: number) => {
+    const n = Number(stock);
+    if (n < 5) return { bg: "var(--ha-red-soft)", color: "var(--ha-red)" };
+    if (n < 10) return { bg: "rgba(251,146,60,0.16)", color: "var(--ha-orange)" };
+    return { bg: "var(--ha-green-soft)", color: "var(--ha-green)" };
+  };
 
   return (
     <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Productos</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} disabled={!selectedLineId}>
-          Nuevo Producto
-        </Button>
+      <div className="ha-page-header">
+        <h1 className="ha-pagetitle">Productos</h1>
+        <button className="ha-btn ha-btn--primary" onClick={openCreate} disabled={!selectedLineId}>
+          <Plus size={15} /> Nuevo producto
+        </button>
       </div>
 
       <ScreenInfoPanel title="¿Qué número va en «stock»?">
         <div>
           <p style={{ margin: "0 0 8px 0" }}>
-            Es <strong>cuánto tenés disponible</strong> de ese producto, en la unidad que elijas para él (el sistema no
-            guarda «kg» o «unidades» aparte: vos lo interpretás).
+            Es <strong>cuánto tenés disponible</strong> de ese producto, en la unidad que elijas para él.
           </p>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
-            <li>
-              <strong>Venta por unidad</strong> (ej. cerveza, pan en unidades): stock = cantidad de unidades (12, 50…).
-            </li>
-            <li>
-              <strong>Venta o insumo por peso/volumen</strong> (ej. tomate en kg): stock = kg o litros, podés usar
-              decimales (10,5).
-            </li>
+            <li><strong>Venta por unidad</strong> (ej. cerveza): stock = cantidad de unidades.</li>
+            <li><strong>Venta por peso/volumen</strong> (ej. tomate en kg): stock = kg o litros, decimales válidos.</li>
           </ul>
-          <p style={{ margin: "8px 0 0 0" }}>
-            Usá la <strong>misma unidad</strong> en movimientos de stock y en recetas para ese producto.
-          </p>
+          <p style={{ margin: "8px 0 0" }}>Usá la <strong>misma unidad</strong> en movimientos y recetas.</p>
         </div>
       </ScreenInfoPanel>
 
-      <Card style={{ marginBottom: "16px", background: "#1f2937", borderColor: "#2d3748" }}>
-        <Space wrap>
-          <Input.Search
-            placeholder="Buscar por nombre, SKU o código"
-            allowClear
+      {/* Filters */}
+      <div className="ha-filters" style={{ marginBottom: 16 }}>
+        <div className="ha-filters__row">
+          <input
+            className="ha-filter-input"
+            style={{ flex: 1, maxWidth: 280 }}
+            placeholder="Buscar por nombre, SKU o código…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            onSearch={(value) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              const trimmed = value.trim();
-              setSearch(trimmed);
-              updateParams({ search: trimmed || null });
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const trimmed = searchInput.trim();
+                setPagination((p) => ({ ...p, page: 1 }));
+                setSearch(trimmed);
+                updateParams({ search: trimmed || null });
+              }
             }}
-            style={{ minWidth: 240 }}
           />
-          <Select
-            allowClear
-            placeholder="Filtrar por categoría"
-            style={{ minWidth: 200 }}
+          <select
+            className="ha-filter-input ha-select"
+            style={{ minWidth: 180, height: 36, padding: "0 30px 0 10px" }}
             value={categoryFilter}
-            options={categories.map((c) => ({ label: c.name, value: c.id }))}
-            onChange={(value) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              setCategoryFilter(value);
-              updateParams({ category: value ?? null });
+            onChange={(e) => {
+              setPagination((p) => ({ ...p, page: 1 }));
+              setCategoryFilter(e.target.value);
+              updateParams({ category: e.target.value || null });
             }}
-          />
-          <Button
-            type={showDeactivated ? "primary" : "default"}
+          >
+            <option value="">Todas las categorías</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button
+            className={`ha-btn ${showDeactivated ? "ha-btn--primary" : "ha-btn--secondary"} ha-btn--sm`}
             onClick={() => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
+              setPagination((p) => ({ ...p, page: 1 }));
               const next = !showDeactivated;
               setShowDeactivated(next);
               updateParams({ showDeactivated: next ? "true" : null });
             }}
           >
             {showDeactivated ? "Mostrar activos" : "Mostrar desactivados"}
-          </Button>
-        </Space>
-      </Card>
+          </button>
+        </div>
+      </div>
 
       {loading ? (
-        <Spin />
-      ) : products.length > 0 ? (
-        <Table
-          columns={columns}
-          dataSource={products}
-          rowKey="id"
-          style={{ backgroundColor: "#1f2937" }}
-          pagination={{
-            current: pagination.page,
-            pageSize: pagination.limit,
-            total: meta?.total || 0,
-            onChange: (page, pageSize) => {
-              setPagination({ page, limit: pageSize });
-            },
-          }}
-        />
+        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
+          <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
+        </div>
+      ) : products.length === 0 ? (
+        <div className="ha-empty">
+          <p className="ha-empty__t">Sin productos</p>
+          <p className="ha-empty__s">{search ? "Ningún producto coincide con la búsqueda." : "Creá el primer producto."}</p>
+        </div>
       ) : (
-        <Empty description="No hay productos" style={{ color: "#9ca3af" }} />
-      )}
+        <>
+          {/* Desktop table */}
+          <div className="ha-table-wrap">
+            <table className="ha-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>SKU</th>
+                  <th>Categoría</th>
+                  <th>Stock</th>
+                  <th style={{ textAlign: "right", width: 100 }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((p) => {
+                  const sc = stockColor(p.stock);
+                  return (
+                    <tr key={p.id}>
+                      <td style={{ fontWeight: 500 }}>{p.name}</td>
+                      <td className="ha-mono" style={{ color: "var(--ha-text-2)" }}>{p.sku || "—"}</td>
+                      <td style={{ color: "var(--ha-text-2)" }}>{p.category?.name || "—"}</td>
+                      <td>
+                        <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600, background: sc.bg, color: sc.color }}>
+                          {formatQuantity(p.stock)} {UNIT_SHORT_LABEL[p.unit] ?? ""}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                          <button
+                            onClick={() => openEdit(p)}
+                            style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          {showDeactivated ? (
+                            <button
+                              onClick={() => { setReactivateId(p.id); setReactivateTarget(p.name); }}
+                              style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}
+                              title="Reactivar"
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => { setDeleteId(p.id); setDeleteTarget(p.name); }}
+                              style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-red)", background: "transparent", borderRadius: 7, color: "var(--ha-red)", cursor: "pointer" }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-      <Modal
-        title={editingId ? "Editar Producto" : "Nuevo Producto"}
-        open={modalOpen}
-        onOk={() => form.submit()}
-        onCancel={() => setModalOpen(false)}
-        okButtonProps={{ loading: submitting, disabled: submitting }}
-        width="min(92vw, 760px)"
-        centered
-        classNames={{ body: "app-panel-scroll" }}
-        styles={{
-          body: {
-            maxHeight: "calc(100vh - 200px)",
-            overflowY: "auto",
-            paddingRight: 8,
-            paddingTop: 16,
-          },
-        }}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Row gutter={[16, 0]}>
-            <Col xs={24} sm={16}>
-              <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "El nombre es requerido" }]}>
-                <Input placeholder="Nombre del producto" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Form.Item name="unit" label="Unidad" initialValue={ProductUnit.UNIT}>
-                <Select placeholder="Unidad" options={PRODUCT_UNIT_OPTIONS} />
-              </Form.Item>
-            </Col>
-          </Row>
+          {/* Mobile card list */}
+          <div className="ha-cardlist">
+            {products.map((p) => {
+              const sc = stockColor(p.stock);
+              return (
+                <div key={p.id} className="ha-ordcard">
+                  <div className="ha-ordcard__top">
+                    <span className="ha-ordcard__name">{p.name}</span>
+                    <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600, background: sc.bg, color: sc.color }}>
+                      {formatQuantity(p.stock)} {UNIT_SHORT_LABEL[p.unit] ?? ""}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 4, fontSize: 12, color: "var(--ha-text-3)" }}>
+                    {p.sku && <span>SKU: <span className="ha-mono" style={{ color: "var(--ha-text-2)" }}>{p.sku}</span></span>}
+                    {p.category?.name && <span>{p.category.name}</span>}
+                  </div>
+                  <div className="ha-ordcard__actions">
+                    <button className="ha-actbtn" onClick={() => openEdit(p)}>
+                      <Edit2 size={15} />
+                    </button>
+                    {showDeactivated ? (
+                      <button className="ha-actbtn" onClick={() => { setReactivateId(p.id); setReactivateTarget(p.name); }}>
+                        <RotateCcw size={15} />
+                      </button>
+                    ) : (
+                      <button
+                        className="ha-actbtn"
+                        onClick={() => { setDeleteId(p.id); setDeleteTarget(p.name); }}
+                        style={{ borderColor: "var(--ha-red)", color: "var(--ha-red)" }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
-          <Row gutter={[16, 0]}>
-            <Col xs={24} sm={12}>
-              <Form.Item name="categoryId" label="Categoría">
-                <Select
-                  placeholder="Selecciona una categoría"
-                  options={categories.map((c) => ({ label: c.name, value: c.id }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                name="stock"
-                label="Stock inicial"
-                extra="Unidades, kg o l según la unidad elegida."
+          {/* Pagination */}
+          {meta && meta.totalPages > 1 && (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+              <button
+                className="ha-btn ha-btn--secondary ha-btn--sm"
+                disabled={pagination.page <= 1}
+                onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
               >
-                <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 12 o 10,5" style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={[16, 0]}>
-            <Col xs={24} sm={12}>
-              <Form.Item name="sku" label="SKU">
-                <Input placeholder="SKU" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="barcode" label="Código de Barras">
-                <Input placeholder="Código de barras" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item name="description" label="Descripción">
-            <Input.TextArea placeholder="Descripción (opcional)" rows={2} />
-          </Form.Item>
-
-          {!editingId && (
-            <div
-              style={{
-                marginTop: 4,
-                marginBottom: 8,
-                padding: "16px 16px 4px",
-                borderRadius: 8,
-                border: "1px solid #2d3748",
-                background: "rgba(255,255,255,0.02)",
-              }}
-            >
-              <div style={{ marginBottom: 16, color: "#ffffff", fontWeight: 600, fontSize: 13, letterSpacing: "0.02em" }}>
-                Costo y precios
-              </div>
-
-              <Row gutter={[16, 0]}>
-                <Col xs={24} sm={12}>
-                  <Form.Item
-                    name="costValue"
-                    label="Costo por unidad"
-                    rules={[{ required: true, message: "El costo es requerido" }]}
-                  >
-                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1200" style={{ width: "100%" }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Row gutter={[16, 0]}>
-                <Col xs={24} sm={8}>
-                  <Form.Item name="priceMayorista" label="Mayorista">
-                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1500" style={{ width: "100%" }} />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} sm={8}>
-                  <Form.Item name="priceMinorista" label="Minorista">
-                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1800" style={{ width: "100%" }} />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} sm={8}>
-                  <Form.Item name="priceFabrica" label="Fábrica">
-                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1300" style={{ width: "100%" }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <ScreenInfoPanel
-                title="Sobre costos y precios en este formulario"
-                style={{ marginBottom: 12, marginTop: 0 }}
+                Anterior
+              </button>
+              <span style={{ fontSize: 13, color: "var(--ha-text-3)" }}>
+                Página {pagination.page} de {meta.totalPages}
+              </span>
+              <button
+                className="ha-btn ha-btn--secondary ha-btn--sm"
+                disabled={pagination.page >= meta.totalPages}
+                onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
               >
-                <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
-                  Si dejás algún precio vacío, podés cargarlo después en la pantalla de <strong>Precios</strong>.
-                </span>
-              </ScreenInfoPanel>
+                Siguiente
+              </button>
             </div>
           )}
-        </Form>
-      </Modal>
+        </>
+      )}
+
+      {/* FAB */}
+      <button className="ha-fab" onClick={openCreate} aria-label="Nuevo producto">
+        <Plus size={24} />
+      </button>
+
+      {/* Drawer */}
+      {drawerOpen && (
+        <>
+          <div className="ha-overlay" onClick={closeDrawer} />
+          <div className="ha-drawer" style={{ width: "min(90vw, 480px)" }}>
+            <div className="ha-sheet__handle" />
+            <div className="ha-drawer__head">
+              <span className="ha-drawer__title">{editingId ? "Editar producto" : "Nuevo producto"}</span>
+              <button className="ha-iconbtn" onClick={closeDrawer} aria-label="Cerrar"><X size={18} /></button>
+            </div>
+            <div className="ha-drawer__body">
+              <div className="ha-formgrid">
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 12 }}>
+                  <div className="ha-field">
+                    <label className="ha-label">Nombre <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                    <input
+                      ref={nameInputRef}
+                      className={`ha-input${fnameErr ? " ha-input--error" : ""}`}
+                      placeholder="Nombre del producto"
+                      value={fname}
+                      onChange={(e) => { setFname(e.target.value); if (fnameErr) setFnameErr(false); }}
+                    />
+                    {fnameErr && <span className="ha-error">El nombre es obligatorio.</span>}
+                  </div>
+                  <div className="ha-field">
+                    <label className="ha-label">Unidad</label>
+                    <select className="ha-input ha-select" value={funit} onChange={(e) => setFunit(e.target.value as ProductUnit)}>
+                      {PRODUCT_UNIT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="ha-field">
+                    <label className="ha-label">Categoría</label>
+                    <select className="ha-input ha-select" value={fcategoryId} onChange={(e) => setFcategoryId(e.target.value)}>
+                      <option value="">Sin categoría</option>
+                      {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="ha-field">
+                    <label className="ha-label">Stock inicial</label>
+                    <input type="number" className="ha-input" placeholder="Ej. 12 o 10.5" min={0} step={0.01} value={fstock} onChange={(e) => setFstock(e.target.value)} />
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="ha-field">
+                    <label className="ha-label">SKU</label>
+                    <input className="ha-input" placeholder="SKU" value={fsku} onChange={(e) => setFsku(e.target.value)} />
+                  </div>
+                  <div className="ha-field">
+                    <label className="ha-label">Código de barras</label>
+                    <input className="ha-input" placeholder="Código de barras" value={fbarcode} onChange={(e) => setFbarcode(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="ha-field">
+                  <label className="ha-label">Descripción</label>
+                  <textarea className="ha-textarea" placeholder="Descripción (opcional)" rows={2} value={fdescription} onChange={(e) => setFdescription(e.target.value)} />
+                </div>
+
+                {!editingId && (
+                  <div style={{ border: "1px solid var(--ha-border)", borderRadius: 8, padding: 16 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, letterSpacing: "0.02em", marginBottom: 14, color: "var(--ha-text)" }}>Costo y precios</div>
+                    <div className="ha-formgrid">
+                      <div className="ha-field">
+                        <label className="ha-label">Costo por unidad <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                        <input type="number" className="ha-input" placeholder="Ej: 1200" min={0} step={0.01} value={fcostValue} onChange={(e) => setFcostValue(e.target.value)} />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                        <div className="ha-field">
+                          <label className="ha-label">Mayorista</label>
+                          <input type="number" className="ha-input" placeholder="Precio" min={0} step={0.01} value={fpriceMayorista} onChange={(e) => setFpriceMayorista(e.target.value)} />
+                        </div>
+                        <div className="ha-field">
+                          <label className="ha-label">Minorista</label>
+                          <input type="number" className="ha-input" placeholder="Precio" min={0} step={0.01} value={fpriceMinorista} onChange={(e) => setFpriceMinorista(e.target.value)} />
+                        </div>
+                        <div className="ha-field">
+                          <label className="ha-label">Fábrica</label>
+                          <input type="number" className="ha-input" placeholder="Precio" min={0} step={0.01} value={fpriceFabrica} onChange={(e) => setFpriceFabrica(e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+                    <ScreenInfoPanel title="Sobre costos y precios" style={{ marginTop: 12, marginBottom: 0 }}>
+                      <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}>
+                        Si dejás algún precio vacío, podés cargarlo después en la pantalla de <strong>Precios</strong>.
+                      </span>
+                    </ScreenInfoPanel>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="ha-drawer__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={closeDrawer}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Delete dialog */}
+      {deleteId && (
+        <div className="ha-dialog-back" onClick={() => setDeleteId(null)}>
+          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="ha-dialog__head">
+              <h3 className="ha-dialog__title">¿Eliminar producto?</h3>
+              <p className="ha-dialog__sub">Esta acción no puede deshacerse.</p>
+            </div>
+            <div className="ha-dialog__body">
+              <p style={{ color: "var(--ha-text-2)", margin: 0, fontSize: 14 }}>
+                Se eliminará <strong style={{ color: "var(--ha-text)" }}>{deleteTarget}</strong>.
+              </p>
+            </div>
+            <div className="ha-dialog__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
+              <button className="ha-btn ha-btn--destructive" onClick={async () => {
+                try {
+                  await apiClient.deleteProduct(deleteId!);
+                  toast.success("Producto eliminado");
+                  setDeleteId(null);
+                  fetchProducts();
+                } catch {
+                  toast.error("Error al eliminar producto");
+                  setDeleteId(null);
+                }
+              }}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reactivate dialog */}
+      {reactivateId && (
+        <div className="ha-dialog-back" onClick={() => setReactivateId(null)}>
+          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="ha-dialog__head">
+              <h3 className="ha-dialog__title">Reactivar producto</h3>
+              <p className="ha-dialog__sub">Vuelve al listado de activos y a las ventas.</p>
+            </div>
+            <div className="ha-dialog__body">
+              <p style={{ color: "var(--ha-text-2)", margin: 0, fontSize: 14 }}>
+                Las cantidades en stock que tenía <strong style={{ color: "var(--ha-text)" }}>{reactivateTarget}</strong> al desactivarse se conservan.
+              </p>
+            </div>
+            <div className="ha-dialog__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setReactivateId(null)}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={async () => {
+                try {
+                  await apiClient.updateProduct(reactivateId!, { deactivationDate: null });
+                  toast.success("Producto reactivado");
+                  setReactivateId(null);
+                  fetchProducts();
+                } catch {
+                  toast.error("Error al reactivar producto");
+                  setReactivateId(null);
+                }
+              }}>Reactivar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

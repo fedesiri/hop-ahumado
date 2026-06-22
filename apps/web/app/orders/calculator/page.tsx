@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/app-layout";
 import { OrderCalculator } from "@/components/order-calculator/order-calculator";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import dayjs, { type Dayjs } from "@/lib/dayjs";
+import dayjs from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import type { PriceType } from "@/lib/order-calculator/price-types";
 import {
@@ -12,8 +12,8 @@ import {
   fetchRecipesByProductIds,
   type RecipeIngredientRow,
 } from "@/lib/order-calculator/stock-preview";
+import { toast } from "@/lib/toast";
 import type { CreateOrderRequest, Customer, Price, Product, StockLocation } from "@/lib/types";
-import { Alert, App, Button, Checkbox, DatePicker, Input, Modal, Select, Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function OrderCalculatorPage() {
@@ -25,7 +25,6 @@ export default function OrderCalculatorPage() {
 }
 
 function OrderCalculatorPageContent() {
-  const { message } = App.useApp();
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
@@ -39,7 +38,7 @@ function OrderCalculatorPageContent() {
     customerId: string | null;
     priceListType: PriceType;
   } | null>(null);
-  const [deliveryDate, setDeliveryDate] = useState<Dayjs | null>(null);
+  const [deliveryDate, setDeliveryDate] = useState(() => dayjs().startOf("day").format("YYYY-MM-DD"));
   const [submitting, setSubmitting] = useState(false);
   const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
   const [fulfillmentLocationId, setFulfillmentLocationId] = useState<string | null>(null);
@@ -58,7 +57,6 @@ function OrderCalculatorPageContent() {
     return map;
   }, [prices]);
 
-  /** Stock en la ubicación elegida: para combos usa ingredientes (misma lógica que el backend al descontar). */
   const productsGoingNegative = useMemo(() => {
     if (!pendingOrder || !fulfillmentLocationId || !stockPreviewReady) return [];
     const productById = Object.fromEntries(products.map((p) => [p.id, p]));
@@ -70,18 +68,13 @@ function OrderCalculatorPageContent() {
       const atLocation = balanceByProductId[productId] ?? 0;
       const after = atLocation - need;
       if (after < 0) {
-        result.push({
-          name: product?.name ?? productId,
-          current: atLocation,
-          requested: need,
-          after,
-        });
+        result.push({ name: product?.name ?? productId, current: atLocation, requested: need, after });
       }
     }
     return result;
   }, [pendingOrder, products, fulfillmentLocationId, balanceByProductId, recipesByProductId, stockPreviewReady]);
 
-  const limit = 100; // máximo que permite la API
+  const limit = 100;
 
   const fetchProducts = useCallback(async () => {
     const allProducts: Product[] = [];
@@ -137,15 +130,14 @@ function OrderCalculatorPageContent() {
         }
       } catch (e) {
         console.error(e);
-        message.error("Error al cargar productos y precios");
+        toast.error("Error al cargar productos y precios");
       } finally {
         setLoading(false);
       }
     };
-    load();
-  }, [message, fetchProducts]);
+    void load();
+  }, [fetchProducts]);
 
-  // Al abrir el modal: productos, saldos en ubicación y recetas (para avisar stock en combos por insumo)
   useEffect(() => {
     if (!confirmModalOpen) {
       setStockPreviewReady(false);
@@ -155,13 +147,13 @@ function OrderCalculatorPageContent() {
     if (!pendingOrder || !fulfillmentLocationId) return;
     let cancelled = false;
     setStockPreviewReady(false);
-    fetchProducts();
-    (async () => {
+    void fetchProducts();
+    void (async () => {
       try {
         const ids = [...new Set(pendingOrder.items.map((i) => i.productId))];
         const [rows, recipes] = await Promise.all([
           apiClient.getStockBalancesAtLocation(fulfillmentLocationId),
-          fetchRecipesByProductIds((p, l, id) => apiClient.getRecipeItems(p, l, id), ids),
+          fetchRecipesByProductIds((p, l, rid) => apiClient.getRecipeItems(p, l, rid), ids),
         ]);
         if (cancelled) return;
         const map: Record<string, number> = {};
@@ -177,9 +169,7 @@ function OrderCalculatorPageContent() {
         }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [confirmModalOpen, pendingOrder, fulfillmentLocationId, fetchProducts]);
 
   const handleConfirmOrder = (
@@ -189,20 +179,15 @@ function OrderCalculatorPageContent() {
     priceListType?: PriceType,
   ) => {
     setOrderComment("");
-    setDeliveryDate(dayjs().startOf("day"));
-    setPendingOrder({
-      items,
-      total,
-      customerId: customerId ?? null,
-      priceListType: priceListType ?? "mayorista",
-    });
+    setDeliveryDate(dayjs().startOf("day").format("YYYY-MM-DD"));
+    setPendingOrder({ items, total, customerId: customerId ?? null, priceListType: priceListType ?? "mayorista" });
     setConfirmModalOpen(true);
   };
 
   const handleCreateOrder = async () => {
     if (!pendingOrder) return;
     if (stockLocations.length > 0 && !fulfillmentLocationId) {
-      message.error("Elegí la ubicación de stock desde la cual descontar el pedido.");
+      toast.error("Elegí la ubicación de stock desde la cual descontar el pedido.");
       return;
     }
     const { items, total, customerId, priceListType } = pendingOrder;
@@ -211,7 +196,7 @@ function OrderCalculatorPageContent() {
       const data: CreateOrderRequest = {
         customerId: customerId ?? undefined,
         userId: user?.id,
-        deliveryDate: (deliveryDate ?? dayjs().startOf("day")).toISOString(),
+        deliveryDate: (deliveryDate ? dayjs(deliveryDate) : dayjs().startOf("day")).toISOString(),
         fulfillmentLocationId: fulfillmentLocationId ?? undefined,
         total: isConsignment ? 0 : total,
         priceListType,
@@ -224,7 +209,7 @@ function OrderCalculatorPageContent() {
         })),
       };
       const createdOrder = await apiClient.createOrder(data);
-      message.success(`Orden creada (${createdOrder.paymentStatus}). El stock se descontó correctamente.`);
+      toast.success(`Orden creada (${createdOrder.paymentStatus}). El stock se descontó correctamente.`);
       if (typeof window !== "undefined") {
         try {
           localStorage.removeItem("order-calc-quantities");
@@ -237,20 +222,25 @@ function OrderCalculatorPageContent() {
       setPendingOrder(null);
       setIsConsignment(false);
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === "object" && "message" in err
-          ? String((err as { message: string }).message)
-          : "Error al crear la orden";
-      message.error(msg);
+      const msg = err && typeof err === "object" && "message" in err
+        ? String((err as { message: string }).message)
+        : "Error al crear la orden";
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
   };
 
+  const closeModal = () => {
+    setConfirmModalOpen(false);
+    setPendingOrder(null);
+    setIsConsignment(false);
+  };
+
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
-        <Spin size="large" />
+        <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
       </div>
     );
   }
@@ -265,124 +255,98 @@ function OrderCalculatorPageContent() {
         onConfirmOrder={handleConfirmOrder}
       />
 
-      <Modal
-        title="Confirmar pedido"
-        open={confirmModalOpen}
-        onCancel={() => {
-          setConfirmModalOpen(false);
-          setPendingOrder(null);
-          setIsConsignment(false);
-        }}
-        footer={[
-          <Button
-            key="cancel"
-            onClick={() => {
-              setConfirmModalOpen(false);
-              setPendingOrder(null);
-            }}
-          >
-            Cancelar
-          </Button>,
-          <Button key="submit" type="primary" loading={submitting} onClick={handleCreateOrder}>
-            Crear orden y descontar stock
-          </Button>,
-        ]}
-      >
-        {pendingOrder && (
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ marginBottom: 8, color: "#9ca3af" }}>Total: {formatCurrency(pendingOrder.total)}</p>
-            <p style={{ marginBottom: 8, color: "#9ca3af" }}>Ítems: {pendingOrder.items.length}</p>
-            {pendingOrder.customerId && (
-              <p style={{ marginBottom: 8, color: "#9ca3af" }}>
-                Cliente: {customers.find((c) => c.id === pendingOrder.customerId)?.name ?? pendingOrder.customerId}
-              </p>
-            )}
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
-                Ubicación de stock (desde dónde se descuenta)
-              </label>
-              <Select
-                style={{ width: "100%" }}
-                placeholder="Elegí ubicación"
-                value={fulfillmentLocationId ?? undefined}
-                onChange={(v) => setFulfillmentLocationId(v)}
-                options={stockLocations.map((l) => ({
-                  label: l.isDefault ? `${l.name} (predeterminada)` : l.name,
-                  value: l.id,
-                }))}
-              />
-              {stockLocations.length === 0 && (
-                <p style={{ marginTop: 8, color: "#f87171", fontSize: 13 }}>
-                  No hay ubicaciones cargadas. Ejecutá la migración de base y/o creá ubicaciones en Stock → Ubicaciones.
-                </p>
+      {confirmModalOpen && (
+        <div className="ha-modal-backdrop" onClick={closeModal}>
+          <div className="ha-modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">Confirmar pedido</span>
+              <button className="ha-iconbtn" onClick={closeModal} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body">
+              {pendingOrder && (
+                <div>
+                  <p style={{ marginBottom: 8, color: "var(--ha-text-3)" }}>Total: {formatCurrency(pendingOrder.total)}</p>
+                  <p style={{ marginBottom: 8, color: "var(--ha-text-3)" }}>Ítems: {pendingOrder.items.length}</p>
+                  {pendingOrder.customerId && (
+                    <p style={{ marginBottom: 8, color: "var(--ha-text-3)" }}>
+                      Cliente: {customers.find((c) => c.id === pendingOrder.customerId)?.name ?? pendingOrder.customerId}
+                    </p>
+                  )}
+                  <div className="ha-field" style={{ marginBottom: 12 }}>
+                    <label className="ha-label">Ubicación de stock (desde dónde se descuenta)</label>
+                    <select className="ha-input" value={fulfillmentLocationId ?? ""} onChange={(e) => setFulfillmentLocationId(e.target.value || null)}>
+                      <option value="">Elegí ubicación</option>
+                      {stockLocations.map((l) => (
+                        <option key={l.id} value={l.id}>{l.isDefault ? `${l.name} (predeterminada)` : l.name}</option>
+                      ))}
+                    </select>
+                    {stockLocations.length === 0 && (
+                      <p style={{ marginTop: 8, color: "#f87171", fontSize: 13 }}>
+                        No hay ubicaciones cargadas. Ejecutá la migración de base y/o creá ubicaciones en Stock → Ubicaciones.
+                      </p>
+                    )}
+                  </div>
+                  {productsGoingNegative.length > 0 && (
+                    <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.4)" }}>
+                      <div style={{ color: "#fbbf24", fontWeight: 500, fontSize: 13, marginBottom: 6 }}>⚠ Stock insuficiente</div>
+                      <p style={{ marginBottom: 8, color: "var(--ha-text-3)", fontSize: 13 }}>
+                        En la ubicación elegida no alcanza el stock. Se descontará igual (puede quedar negativo). El total del producto en todas las ubicaciones sigue en la ficha.
+                      </p>
+                      <ul style={{ margin: 0, paddingLeft: 20, color: "var(--ha-text-2)", fontSize: 13 }}>
+                        {productsGoingNegative.map((p) => (
+                          <li key={p.name}>
+                            <strong>{p.name}</strong>: stock {p.current}, pedido {p.requested} → quedará {p.after}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="ha-field" style={{ marginBottom: 12 }}>
+                    <label className="ha-label">Fecha de entrega</label>
+                    <input type="date" className="ha-input" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
+                  </div>
+                  <div className="ha-field" style={{ marginTop: 12, marginBottom: 16 }}>
+                    <label className="ha-label">Comentario del pedido (opcional)</label>
+                    <textarea
+                      className="ha-input"
+                      value={orderComment}
+                      onChange={(e) => setOrderComment(e.target.value)}
+                      placeholder="Ej. horario de retiro, instrucciones especiales…"
+                      rows={3}
+                      maxLength={2000}
+                      style={{ resize: "vertical" }}
+                    />
+                  </div>
+                  <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                    <input
+                      type="checkbox"
+                      id="consignment-check"
+                      checked={isConsignment}
+                      onChange={(e) => setIsConsignment(e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: "var(--ha-amber)", cursor: "pointer" }}
+                    />
+                    <label htmlFor="consignment-check" style={{ color: "var(--ha-text)", cursor: "pointer", fontSize: 14 }}>
+                      Es consignación (el precio se fija al momento de cobrar)
+                    </label>
+                  </div>
+                  {isConsignment && (
+                    <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.35)" }}>
+                      <div style={{ color: "#93c5fd", fontWeight: 500, fontSize: 13, marginBottom: 4 }}>ℹ Orden a consignación</div>
+                      <div style={{ color: "var(--ha-text-3)", fontSize: 13 }}>El stock se descuenta hoy. El precio se ingresa cuando vayas a cobrar esta orden.</div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-            {productsGoingNegative.length > 0 && (
-              <Alert
-                type="warning"
-                showIcon
-                style={{ marginBottom: 12 }}
-                message="Stock insuficiente"
-                description={
-                  <>
-                    <p style={{ marginBottom: 8 }}>
-                      En la ubicación elegida no alcanza el stock. Se descontará igual (puede quedar negativo en esa
-                      ubicación). El total del producto en todas las ubicaciones sigue en la ficha del producto.
-                    </p>
-                    <ul style={{ margin: 0, paddingLeft: 20 }}>
-                      {productsGoingNegative.map((p) => (
-                        <li key={p.name}>
-                          <strong>{p.name}</strong>: stock actual {p.current}, pedido {p.requested} → quedará {p.after}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                }
-              />
-            )}
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Fecha de entrega</label>
-              <DatePicker
-                style={{ width: "100%" }}
-                value={deliveryDate}
-                onChange={(v) => setDeliveryDate(v)}
-                format="DD/MM/YYYY"
-              />
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={closeModal}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={() => void handleCreateOrder()} disabled={submitting}>
+                {submitting ? "Creando…" : "Crear orden y descontar stock"}
+              </button>
             </div>
-            <div style={{ marginTop: 12, marginBottom: 16 }}>
-              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
-                Comentario del pedido (opcional)
-              </label>
-              <Input.TextArea
-                value={orderComment}
-                onChange={(e) => setOrderComment(e.target.value)}
-                placeholder="Ej. horario de retiro, instrucciones especiales…"
-                rows={3}
-                maxLength={2000}
-                showCount
-              />
-            </div>
-            <div style={{ marginBottom: 8 }}>
-              <Checkbox
-                checked={isConsignment}
-                onChange={(e) => setIsConsignment(e.target.checked)}
-                style={{ color: "#e5e7eb" }}
-              >
-                Es consignación (el precio se fija al momento de cobrar)
-              </Checkbox>
-            </div>
-            {isConsignment && (
-              <Alert
-                type="info"
-                showIcon
-                style={{ marginBottom: 12 }}
-                message="Orden a consignación"
-                description="El stock se descuenta hoy. El precio se ingresa cuando vayas a cobrar esta orden."
-              />
-            )}
           </div>
-        )}
-      </Modal>
+        </div>
+      )}
     </>
   );
 }

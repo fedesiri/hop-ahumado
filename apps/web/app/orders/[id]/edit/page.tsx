@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/app-layout";
 import { OrderCalculator } from "@/components/order-calculator/order-calculator";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import dayjs, { type Dayjs } from "@/lib/dayjs";
+import dayjs from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { inferPriceTypeFromOrderLines, parsePriceListType, type PriceType } from "@/lib/order-calculator/price-types";
 import {
@@ -12,9 +12,9 @@ import {
   fetchRecipesByProductIds,
   type RecipeIngredientRow,
 } from "@/lib/order-calculator/stock-preview";
+import { toast } from "@/lib/toast";
 import type { Customer, Order, Price, Product, StockLocation } from "@/lib/types";
-import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Alert, App, Button, DatePicker, Input, Modal, Select, Spin } from "antd";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -26,13 +26,12 @@ export default function OrderEditPage({ params }: OrderEditPageProps) {
   const { id } = use(params);
   return (
     <AppLayout>
-        <OrderEditPageContent id={id} />
-      </AppLayout>
+      <OrderEditPageContent id={id} />
+    </AppLayout>
   );
 }
 
 function OrderEditPageContent({ id }: { id: string }) {
-  const { message } = App.useApp();
   const { user } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -46,8 +45,8 @@ function OrderEditPageContent({ id }: { id: string }) {
     customerId: string | null;
     priceListType: PriceType;
   } | null>(null);
-  const [deliveryDate, setDeliveryDate] = useState<Dayjs | null>(null);
-  const [deliveredAt, setDeliveredAt] = useState<Dayjs | null>(null);
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [deliveredAt, setDeliveredAt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
   const [fulfillmentLocationId, setFulfillmentLocationId] = useState<string | null>(null);
@@ -74,10 +73,12 @@ function OrderEditPageContent({ id }: { id: string }) {
     return m;
   }, [order]);
 
-  /** Misma lista de precios que al crear el pedido (mayorista/minorista/fábrica), inferida de las líneas guardadas */
   const inferredPriceType = useMemo(() => {
     if (!order?.orderItems?.length || !prices.length) return undefined;
-    return inferPriceTypeFromOrderLines(order.orderItems, pricesByProductId);
+    return inferPriceTypeFromOrderLines(
+      order.orderItems.map((oi) => ({ ...oi, price: oi.price ?? 0 })),
+      pricesByProductId,
+    );
   }, [order, prices.length, pricesByProductId]);
 
   const productsGoingNegative = useMemo(() => {
@@ -96,12 +97,7 @@ function OrderEditPageContent({ id }: { id: string }) {
       const after = effective - need;
       if (after < 0) {
         const product = productById[productId];
-        result.push({
-          name: product?.name ?? productId,
-          current: effective,
-          requested: need,
-          after,
-        });
+        result.push({ name: product?.name ?? productId, current: effective, requested: need, after });
       }
     }
     return result;
@@ -129,8 +125,8 @@ function OrderEditPageContent({ id }: { id: string }) {
         setLoading(true);
         const orderData = await apiClient.getOrder(id);
         setOrder(orderData);
-        setDeliveryDate(orderData.deliveryDate ? dayjs(orderData.deliveryDate) : null);
-        setDeliveredAt(orderData.deliveredAt ? dayjs(orderData.deliveredAt) : null);
+        setDeliveryDate(orderData.deliveryDate ? orderData.deliveryDate.slice(0, 10) : "");
+        setDeliveredAt(orderData.deliveredAt ? new Date(orderData.deliveredAt).toISOString().slice(0, 16) : "");
         setOrderComment(orderData.comment ?? "");
 
         await fetchProducts();
@@ -169,14 +165,15 @@ function OrderEditPageContent({ id }: { id: string }) {
         }
       } catch (e) {
         console.error(e);
-        message.error("Error al cargar la orden o los datos");
+        toast.error("Error al cargar la orden o los datos");
         setOrder(null);
       } finally {
         setLoading(false);
       }
     };
-    load();
-  }, [id, message, fetchProducts]);
+    void load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   useEffect(() => {
     if (!confirmModalOpen) {
@@ -187,15 +184,15 @@ function OrderEditPageContent({ id }: { id: string }) {
     if (!pendingOrder || !fulfillmentLocationId || !order?.orderItems) return;
     let cancelled = false;
     setStockPreviewReady(false);
-    fetchProducts();
-    (async () => {
+    void fetchProducts();
+    void (async () => {
       try {
         const ids = new Set<string>();
         pendingOrder.items.forEach((i) => ids.add(i.productId));
         order.orderItems!.forEach((oi) => ids.add(oi.productId));
         const [rows, recipes] = await Promise.all([
           apiClient.getStockBalancesAtLocation(fulfillmentLocationId),
-          fetchRecipesByProductIds((p, l, id) => apiClient.getRecipeItems(p, l, id), [...ids]),
+          fetchRecipesByProductIds((p, l, rid) => apiClient.getRecipeItems(p, l, rid), [...ids]),
         ]);
         if (cancelled) return;
         const map: Record<string, number> = {};
@@ -211,9 +208,7 @@ function OrderEditPageContent({ id }: { id: string }) {
         }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [confirmModalOpen, pendingOrder, fulfillmentLocationId, fetchProducts, order?.orderItems]);
 
   const handleConfirmOrder = (
@@ -222,19 +217,14 @@ function OrderEditPageContent({ id }: { id: string }) {
     customerId?: string | null,
     priceListType?: PriceType,
   ) => {
-    setPendingOrder({
-      items,
-      total,
-      customerId: customerId ?? null,
-      priceListType: priceListType ?? inferredPriceType ?? "mayorista",
-    });
+    setPendingOrder({ items, total, customerId: customerId ?? null, priceListType: priceListType ?? inferredPriceType ?? "mayorista" });
     setConfirmModalOpen(true);
   };
 
   const handleSaveOrder = async () => {
     if (!pendingOrder || !order) return;
     if (stockLocations.length > 0 && !fulfillmentLocationId) {
-      message.error("Elegí la ubicación de stock desde la cual descontar el pedido.");
+      toast.error("Elegí la ubicación de stock desde la cual descontar el pedido.");
       return;
     }
     const { items, total, customerId, priceListType } = pendingOrder;
@@ -243,9 +233,8 @@ function OrderEditPageContent({ id }: { id: string }) {
       await apiClient.updateOrder(id, {
         customerId: customerId ?? undefined,
         userId: order.userId ?? user?.id ?? undefined,
-        deliveryDate:
-          deliveryDate?.toISOString() ?? (order.deliveryDate ? new Date(order.deliveryDate).toISOString() : undefined),
-        deliveredAt: deliveredAt ? deliveredAt.toISOString() : null,
+        deliveryDate: deliveryDate ? new Date(deliveryDate).toISOString() : (order.deliveryDate ? new Date(order.deliveryDate).toISOString() : undefined),
+        deliveredAt: deliveredAt ? new Date(deliveredAt).toISOString() : null,
         fulfillmentLocationId: fulfillmentLocationId ?? undefined,
         total,
         priceListType,
@@ -256,26 +245,30 @@ function OrderEditPageContent({ id }: { id: string }) {
           price: Number(item.price),
         })),
       });
-      message.success("Orden actualizada. El stock se ajustó correctamente.");
+      toast.success("Orden actualizada. El stock se ajustó correctamente.");
       setConfirmModalOpen(false);
       setPendingOrder(null);
       const updated = await apiClient.getOrder(id);
       setOrder(updated);
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === "object" && "message" in err
-          ? String((err as { message: string }).message)
-          : "Error al actualizar la orden";
-      message.error(msg);
+      const msg = err && typeof err === "object" && "message" in err
+        ? String((err as { message: string }).message)
+        : "Error al actualizar la orden";
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
   };
 
+  const closeModal = () => {
+    setConfirmModalOpen(false);
+    setPendingOrder(null);
+  };
+
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
-        <Spin size="large" />
+        <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
       </div>
     );
   }
@@ -283,10 +276,10 @@ function OrderEditPageContent({ id }: { id: string }) {
   if (!order) {
     return (
       <div>
-        <Link href="/orders">
-          <Button icon={<ArrowLeftOutlined />}>Volver al listado</Button>
+        <Link href="/orders" className="ha-btn ha-btn--secondary ha-btn--sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", marginBottom: 16 }}>
+          <ArrowLeft size={15} /> Volver al listado
         </Link>
-        <p style={{ marginTop: 24, color: "#9ca3af" }}>No se pudo cargar la orden.</p>
+        <p style={{ color: "var(--ha-text-3)" }}>No se pudo cargar la orden.</p>
       </div>
     );
   }
@@ -294,8 +287,8 @@ function OrderEditPageContent({ id }: { id: string }) {
   return (
     <>
       <div style={{ marginBottom: 16 }}>
-        <Link href="/orders">
-          <Button icon={<ArrowLeftOutlined />}>Volver al listado</Button>
+        <Link href="/orders" className="ha-btn ha-btn--secondary ha-btn--sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
+          <ArrowLeft size={15} /> Volver al listado
         </Link>
       </div>
 
@@ -319,111 +312,81 @@ function OrderEditPageContent({ id }: { id: string }) {
         />
       )}
 
-      <Modal
-        title="Confirmar cambios"
-        open={confirmModalOpen}
-        onCancel={() => {
-          setConfirmModalOpen(false);
-          setPendingOrder(null);
-        }}
-        footer={[
-          <Button
-            key="cancel"
-            onClick={() => {
-              setConfirmModalOpen(false);
-              setPendingOrder(null);
-            }}
-          >
-            Cancelar
-          </Button>,
-          <Button key="submit" type="primary" loading={submitting} onClick={handleSaveOrder}>
-            Guardar orden
-          </Button>,
-        ]}
-      >
-        {pendingOrder && (
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ marginBottom: 8, color: "#9ca3af" }}>Total: {formatCurrency(pendingOrder.total)}</p>
-            <p style={{ marginBottom: 8, color: "#9ca3af" }}>Ítems: {pendingOrder.items.length}</p>
-            {pendingOrder.customerId && (
-              <p style={{ marginBottom: 8, color: "#9ca3af" }}>
-                Cliente: {customers.find((c) => c.id === pendingOrder.customerId)?.name ?? pendingOrder.customerId}
-              </p>
-            )}
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
-                Ubicación de stock (desde dónde se descuenta)
-              </label>
-              <Select
-                style={{ width: "100%" }}
-                value={fulfillmentLocationId ?? undefined}
-                onChange={(v) => setFulfillmentLocationId(v)}
-                options={stockLocations.map((l) => ({
-                  label: l.isDefault ? `${l.name} (predeterminada)` : l.name,
-                  value: l.id,
-                }))}
-              />
+      {confirmModalOpen && (
+        <div className="ha-modal-backdrop" onClick={closeModal}>
+          <div className="ha-modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">Confirmar cambios</span>
+              <button className="ha-iconbtn" onClick={closeModal} aria-label="Cerrar">✕</button>
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Fecha de entrega</label>
-              <DatePicker
-                style={{ width: "100%" }}
-                value={deliveryDate}
-                onChange={(v) => setDeliveryDate(v)}
-                format="DD/MM/YYYY"
-              />
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>Entregado en (real)</label>
-              <DatePicker
-                showTime
-                style={{ width: "100%" }}
-                value={deliveredAt}
-                onChange={(v) => setDeliveredAt(v)}
-                format="DD/MM/YYYY HH:mm"
-                allowClear
-              />
-            </div>
-            {productsGoingNegative.length > 0 && (
-              <Alert
-                type="warning"
-                showIcon
-                style={{ marginBottom: 12 }}
-                message="Stock insuficiente"
-                description={
-                  <>
-                    <p style={{ marginBottom: 8 }}>
-                      Tras devolver el stock de esta orden, los productos indicados quedarían por debajo de cero. Se
-                      aplicará igual (misma política que al crear la orden).
+            <div className="ha-modal__body">
+              {pendingOrder && (
+                <div>
+                  <p style={{ marginBottom: 8, color: "var(--ha-text-3)" }}>Total: {formatCurrency(pendingOrder.total)}</p>
+                  <p style={{ marginBottom: 8, color: "var(--ha-text-3)" }}>Ítems: {pendingOrder.items.length}</p>
+                  {pendingOrder.customerId && (
+                    <p style={{ marginBottom: 8, color: "var(--ha-text-3)" }}>
+                      Cliente: {customers.find((c) => c.id === pendingOrder.customerId)?.name ?? pendingOrder.customerId}
                     </p>
-                    <ul style={{ margin: 0, paddingLeft: 20 }}>
-                      {productsGoingNegative.map((p) => (
-                        <li key={p.name}>
-                          <strong>{p.name}</strong>: disponible tras devolver esta orden {p.current}, pedido{" "}
-                          {p.requested} → quedará {p.after}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                }
-              />
-            )}
-            <div style={{ marginTop: 12, marginBottom: 28 }}>
-              <label style={{ display: "block", marginBottom: 4, color: "#9ca3af" }}>
-                Comentario del pedido (opcional)
-              </label>
-              <Input.TextArea
-                value={orderComment}
-                onChange={(e) => setOrderComment(e.target.value)}
-                placeholder="Ej. horario de retiro, instrucciones especiales…"
-                rows={3}
-                maxLength={2000}
-                showCount
-              />
+                  )}
+                  {stockLocations.length > 0 && (
+                    <div className="ha-field" style={{ marginBottom: 12 }}>
+                      <label className="ha-label">Ubicación de stock (desde dónde se descuenta)</label>
+                      <select className="ha-input" value={fulfillmentLocationId ?? ""} onChange={(e) => setFulfillmentLocationId(e.target.value || null)}>
+                        <option value="">Elegí ubicación</option>
+                        {stockLocations.map((l) => (
+                          <option key={l.id} value={l.id}>{l.isDefault ? `${l.name} (predeterminada)` : l.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div className="ha-field" style={{ marginBottom: 12 }}>
+                    <label className="ha-label">Fecha de entrega</label>
+                    <input type="date" className="ha-input" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
+                  </div>
+                  <div className="ha-field" style={{ marginBottom: 12 }}>
+                    <label className="ha-label">Entregado en (real)</label>
+                    <input type="datetime-local" className="ha-input" value={deliveredAt} onChange={(e) => setDeliveredAt(e.target.value)} />
+                  </div>
+                  {productsGoingNegative.length > 0 && (
+                    <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.4)" }}>
+                      <div style={{ color: "#fbbf24", fontWeight: 500, fontSize: 13, marginBottom: 6 }}>⚠ Stock insuficiente</div>
+                      <p style={{ marginBottom: 8, color: "var(--ha-text-3)", fontSize: 13 }}>
+                        Tras devolver el stock de esta orden, los productos indicados quedarían por debajo de cero. Se aplicará igual.
+                      </p>
+                      <ul style={{ margin: 0, paddingLeft: 20, color: "var(--ha-text-2)", fontSize: 13 }}>
+                        {productsGoingNegative.map((p) => (
+                          <li key={p.name}>
+                            <strong>{p.name}</strong>: disponible {p.current}, pedido {p.requested} → quedará {p.after}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="ha-field" style={{ marginTop: 12, marginBottom: 16 }}>
+                    <label className="ha-label">Comentario del pedido (opcional)</label>
+                    <textarea
+                      className="ha-input"
+                      value={orderComment}
+                      onChange={(e) => setOrderComment(e.target.value)}
+                      placeholder="Ej. horario de retiro, instrucciones especiales…"
+                      rows={3}
+                      maxLength={2000}
+                      style={{ resize: "vertical" }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={closeModal}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={() => void handleSaveOrder()} disabled={submitting}>
+                {submitting ? "Guardando…" : "Guardar orden"}
+              </button>
             </div>
           </div>
-        )}
-      </Modal>
+        </div>
+      )}
     </>
   );
 }

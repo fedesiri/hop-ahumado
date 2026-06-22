@@ -6,9 +6,9 @@ import type { Dayjs } from "@/lib/dayjs";
 import dayjs from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
+import { toast } from "@/lib/toast";
 import type { Order } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { App, Button, Card, DatePicker, Select, Space, Spin } from "antd";
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -63,15 +63,22 @@ export default function OrdersMetricsPage() {
 }
 
 function OrdersMetricsContent() {
-  const { message } = App.useApp();
   const { selectedLineId } = useLineContext();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [metricsOrders, setMetricsOrders] = useState<Order[]>([]);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("last12m");
-  const [customRange, setCustomRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [compareMonthA, setCompareMonthA] = useState<string | undefined>(undefined);
   const [compareMonthB, setCompareMonthB] = useState<string | undefined>(undefined);
+
+  const customRange: [Dayjs, Dayjs] | null = useMemo(() => {
+    if (!customFrom || !customTo) return null;
+    const a = dayjs(customFrom);
+    const b = dayjs(customTo);
+    return a.isValid() && b.isValid() ? [a, b] : null;
+  }, [customFrom, customTo]);
 
   const fetchAllOrdersForMetrics = async () => {
     try {
@@ -88,7 +95,7 @@ function OrdersMetricsContent() {
       }
       setMetricsOrders(all);
     } catch {
-      message.error("Error al cargar métricas globales de órdenes");
+      toast.error("Error al cargar métricas globales de órdenes");
     } finally {
       setMetricsLoading(false);
     }
@@ -295,116 +302,112 @@ function OrdersMetricsContent() {
     return { grew, fell, pctCount, pctAmt };
   }, [comparisonKpis, itemComparisonByMonth]);
 
+  const cardStyle: React.CSSProperties = {
+    background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)",
+    borderRadius: 12, padding: "20px 24px", marginBottom: 16,
+  };
+
   return (
     <div style={{ width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box" }}>
-
-      <div
-        style={{
-          marginBottom: "24px",
-          display: "flex",
-          flexWrap: "wrap",
-          justifyContent: "space-between",
-          alignItems: isMobile ? "stretch" : "center",
-          gap: 12,
-          flexDirection: isMobile ? "column" : "row",
-        }}
-      >
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Órdenes — Métricas</h1>
-        <Space
-          wrap={!isMobile}
-          direction={isMobile ? "vertical" : "horizontal"}
-          style={isMobile ? { width: "100%" } : undefined}
-        >
-          <Link href="/orders" style={isMobile ? { width: "100%" } : undefined}>
-            <Button block={isMobile}>Ir al listado</Button>
-          </Link>
-          <Link href="/orders/calculator" style={isMobile ? { width: "100%" } : undefined}>
-            <Button type="primary" block={isMobile}>
-              Nueva orden
-            </Button>
-          </Link>
-          <Button onClick={() => void fetchAllOrdersForMetrics()} loading={metricsLoading} block={isMobile}>
-            Actualizar datos
-          </Button>
-        </Space>
+      <div className="ha-page-header">
+        <h1 className="ha-pagetitle">Órdenes — Métricas</h1>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <Link href="/orders"><button className="ha-btn ha-btn--secondary ha-btn--sm">Ir al listado</button></Link>
+          <Link href="/orders/calculator"><button className="ha-btn ha-btn--primary ha-btn--sm">Nueva orden</button></Link>
+          <button
+            className="ha-btn ha-btn--secondary ha-btn--sm"
+            onClick={() => void fetchAllOrdersForMetrics()}
+            disabled={metricsLoading}
+          >
+            {metricsLoading ? "Cargando…" : "Actualizar datos"}
+          </button>
+        </div>
       </div>
 
-      <Card style={{ marginBottom: 16, background: "#1f2937", borderColor: "#2d3748" }}>
-        <Space direction="vertical" style={{ width: "100%" }} size={12}>
-          <div style={{ color: "#94a3b8", fontSize: 13 }}>
-            Los KPIs y los tres primeros gráficos usan el{" "}
-            <strong style={{ color: "#e5e7eb" }}>período seleccionado</strong>. La comparación de meses abajo usa el
-            historial cargado ({metricsOrders.length} órdenes).
-          </div>
-          <Space wrap style={{ width: "100%" }}>
-            <Select
-              value={periodPreset}
-              style={{ width: isMobile ? "100%" : 280 }}
-              options={PERIOD_OPTIONS}
-              onChange={(value) => {
-                setPeriodPreset(value as PeriodPreset);
-              }}
-            />
-            {periodPreset === "custom" ? (
-              <DatePicker.RangePicker
-                style={{ width: isMobile ? "100%" : undefined }}
-                value={customRange as any}
-                format="DD/MM/YYYY"
-                onChange={(v) => setCustomRange(v as [Dayjs, Dayjs] | null)}
+      {/* Period filter */}
+      <div style={{ ...cardStyle, marginBottom: 16 }}>
+        <div style={{ color: "var(--ha-text-2)", fontSize: 13, marginBottom: 12 }}>
+          Los KPIs y los tres primeros gráficos usan el{" "}
+          <strong style={{ color: "var(--ha-text)" }}>período seleccionado</strong>. La comparación de meses abajo usa el
+          historial cargado ({metricsOrders.length} órdenes).
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+          <select
+            className="ha-select"
+            style={{ height: 36, padding: "0 12px", minWidth: 220, borderRadius: 8, border: "1px solid var(--ha-border-2)", background: "var(--ha-bg-raised)", color: "var(--ha-text)", fontSize: 13 }}
+            value={periodPreset}
+            onChange={(e) => setPeriodPreset(e.target.value as PeriodPreset)}
+          >
+            {PERIOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          {periodPreset === "custom" && (
+            <>
+              <input
+                type="date"
+                className="ha-input"
+                style={{ height: 36, width: "auto", padding: "0 10px" }}
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
               />
-            ) : null}
-          </Space>
-        </Space>
-      </Card>
+              <span style={{ color: "var(--ha-text-3)" }}>—</span>
+              <input
+                type="date"
+                className="ha-input"
+                style={{ height: 36, width: "auto", padding: "0 10px" }}
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+              />
+            </>
+          )}
+        </div>
+      </div>
 
-      <Spin spinning={metricsLoading && metricsOrders.length === 0}>
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Card style={{ background: "#1f2937", borderColor: "#2d3748" }}>
-            <Space size={24} wrap direction={isMobile ? "vertical" : "horizontal"}>
+      {metricsLoading && metricsOrders.length === 0 ? (
+        <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
+          <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* KPI summary */}
+          <div style={cardStyle}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
               <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Período</div>
-                <div style={{ color: "#e5e7eb", fontSize: 13 }}>{periodLabel}</div>
+                <div style={{ color: "var(--ha-text-3)", fontSize: 12 }}>Período</div>
+                <div style={{ color: "var(--ha-text-2)", fontSize: 13 }}>{periodLabel}</div>
               </div>
               <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Órdenes</div>
-                <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>{filteredOrders.length}</div>
+                <div style={{ color: "var(--ha-text-3)", fontSize: 12 }}>Órdenes</div>
+                <div className="ha-mono" style={{ color: "var(--ha-text)", fontSize: 24, fontWeight: 600 }}>{filteredOrders.length}</div>
               </div>
               <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Facturación</div>
-                <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>
-                  {formatCurrency(metricsTotalAmount)}
-                </div>
+                <div style={{ color: "var(--ha-text-3)", fontSize: 12 }}>Facturación</div>
+                <div className="ha-mono" style={{ color: "var(--ha-text)", fontSize: 24, fontWeight: 600 }}>{formatCurrency(metricsTotalAmount)}</div>
               </div>
               <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Ticket promedio</div>
-                <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>
-                  {formatCurrency(metricsAvgTicket)}
-                </div>
+                <div style={{ color: "var(--ha-text-3)", fontSize: 12 }}>Ticket promedio</div>
+                <div className="ha-mono" style={{ color: "var(--ha-text)", fontSize: 24, fontWeight: 600 }}>{formatCurrency(metricsAvgTicket)}</div>
               </div>
-            </Space>
-            {kpiAnalysis ? <AnalysisBlock>{kpiAnalysis}</AnalysisBlock> : null}
-          </Card>
+            </div>
+            {kpiAnalysis && <AnalysisBlock>{kpiAnalysis}</AnalysisBlock>}
+          </div>
 
-          <Card title={`Pedidos por mes (período: ${periodLabel})`}>
+          {/* Monthly orders chart */}
+          <div style={cardStyle}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Pedidos por mes (período: {periodLabel})</div>
             <div style={{ overflowX: isMobile ? "auto" : undefined, WebkitOverflowScrolling: "touch", width: "100%" }}>
               <div style={{ height: isMobile ? 240 : 280, minWidth: globalMonthlyMinWidthPx ?? "100%" }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={monthlyOrdersSeries} margin={{ bottom: isMobile ? 16 : 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis
-                      dataKey="month"
-                      stroke="#9ca3af"
-                      tick={{ fill: "#9ca3af", fontSize: isMobile ? 10 : 12 }}
-                      interval={isMobile ? 0 : undefined}
-                    />
-                    <YAxis stroke="#9ca3af" allowDecimals={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--ha-border)" />
+                    <XAxis dataKey="month" stroke="var(--ha-text-3)" tick={{ fill: "var(--ha-text-3)", fontSize: isMobile ? 10 : 12 }} interval={isMobile ? 0 : undefined} />
+                    <YAxis stroke="var(--ha-text-3)" allowDecimals={false} tick={{ fill: "var(--ha-text-3)", fontSize: 11 }} />
                     <Tooltip />
                     <Bar dataKey="orders" name="Pedidos" fill="#60a5fa" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            {monthlyAnalysis ? (
+            {monthlyAnalysis && (
               <AnalysisBlock>
                 El mes con más pedidos fue <strong>{monthlyAnalysis.best.month}</strong> con{" "}
                 <strong>{monthlyAnalysis.best.orders}</strong> órdenes. El mes con menos actividad fue{" "}
@@ -412,31 +415,26 @@ function OrdersMetricsContent() {
                 <strong>{monthlyAnalysis.worst.orders}</strong> orden{monthlyAnalysis.worst.orders !== 1 ? "es" : ""}.
                 {monthlyAnalysis.trend ? ` ${monthlyAnalysis.trend}` : ""}
               </AnalysisBlock>
-            ) : null}
-          </Card>
+            )}
+          </div>
 
-          <Card title="Ítems más pedidos (unidades), período seleccionado">
+          {/* Top items chart */}
+          <div style={cardStyle}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Ítems más pedidos (unidades), período seleccionado</div>
             <div style={{ overflowX: isMobile ? "auto" : undefined, WebkitOverflowScrolling: "touch", width: "100%" }}>
               <div style={{ height: isMobile ? 280 : 320, minWidth: globalItemsBarMinWidthPx ?? "100%" }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={topItemsSeries} layout="vertical" margin={{ left: isMobile ? 12 : 20, right: 16 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis type="number" stroke="#9ca3af" allowDecimals={false} />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      stroke="#9ca3af"
-                      width={globalItemsYAxisWidth}
-                      interval={0}
-                      tick={{ fill: "#9ca3af", fontSize: isMobile ? 11 : 12 }}
-                    />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--ha-border)" />
+                    <XAxis type="number" stroke="var(--ha-text-3)" allowDecimals={false} tick={{ fill: "var(--ha-text-3)", fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" stroke="var(--ha-text-3)" width={globalItemsYAxisWidth} interval={0} tick={{ fill: "var(--ha-text-3)", fontSize: isMobile ? 11 : 12 }} />
                     <Tooltip />
                     <Bar dataKey="units" name="Unidades" fill="#22c55e" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            {topItemsAnalysis ? (
+            {topItemsAnalysis && (
               <AnalysisBlock>
                 El producto más demandado es <strong>{topItemsAnalysis.top.name}</strong> con{" "}
                 <strong>{topItemsAnalysis.top.units}</strong> unidades.
@@ -444,133 +442,107 @@ function OrdersMetricsContent() {
                   ? ` Los 3 primeros productos concentran el ${topItemsAnalysis.top3Pct}% del total de unidades pedidas.`
                   : ""}
               </AnalysisBlock>
-            ) : null}
-          </Card>
+            )}
+          </div>
 
-          <Card title="Comparar dos meses (unidades por ítem)">
-            <Space direction="vertical" style={{ width: "100%" }} size={12}>
-              <Space wrap style={{ width: "100%" }}>
-                <Select
-                  placeholder="Mes 1"
-                  style={{ width: isMobile ? "100%" : 220 }}
-                  value={compareMonthA}
-                  options={monthOptions}
-                  onChange={setCompareMonthA}
-                  showSearch
-                  optionFilterProp="label"
-                />
-                <Select
-                  placeholder="Mes 2"
-                  style={{ width: isMobile ? "100%" : 220 }}
-                  value={compareMonthB}
-                  options={monthOptions}
-                  onChange={setCompareMonthB}
-                  showSearch
-                  optionFilterProp="label"
-                />
-              </Space>
-              {comparisonKpis ? (
-                <Space direction="vertical" size={8} style={{ color: "#9ca3af" }}>
-                  <div>
-                    <strong style={{ color: "#fafafa" }}>{compareMonthALabel}</strong>: {comparisonKpis.aCount} pedidos
-                    · {formatCurrency(comparisonKpis.aAmt)}
-                  </div>
-                  <div>
-                    <strong style={{ color: "#fafafa" }}>{compareMonthBLabel}</strong>: {comparisonKpis.bCount} pedidos
-                    · {formatCurrency(comparisonKpis.bAmt)}
-                  </div>
-                  <div style={{ color: comparisonKpis.deltaCount >= 0 ? "#22c55e" : "#f87171" }}>
-                    Δ pedidos: {comparisonKpis.deltaCount >= 0 ? "+" : ""}
-                    {comparisonKpis.deltaCount}
-                    {comparisonAnalysis?.pctCount != null
-                      ? ` (${comparisonAnalysis.pctCount >= 0 ? "+" : ""}${comparisonAnalysis.pctCount}%)`
-                      : ""}
-                  </div>
-                  <div style={{ color: comparisonKpis.deltaAmt >= 0 ? "#22c55e" : "#f87171" }}>
-                    Δ facturación: {comparisonKpis.deltaAmt >= 0 ? "+" : ""}
-                    {formatCurrency(comparisonKpis.deltaAmt)}
-                    {comparisonAnalysis?.pctAmt != null
-                      ? ` (${comparisonAnalysis.pctAmt >= 0 ? "+" : ""}${comparisonAnalysis.pctAmt}%)`
-                      : ""}
-                  </div>
-                </Space>
-              ) : null}
-              <div
-                style={{ overflowX: isMobile ? "auto" : undefined, WebkitOverflowScrolling: "touch", width: "100%" }}
+          {/* Month comparison */}
+          <div style={cardStyle}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Comparar dos meses (unidades por ítem)</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+              <select
+                className="ha-select"
+                style={{ height: 36, padding: "0 12px", minWidth: 200, borderRadius: 8, border: "1px solid var(--ha-border-2)", background: "var(--ha-bg-raised)", color: "var(--ha-text)", fontSize: 13 }}
+                value={compareMonthA ?? ""}
+                onChange={(e) => setCompareMonthA(e.target.value || undefined)}
               >
-                <div style={{ height: isMobile ? 300 : 320, minWidth: globalComparisonMinWidthPx ?? "100%" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={itemComparisonByMonth}
-                      margin={{ left: 4, right: 8, top: 8, bottom: isMobile ? 112 : 64 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis
-                        dataKey="name"
-                        stroke="#9ca3af"
-                        interval={0}
-                        angle={isMobile ? -42 : -20}
-                        textAnchor="end"
-                        height={isMobile ? 110 : 72}
-                        tick={{ fill: "#9ca3af", fontSize: isMobile ? 9 : 12 }}
-                      />
-                      <YAxis stroke="#9ca3af" allowDecimals={false} tick={{ fill: "#9ca3af", fontSize: 11 }} />
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: isMobile ? 11 : undefined }} />
-                      <Bar dataKey="monthAUnits" name={compareMonthALabel} fill="#60a5fa" />
-                      <Bar dataKey="monthBUnits" name={compareMonthBLabel} fill="#f59e0b" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <option value="">Mes 1</option>
+                {monthOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <select
+                className="ha-select"
+                style={{ height: 36, padding: "0 12px", minWidth: 200, borderRadius: 8, border: "1px solid var(--ha-border-2)", background: "var(--ha-bg-raised)", color: "var(--ha-text)", fontSize: 13 }}
+                value={compareMonthB ?? ""}
+                onChange={(e) => setCompareMonthB(e.target.value || undefined)}
+              >
+                <option value="">Mes 2</option>
+                {monthOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+
+            {comparisonKpis && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: "var(--ha-text-2)", marginBottom: 16 }}>
+                <div><strong style={{ color: "var(--ha-text)" }}>{compareMonthALabel}</strong>: {comparisonKpis.aCount} pedidos · {formatCurrency(comparisonKpis.aAmt)}</div>
+                <div><strong style={{ color: "var(--ha-text)" }}>{compareMonthBLabel}</strong>: {comparisonKpis.bCount} pedidos · {formatCurrency(comparisonKpis.bAmt)}</div>
+                <div style={{ color: comparisonKpis.deltaCount >= 0 ? "var(--ha-green)" : "var(--ha-red)" }}>
+                  Δ pedidos: {comparisonKpis.deltaCount >= 0 ? "+" : ""}{comparisonKpis.deltaCount}
+                  {comparisonAnalysis?.pctCount != null ? ` (${comparisonAnalysis.pctCount >= 0 ? "+" : ""}${comparisonAnalysis.pctCount}%)` : ""}
+                </div>
+                <div style={{ color: comparisonKpis.deltaAmt >= 0 ? "var(--ha-green)" : "var(--ha-red)" }}>
+                  Δ facturación: {comparisonKpis.deltaAmt >= 0 ? "+" : ""}{formatCurrency(comparisonKpis.deltaAmt)}
+                  {comparisonAnalysis?.pctAmt != null ? ` (${comparisonAnalysis.pctAmt >= 0 ? "+" : ""}${comparisonAnalysis.pctAmt}%)` : ""}
                 </div>
               </div>
-              {comparisonAnalysis ? (
-                <AnalysisBlock>
-                  {comparisonKpis && comparisonKpis.deltaCount !== 0 ? (
-                    <>
-                      <strong>{compareMonthALabel}</strong>{" "}
-                      {comparisonKpis.deltaCount > 0 ? "superó" : "estuvo por debajo de"}{" "}
-                      <strong>{compareMonthBLabel}</strong> en pedidos
-                      {comparisonAnalysis.pctCount != null
-                        ? ` (${comparisonAnalysis.pctCount >= 0 ? "+" : ""}${comparisonAnalysis.pctCount}%)`
-                        : ""}.{" "}
-                    </>
-                  ) : null}
-                  {comparisonAnalysis.grew && comparisonAnalysis.grew.monthAUnits > comparisonAnalysis.grew.monthBUnits ? (
-                    <>
-                      El producto con mayor crecimiento fue <strong>{comparisonAnalysis.grew.name}</strong> (
-                      {comparisonAnalysis.grew.monthBUnits} → {comparisonAnalysis.grew.monthAUnits} un.).{" "}
-                    </>
-                  ) : null}
-                  {comparisonAnalysis.fell && comparisonAnalysis.fell.monthBUnits > comparisonAnalysis.fell.monthAUnits ? (
-                    <>
-                      El que más cayó fue <strong>{comparisonAnalysis.fell.name}</strong> (
-                      {comparisonAnalysis.fell.monthBUnits} → {comparisonAnalysis.fell.monthAUnits} un.).
-                    </>
-                  ) : null}
-                </AnalysisBlock>
-              ) : null}
-            </Space>
-          </Card>
-        </Space>
-      </Spin>
+            )}
+
+            <div style={{ overflowX: isMobile ? "auto" : undefined, WebkitOverflowScrolling: "touch", width: "100%" }}>
+              <div style={{ height: isMobile ? 300 : 320, minWidth: globalComparisonMinWidthPx ?? "100%" }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={itemComparisonByMonth} margin={{ left: 4, right: 8, top: 8, bottom: isMobile ? 112 : 64 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--ha-border)" />
+                    <XAxis dataKey="name" stroke="var(--ha-text-3)" interval={0} angle={isMobile ? -42 : -20} textAnchor="end" height={isMobile ? 110 : 72} tick={{ fill: "var(--ha-text-3)", fontSize: isMobile ? 9 : 12 }} />
+                    <YAxis stroke="var(--ha-text-3)" allowDecimals={false} tick={{ fill: "var(--ha-text-3)", fontSize: 11 }} />
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: isMobile ? 11 : undefined }} />
+                    <Bar dataKey="monthAUnits" name={compareMonthALabel} fill="#60a5fa" />
+                    <Bar dataKey="monthBUnits" name={compareMonthBLabel} fill="#f59e0b" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {comparisonAnalysis && (
+              <AnalysisBlock>
+                {comparisonKpis && comparisonKpis.deltaCount !== 0 ? (
+                  <>
+                    <strong>{compareMonthALabel}</strong>{" "}
+                    {comparisonKpis.deltaCount > 0 ? "superó" : "estuvo por debajo de"}{" "}
+                    <strong>{compareMonthBLabel}</strong> en pedidos
+                    {comparisonAnalysis.pctCount != null ? ` (${comparisonAnalysis.pctCount >= 0 ? "+" : ""}${comparisonAnalysis.pctCount}%)` : ""}.{" "}
+                  </>
+                ) : null}
+                {comparisonAnalysis.grew && comparisonAnalysis.grew.monthAUnits > comparisonAnalysis.grew.monthBUnits ? (
+                  <>
+                    El producto con mayor crecimiento fue <strong>{comparisonAnalysis.grew.name}</strong> (
+                    {comparisonAnalysis.grew.monthBUnits} → {comparisonAnalysis.grew.monthAUnits} un.).{" "}
+                  </>
+                ) : null}
+                {comparisonAnalysis.fell && comparisonAnalysis.fell.monthBUnits > comparisonAnalysis.fell.monthAUnits ? (
+                  <>
+                    El que más cayó fue <strong>{comparisonAnalysis.fell.name}</strong> (
+                    {comparisonAnalysis.fell.monthBUnits} → {comparisonAnalysis.fell.monthAUnits} un.).
+                  </>
+                ) : null}
+              </AnalysisBlock>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function AnalysisBlock({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      style={{
-        background: "#0f172a",
-        border: "1px solid #1e293b",
-        borderRadius: 8,
-        padding: "10px 14px",
-        color: "#94a3b8",
-        fontSize: 13,
-        marginTop: 12,
-        lineHeight: 1.7,
-      }}
-    >
+    <div style={{
+      background: "var(--ha-bg-raised)",
+      border: "1px solid var(--ha-border)",
+      borderRadius: 8,
+      padding: "10px 14px",
+      color: "var(--ha-text-2)",
+      fontSize: 13,
+      marginTop: 12,
+      lineHeight: 1.7,
+    }}>
       {children}
     </div>
   );

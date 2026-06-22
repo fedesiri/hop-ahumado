@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth } from "@/lib/auth-context";
-import { Spin } from "antd";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -36,16 +35,8 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 
   if (loading || !user) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#0a0a0a",
-        }}
-      >
-        <Spin size="large" />
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--ha-bg)" }}>
+        <div className="ha-spin-el" />
       </div>
     );
   }

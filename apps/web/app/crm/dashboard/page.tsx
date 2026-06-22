@@ -3,8 +3,7 @@
 import { apiClient } from "@/lib/api-client";
 import type { CrmDashboardResponse } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
-import { MessageOutlined, RiseOutlined, UserOutlined } from "@ant-design/icons";
-import { Card, Col, Row, Spin, Statistic, Table } from "antd";
+import { MessageSquare, TrendingUp, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function CrmDashboardPage() {
@@ -21,44 +20,83 @@ export default function CrmDashboardPage() {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
-        <Spin size="large" />
+      <div className="ha-empty">
+        <span className="ha-empty__t">Cargando...</span>
       </div>
     );
   }
 
   if (!data) return null;
 
-  const statusColumns = [
-    { title: "Estado", dataIndex: "status", key: "status", render: (v: string | null) => formatStatusLabel(v) || "—" },
-    { title: "Cantidad", dataIndex: "count", key: "count" },
-  ];
-
   return (
-    <div style={{ padding: 0 }}>
-      <h1 style={{ marginBottom: 24, color: "#fafafa", fontSize: 24 }}>CRM - Dashboard</h1>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={8}>
-          <Card>
-            <Statistic title="Contactos (perfiles)" value={data.profileCount} prefix={<UserOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card>
-            <Statistic title="Interacciones" value={data.interactionCount} prefix={<MessageOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card>
-            <Statistic title="Oportunidades" value={data.opportunityCount} prefix={<RiseOutlined />} />
-          </Card>
-        </Col>
-        <Col span={24}>
-          <Card title="Por estado">
-            <Table rowKey="status" dataSource={data.byStatus} columns={statusColumns} pagination={false} size="small" />
-          </Card>
-        </Col>
-      </Row>
+    <div>
+      <div className="ha-page-header">
+        <h1 className="ha-pagetitle">CRM — Dashboard</h1>
+      </div>
+
+      <div className="ha-stats">
+        <div className="ha-stat">
+          <span className="ha-stat__icon">
+            <Users size={18} />
+          </span>
+          <span className="ha-stat__label">Contactos</span>
+          <span className="ha-stat__value">{data.profileCount}</span>
+        </div>
+        <div className="ha-stat">
+          <span className="ha-stat__icon">
+            <MessageSquare size={18} />
+          </span>
+          <span className="ha-stat__label">Interacciones</span>
+          <span className="ha-stat__value">{data.interactionCount}</span>
+        </div>
+        <div className="ha-stat">
+          <span className="ha-stat__icon">
+            <TrendingUp size={18} />
+          </span>
+          <span className="ha-stat__label">Oportunidades</span>
+          <span className="ha-stat__value">{data.opportunityCount}</span>
+        </div>
+      </div>
+
+      <div className="ha-table-wrap" style={{ marginTop: 24 }}>
+        <h2 className="ha-pagetitle" style={{ fontSize: 16, marginBottom: 12 }}>
+          Por estado
+        </h2>
+        <table className="ha-table">
+          <thead>
+            <tr>
+              <th>Estado</th>
+              <th style={{ textAlign: "right" }}>Cantidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.byStatus.map((row) => (
+              <tr key={row.status ?? "__null__"}>
+                <td>{formatStatusLabel(row.status) || "—"}</td>
+                <td style={{ textAlign: "right" }} className="ha-mono">
+                  {row.count}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="ha-cardlist" style={{ marginTop: 24 }}>
+        <h2 className="ha-pagetitle" style={{ fontSize: 16, marginBottom: 12 }}>
+          Por estado
+        </h2>
+        {data.byStatus.map((row) => (
+          <div key={row.status ?? "__null__"} className="ha-ordcard">
+            <div className="ha-ordcard__header">
+              <span className="ha-ordcard__id">
+                {formatStatusLabel(row.status) || "—"}
+              </span>
+              <span className="ha-mono">{row.count}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

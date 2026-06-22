@@ -4,24 +4,9 @@ import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
+import { toast } from "@/lib/toast";
 import type { Cost, CreateCostRequest, Product, UpdateCostRequest } from "@/lib/types";
-import { DeleteOutlined, EditOutlined, PlusOutlined, SwapOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Empty,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Select,
-  Space,
-  Spin,
-  Table,
-  Tooltip,
-  Typography,
-} from "antd";
-import type { ColumnsType } from "antd/es/table";
+import { Edit, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -34,7 +19,6 @@ export default function CostsPage() {
 }
 
 function CostsContent() {
-  const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,18 +30,22 @@ function CostsContent() {
   const [replaceModalOpen, setReplaceModalOpen] = useState(false);
   const [replaceTarget, setReplaceTarget] = useState<Cost | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form] = Form.useForm();
-  const [replaceForm] = Form.useForm();
   const [bulkReplaceModalOpen, setBulkReplaceModalOpen] = useState(false);
-  const [bulkReplaceForm] = Form.useForm();
   const [bulkPreviewRows, setBulkPreviewRows] = useState<Cost[] | null>(null);
   const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
   const [selectedCostIds, setSelectedCostIds] = useState<string[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
-  const [showActive, setShowActive] = useState(true);
+  const [showActive] = useState(true);
   const [searchText, setSearchText] = useState(() => searchParams.get("search") ?? "");
   const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get("search") ?? "");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Form state
+  const [fProductId, setFProductId] = useState("");
+  const [fValue, setFValue] = useState("");
+  const [replaceValue, setReplaceValue] = useState("");
+  const [bulkValue, setBulkValue] = useState("");
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -78,22 +66,13 @@ function CostsContent() {
       updateParams({ search: trimmed || null });
     }, 350);
     return () => clearTimeout(t);
-  }, [searchText]);
+  }, [searchText, updateParams]);
 
   useEffect(() => {
     setPagination((p) => (p.page === 1 ? p : { ...p, page: 1 }));
   }, [debouncedSearch]);
 
-  useEffect(() => {
-    fetchCosts();
-    fetchProducts();
-  }, [pagination.page, pagination.limit, showActive, debouncedSearch, selectedLineId]);
-
-  useEffect(() => {
-    setSelectedCostIds([]);
-  }, [showActive]);
-
-  const fetchCosts = async () => {
+  const fetchCosts = useCallback(async () => {
     try {
       setLoading(true);
       const response = await apiClient.getCosts(
@@ -106,41 +85,48 @@ function CostsContent() {
       );
       setCosts(response.data);
       setMeta(response.meta);
-    } catch (error) {
-      message.error("Error al cargar costos");
-      console.error(error);
+    } catch {
+      toast.error("Error al cargar costos");
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page, pagination.limit, showActive, debouncedSearch, selectedLineId]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       const response = await apiClient.getProducts(1, 100, false, undefined, undefined, selectedLineId ?? undefined);
       setProducts(response.data);
     } catch {
       // silent
     }
-  };
+  }, [selectedLineId]);
+
+  useEffect(() => {
+    void fetchCosts();
+    void fetchProducts();
+  }, [fetchCosts, fetchProducts]);
+
+  useEffect(() => {
+    setSelectedCostIds([]);
+  }, [showActive]);
 
   const handleCreate = () => {
     setEditingId(null);
-    form.resetFields();
+    setFProductId("");
+    setFValue("");
     setModalOpen(true);
   };
 
   const handleEdit = (record: Cost) => {
     setEditingId(record.id);
-    form.setFieldsValue({
-      productId: record.productId,
-      value: record.value,
-    });
+    setFProductId(record.productId);
+    setFValue(String(record.value));
     setModalOpen(true);
   };
 
   const openReplaceCost = (record: Cost) => {
     setReplaceTarget(record);
-    replaceForm.resetFields();
+    setReplaceValue("");
     setReplaceModalOpen(true);
   };
 
@@ -151,29 +137,9 @@ function CostsContent() {
     return { rowCount, someSelectionOffPage };
   }, [costs, selectedCostIds]);
 
-  const bulkPreviewColumns: ColumnsType<Cost> = useMemo(
-    () => [
-      {
-        title: "Producto",
-        key: "product",
-        ellipsis: true,
-        render: (_: unknown, row: Cost) => row.product?.name ?? "—",
-      },
-      {
-        title: "Costo actual (unidad)",
-        dataIndex: "value",
-        key: "value",
-        width: 168,
-        align: "right",
-        render: (v: number | string) => formatCurrency(v),
-      },
-    ],
-    [],
-  );
-
   const openBulkReplace = async () => {
     if (selectedCostIds.length === 0) return;
-    bulkReplaceForm.resetFields();
+    setBulkValue("");
     setBulkPreviewRows(null);
     setBulkReplaceModalOpen(true);
     setBulkPreviewLoading(true);
@@ -182,7 +148,7 @@ function CostsContent() {
       const rows = await Promise.all(orderedUniqueIds.map((id) => apiClient.getCost(id)));
       setBulkPreviewRows(rows);
     } catch {
-      message.error("No se pudo cargar el detalle de los costos");
+      toast.error("No se pudo cargar el detalle de los costos");
       setBulkReplaceModalOpen(false);
       setBulkPreviewRows(null);
     } finally {
@@ -190,318 +156,353 @@ function CostsContent() {
     }
   };
 
-  const handleBulkReplaceSubmit = async (values: { value: number }) => {
+  const handleBulkReplaceSubmit = async () => {
+    const value = Number(bulkValue);
+    if (!Number.isFinite(value) || value < 0) { toast.error("Ingresá un costo válido"); return; }
     if (selectedCostIds.length === 0) return;
     setSubmitting(true);
     try {
-      const res = await apiClient.bulkReplaceCosts({
-        costIds: selectedCostIds,
-        value: values.value,
-      });
-      message.success(
-        `Listo: ${res.count} producto${res.count === 1 ? "" : "s"} con nuevo costo; los anteriores quedaron archivados.`,
-      );
+      const res = await apiClient.bulkReplaceCosts({ costIds: selectedCostIds, value });
+      toast.success(`Listo: ${res.count} producto${res.count === 1 ? "" : "s"} con nuevo costo; los anteriores quedaron archivados.`);
       setBulkReplaceModalOpen(false);
       setBulkPreviewRows(null);
       setSelectedCostIds([]);
-      bulkReplaceForm.resetFields();
-      fetchCosts();
+      void fetchCosts();
     } catch {
-      message.error("Error al actualizar costos");
+      toast.error("Error al actualizar costos");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleReplaceSubmit = async (values: { value: number }) => {
+  const handleReplaceSubmit = async () => {
     if (!replaceTarget) return;
+    const value = Number(replaceValue);
+    if (!Number.isFinite(value) || value < 0) { toast.error("Ingresá un costo válido"); return; }
     setSubmitting(true);
     try {
-      await apiClient.replaceCost(replaceTarget.id, { value: values.value });
-      message.success("Costo actualizado: el anterior quedó archivado.");
+      await apiClient.replaceCost(replaceTarget.id, { value });
+      toast.success("Costo actualizado: el anterior quedó archivado.");
       setReplaceModalOpen(false);
       setReplaceTarget(null);
-      fetchCosts();
+      void fetchCosts();
     } catch {
-      message.error("Error al actualizar costo");
+      toast.error("Error al actualizar costo");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = (id: string) => {
-    modal.confirm({
-      title: "Confirmar eliminacion",
-      content: "Estas seguro de que deseas eliminar este costo?",
-      okText: "Si",
-      cancelText: "No",
-      onOk: async () => {
-        try {
-          await apiClient.deleteCost(id);
-          message.success("Costo eliminado");
-          fetchCosts();
-        } catch (error) {
-          message.error("Error al eliminar costo");
-        }
-      },
-    });
+  const handleDelete = async (id: string) => {
+    try {
+      await apiClient.deleteCost(id);
+      toast.success("Costo eliminado");
+      setDeleteId(null);
+      void fetchCosts();
+    } catch {
+      toast.error("Error al eliminar costo");
+      setDeleteId(null);
+    }
   };
 
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async () => {
+    if (!fProductId) { toast.error("El producto es requerido"); return; }
+    const value = Number(fValue);
+    if (!Number.isFinite(value) || value < 0) { toast.error("El costo es requerido"); return; }
     setSubmitting(true);
     try {
-      const data: CreateCostRequest = {
-        productId: values.productId,
-        value: values.value,
-      };
-
+      const data: CreateCostRequest = { productId: fProductId, value };
       if (editingId) {
         await apiClient.updateCost(editingId, data as UpdateCostRequest);
-        message.success("Costo actualizado");
+        toast.success("Costo actualizado");
       } else {
         await apiClient.createCost(data);
-        message.success("Costo creado");
+        toast.success("Costo creado");
       }
       setModalOpen(false);
-      fetchCosts();
-    } catch (error) {
-      message.error("Error al guardar costo");
+      void fetchCosts();
+    } catch {
+      toast.error("Error al guardar costo");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const columns = [
-    {
-      title: "Producto",
-      dataIndex: ["product", "name"],
-      key: "product",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Costo",
-      dataIndex: "value",
-      key: "value",
-      render: (value: number | string) => formatCurrency(value),
-    },
-    {
-      title: "Fecha de Creación",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      render: (date: string) => new Date(date).toLocaleDateString("es-AR"),
-    },
-    {
-      title: "Acciones",
-      key: "actions",
-      width: showActive ? 168 : 120,
-      render: (_: any, record: Cost) => (
-        <Space size="small" wrap>
-          {showActive && !record.deactivatedAt && (
-            <Tooltip title="Archiva este costo y crea uno nuevo (misma acción que eliminar + crear)">
-              <Button
-                type="default"
-                size="small"
-                icon={<SwapOutlined />}
-                onClick={() => openReplaceCost(record)}
-              />
-            </Tooltip>
-          )}
-          <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
-        </Space>
-      ),
-    },
-  ];
+  const totalPages = meta ? Math.ceil(meta.total / pagination.limit) : 1;
+  const allPageSelected = costs.length > 0 && costs.every((c) => selectedCostIds.includes(c.id));
+  const somePageSelected = costs.some((c) => selectedCostIds.includes(c.id)) && !allPageSelected;
+
+  const toggleAllPage = () => {
+    if (allPageSelected) {
+      setSelectedCostIds((prev) => prev.filter((id) => !costs.find((c) => c.id === id)));
+    } else {
+      const pageIds = costs.filter((c) => !c.deactivatedAt).map((c) => c.id);
+      setSelectedCostIds((prev) => [...new Set([...prev, ...pageIds])]);
+    }
+  };
+
+  const toggleRow = (id: string, disabled: boolean) => {
+    if (disabled) return;
+    setSelectedCostIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
 
   return (
     <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Costos</h1>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", flex: 1, justifyContent: "flex-end", minWidth: 0 }}>
-          <Input.Search
-            allowClear
+      <div className="ha-page-header">
+        <h1 className="ha-pagetitle">Costos</h1>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+          <input
+            type="search"
+            className="ha-input"
             placeholder="Buscar por nombre, SKU o código de barras"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            style={{ maxWidth: 420, width: "100%", minWidth: 200 }}
+            style={{ maxWidth: 280, width: "100%", minWidth: 160 }}
           />
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-            Nuevo Costo
-          </Button>
+          <button className="ha-btn ha-btn--primary" onClick={handleCreate}>
+            + Nuevo costo
+          </button>
         </div>
       </div>
 
       {showActive && bulkSelectionSummary.rowCount > 0 && (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: "10px 14px",
-            borderRadius: 8,
-            background: "rgba(59, 130, 246, 0.12)",
-            border: "1px solid rgba(59, 130, 246, 0.35)",
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span style={{ color: "#e5e7eb" }}>
+        <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.35)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+          <span style={{ color: "var(--ha-text)" }}>
             <strong>{bulkSelectionSummary.rowCount}</strong> costo(s) seleccionado(s)
-            {bulkSelectionSummary.someSelectionOffPage && (
-              <span style={{ color: "#9ca3af" }}> (incluye otras páginas)</span>
-            )}
-            .
+            {bulkSelectionSummary.someSelectionOffPage && <span style={{ color: "var(--ha-text-3)" }}> (incluye otras páginas)</span>}.
           </span>
-          <Button type="primary" icon={<SwapOutlined />} onClick={openBulkReplace}>
-            Mismo nuevo costo para todos
-          </Button>
+          <button className="ha-btn ha-btn--primary ha-btn--sm" onClick={() => void openBulkReplace()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <RefreshCw size={13} /> Mismo nuevo costo para todos
+          </button>
         </div>
       )}
 
       {loading ? (
-        <Spin />
-      ) : costs.length > 0 ? (
-        <Table
-          columns={columns}
-          dataSource={costs}
-          rowKey="id"
-          style={{ backgroundColor: "#1f2937" }}
-          rowSelection={
-            showActive
-              ? {
-                  selectedRowKeys: selectedCostIds,
-                  onChange: (keys) => setSelectedCostIds(keys as string[]),
-                  preserveSelectedRowKeys: true,
-                  getCheckboxProps: (record) => ({
-                    disabled: !!record.deactivatedAt,
-                  }),
-                }
-              : undefined
-          }
-          pagination={{
-            current: pagination.page,
-            pageSize: pagination.limit,
-            total: meta?.total || 0,
-            onChange: (page, pageSize) => {
-              setPagination({ page, limit: pageSize });
-            },
-          }}
-        />
+        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
+          <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
+        </div>
+      ) : costs.length === 0 ? (
+        <div className="ha-empty">
+          <p className="ha-empty__t">No hay costos</p>
+        </div>
       ) : (
-        <Empty description="No hay costos" style={{ color: "#9ca3af" }} />
+        <div className="ha-table-wrap">
+          <table className="ha-table">
+            <thead>
+              <tr>
+                {showActive && (
+                  <th style={{ width: 40 }}>
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      ref={(el) => { if (el) el.indeterminate = somePageSelected; }}
+                      onChange={toggleAllPage}
+                      style={{ accentColor: "var(--ha-amber)", cursor: "pointer" }}
+                    />
+                  </th>
+                )}
+                <th>Producto</th>
+                <th>Costo</th>
+                <th>Fecha de Creación</th>
+                <th style={{ width: showActive ? 168 : 120 }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {costs.map((cost) => {
+                const isDisabled = !!cost.deactivatedAt;
+                const isSelected = selectedCostIds.includes(cost.id);
+                return (
+                  <tr key={cost.id}>
+                    {showActive && (
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onChange={() => toggleRow(cost.id, isDisabled)}
+                          style={{ accentColor: "var(--ha-amber)", cursor: isDisabled ? "not-allowed" : "pointer" }}
+                        />
+                      </td>
+                    )}
+                    <td>{cost.product?.name || "—"}</td>
+                    <td className="ha-mono">{formatCurrency(cost.value)}</td>
+                    <td className="ha-mono" style={{ color: "var(--ha-text-3)" }}>{new Date(cost.createdAt).toLocaleDateString("es-AR")}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {showActive && !cost.deactivatedAt && (
+                          <button
+                            className="ha-btn ha-btn--secondary ha-btn--sm"
+                            title="Archiva este costo y crea uno nuevo"
+                            onClick={() => openReplaceCost(cost)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                          >
+                            <RefreshCw size={12} />
+                          </button>
+                        )}
+                        <button className="ha-btn ha-btn--secondary ha-btn--sm" onClick={() => handleEdit(cost)} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <Edit size={12} />
+                        </button>
+                        <button
+                          onClick={() => setDeleteId(cost.id)}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", border: "1px solid var(--ha-red)", background: "transparent", borderRadius: 6, color: "var(--ha-red)", cursor: "pointer", fontSize: 12 }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      <Modal
-        title={editingId ? "Editar Costo" : "Nuevo Costo"}
-        open={modalOpen}
-        onOk={() => form.submit()}
-        onCancel={() => setModalOpen(false)}
-        okButtonProps={{ loading: submitting, disabled: submitting }}
-        forceRender
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item
-            name="productId"
-            label="Producto"
-            rules={[{ required: true, message: "El producto es requerido" }]}
-          >
-            <Select
-              placeholder="Selecciona un producto"
-              options={products.map((p) => ({ label: p.name, value: p.id }))}
-            />
-          </Form.Item>
-
-          <Form.Item name="value" label="Costo" rules={[{ required: true, message: "El costo es requerido" }]}>
-            <InputNumber min={0} step={0.01} placeholder="Costo del producto" />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="Nuevo costo (archivar el actual)"
-        open={replaceModalOpen}
-        onOk={() => replaceForm.submit()}
-        onCancel={() => {
-          setReplaceModalOpen(false);
-          setReplaceTarget(null);
-        }}
-        okButtonProps={{ loading: submitting, disabled: submitting }}
-        forceRender
-      >
-        {replaceTarget && (
-          <>
-            <Typography.Paragraph style={{ marginBottom: 12, color: "rgba(255,255,255,0.75)" }}>
-              <strong>{replaceTarget.product?.name ?? "Producto"}</strong>
-              {" — costo vigente "}
-              {formatCurrency(replaceTarget.value)} (solo referencia).
-            </Typography.Paragraph>
-            <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
-              El costo vigente pasará al historial (archivado) y este valor será el único activo para el producto.
-            </Typography.Paragraph>
-          </>
-        )}
-        <Form form={replaceForm} layout="vertical" onFinish={handleReplaceSubmit}>
-          <Form.Item
-            name="value"
-            label="Nuevo costo por unidad"
-            rules={[{ required: true, message: "Ingresá el nuevo costo" }]}
-          >
-            <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 1520.50" style={{ width: "100%" }} />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="Mismo nuevo costo para varios productos"
-        open={bulkReplaceModalOpen}
-        onOk={() => bulkReplaceForm.submit()}
-        onCancel={() => {
-          setBulkReplaceModalOpen(false);
-          setBulkPreviewRows(null);
-        }}
-        okButtonProps={{
-          loading: submitting,
-          disabled: submitting || bulkPreviewLoading || !bulkPreviewRows?.length,
-        }}
-        forceRender
-        width={720}
-      >
-        <Typography.Paragraph style={{ marginBottom: 8, color: "rgba(255,255,255,0.85)" }}>
-          Se archivan los costos vigentes de cada fila elegida y se crea{" "}
-          <strong>un costo activo nuevo por producto</strong>, todos con el{" "}
-          <strong>mismo valor por unidad</strong> que ingreses abajo.
-        </Typography.Paragraph>
-        <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 14 }}>
-          Revisá el costo actual de cada ítem; al confirmar, todos pasan al mismo precio nuevo.
-        </Typography.Paragraph>
-        <div style={{ marginBottom: 16 }}>
-          {bulkPreviewLoading ? (
-            <div style={{ padding: "24px 0", textAlign: "center" }}>
-              <Spin />
-            </div>
-          ) : bulkPreviewRows && bulkPreviewRows.length > 0 ? (
-            <Table<Cost>
-              size="small"
-              rowKey="id"
-              columns={bulkPreviewColumns}
-              dataSource={bulkPreviewRows}
-              pagination={false}
-              scroll={{ y: 280 }}
-              locale={{ emptyText: <Empty description="Sin filas" /> }}
-              style={{ backgroundColor: "#1f2937" }}
-            />
-          ) : null}
+      {/* Pagination */}
+      {meta && meta.total > 0 && (
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
+          <span style={{ color: "var(--ha-text-3)", fontSize: 13 }}>
+            {meta.total} total · página {pagination.page} de {totalPages}
+          </span>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="ha-btn ha-btn--secondary ha-btn--sm" disabled={pagination.page <= 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>‹</button>
+            <button className="ha-btn ha-btn--secondary ha-btn--sm" disabled={pagination.page >= totalPages} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>›</button>
+          </div>
         </div>
-        <Form form={bulkReplaceForm} layout="vertical" onFinish={handleBulkReplaceSubmit}>
-          <Form.Item
-            name="value"
-            label="Nuevo costo por unidad (aplica a todos los listados arriba)"
-            rules={[{ required: true, message: "Ingresá el nuevo costo" }]}
-          >
-            <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 1520.50" style={{ width: "100%" }} />
-          </Form.Item>
-        </Form>
-      </Modal>
+      )}
+
+      {/* Create/Edit Modal */}
+      {modalOpen && (
+        <div className="ha-modal-backdrop" onClick={() => setModalOpen(false)}>
+          <div className="ha-modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">{editingId ? "Editar Costo" : "Nuevo Costo"}</span>
+              <button className="ha-iconbtn" onClick={() => setModalOpen(false)} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body">
+              <div className="ha-field" style={{ marginBottom: 16 }}>
+                <label className="ha-label">Producto <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <select className="ha-input" value={fProductId} onChange={(e) => setFProductId(e.target.value)}>
+                  <option value="">Seleccioná un producto</option>
+                  {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="ha-field">
+                <label className="ha-label">Costo <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <input type="number" className="ha-input" min={0} step={0.01} placeholder="Costo del producto" value={fValue} onChange={(e) => setFValue(e.target.value)} />
+              </div>
+            </div>
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={() => void handleSubmit()} disabled={submitting}>{submitting ? "Guardando…" : "Guardar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Replace Modal */}
+      {replaceModalOpen && replaceTarget && (
+        <div className="ha-modal-backdrop" onClick={() => { setReplaceModalOpen(false); setReplaceTarget(null); }}>
+          <div className="ha-modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">Nuevo costo (archivar el actual)</span>
+              <button className="ha-iconbtn" onClick={() => { setReplaceModalOpen(false); setReplaceTarget(null); }} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body">
+              <p style={{ marginBottom: 12, color: "var(--ha-text-2)", fontSize: 14 }}>
+                <strong>{replaceTarget.product?.name ?? "Producto"}</strong> — costo vigente {formatCurrency(replaceTarget.value)} (solo referencia).
+              </p>
+              <p style={{ fontSize: 13, color: "var(--ha-text-3)", marginBottom: 16 }}>
+                El costo vigente pasará al historial (archivado) y este valor será el único activo para el producto.
+              </p>
+              <div className="ha-field">
+                <label className="ha-label">Nuevo costo por unidad <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej. 1520.50" value={replaceValue} onChange={(e) => setReplaceValue(e.target.value)} />
+              </div>
+            </div>
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => { setReplaceModalOpen(false); setReplaceTarget(null); }}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={() => void handleReplaceSubmit()} disabled={submitting}>{submitting ? "Guardando…" : "Guardar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Replace Modal */}
+      {bulkReplaceModalOpen && (
+        <div className="ha-modal-backdrop" onClick={() => { setBulkReplaceModalOpen(false); setBulkPreviewRows(null); }}>
+          <div className="ha-modal" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">Mismo nuevo costo para varios productos</span>
+              <button className="ha-iconbtn" onClick={() => { setBulkReplaceModalOpen(false); setBulkPreviewRows(null); }} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body">
+              <p style={{ marginBottom: 8, color: "var(--ha-text-2)", fontSize: 14 }}>
+                Se archivan los costos vigentes de cada fila elegida y se crea <strong>un costo activo nuevo por producto</strong>, todos con el <strong>mismo valor por unidad</strong> que ingreses abajo.
+              </p>
+              <p style={{ fontSize: 13, color: "var(--ha-text-3)", marginBottom: 14 }}>
+                Revisá el costo actual de cada ítem; al confirmar, todos pasan al mismo precio nuevo.
+              </p>
+              <div style={{ marginBottom: 16 }}>
+                {bulkPreviewLoading ? (
+                  <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
+                    <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
+                  </div>
+                ) : bulkPreviewRows && bulkPreviewRows.length > 0 ? (
+                  <div style={{ maxHeight: 280, overflowY: "auto", border: "1px solid var(--ha-border)", borderRadius: 8 }}>
+                    <table className="ha-table" style={{ marginBottom: 0 }}>
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th style={{ textAlign: "right" }}>Costo actual (unidad)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bulkPreviewRows.map((r) => (
+                          <tr key={r.id}>
+                            <td>{r.product?.name ?? "—"}</td>
+                            <td className="ha-mono" style={{ textAlign: "right" }}>{formatCurrency(r.value)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </div>
+              <div className="ha-field">
+                <label className="ha-label">Nuevo costo por unidad (aplica a todos) <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej. 1520.50" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} />
+              </div>
+            </div>
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => { setBulkReplaceModalOpen(false); setBulkPreviewRows(null); }}>Cancelar</button>
+              <button
+                className="ha-btn ha-btn--primary"
+                onClick={() => void handleBulkReplaceSubmit()}
+                disabled={submitting || bulkPreviewLoading || !bulkPreviewRows?.length}
+              >
+                {submitting ? "Guardando…" : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete dialog */}
+      {deleteId && (
+        <div className="ha-dialog-back" onClick={() => setDeleteId(null)}>
+          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="ha-dialog__head">
+              <h3 className="ha-dialog__title">¿Eliminar costo?</h3>
+              <p className="ha-dialog__sub">Esta acción no se puede deshacer.</p>
+            </div>
+            <div className="ha-dialog__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
+              <button className="ha-btn ha-btn--destructive" onClick={() => void handleDelete(deleteId)}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,20 +2,25 @@
 
 import { useLineContext } from "@/lib/line-context";
 import { BusinessLine } from "@/lib/types";
-import { Segmented } from "antd";
 
 export function BusinessLineSelector() {
   const { selectedLine, setSelectedLine } = useLineContext();
+  const active = selectedLine ?? BusinessLine.BEER;
 
   return (
-    <Segmented
-      value={selectedLine ?? BusinessLine.BEER}
-      onChange={(value) => setSelectedLine(value as BusinessLine)}
-      options={[
-        { label: "Hop", value: BusinessLine.BEER },
-        { label: "Alumo", value: BusinessLine.MEAT },
-      ]}
-      style={{ fontSize: 13 }}
-    />
+    <div className="ha-seg">
+      <button
+        className={`ha-seg__o${active === BusinessLine.BEER ? " act" : ""}`}
+        onClick={() => setSelectedLine(BusinessLine.BEER)}
+      >
+        Hop
+      </button>
+      <button
+        className={`ha-seg__o${active === BusinessLine.MEAT ? " act" : ""}`}
+        onClick={() => setSelectedLine(BusinessLine.MEAT)}
+      >
+        Alumo
+      </button>
+    </div>
   );
 }

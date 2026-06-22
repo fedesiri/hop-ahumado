@@ -6,9 +6,10 @@ import { LocationStockModal } from "@/components/stock/location-stock-modal";
 import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
 import type { StockBalanceRow, StockLocation } from "@/lib/types";
-import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, SwapOutlined } from "@ant-design/icons";
-import { App, Button, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Spin, Table, Tag } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import { ArrowLeftRight, Eye, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+type Toast = { type: "success" | "error" | "info"; msg: string };
 
 export default function StockLocationsPage() {
   return (
@@ -19,357 +20,410 @@ export default function StockLocationsPage() {
 }
 
 function StockLocationsContent() {
-  const { message } = App.useApp();
   const { selectedLineId } = useLineContext();
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [viewModalOpen, setViewModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const [toast, setToast] = useState<Toast | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (t: Toast) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(t);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  };
+
+  type DrawerMode = "create" | "edit" | "transfer" | null;
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>(null);
   const [editingLocation, setEditingLocation] = useState<StockLocation | null>(null);
+  const [transferFromLocation, setTransferFromLocation] = useState<StockLocation | null>(null);
+
+  const [fname, setFname] = useState("");
+  const [fisDefault, setFisDefault] = useState(false);
+  const [fnameErr, setFnameErr] = useState(false);
+  const [fTransferTo, setFTransferTo] = useState("");
+  const [fTransferErr, setFTransferErr] = useState(false);
+
+  const [confirmDelete, setConfirmDelete] = useState<StockLocation | null>(null);
+
+  const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewingLocation, setViewingLocation] = useState<StockLocation | null>(null);
   const [viewBalances, setViewBalances] = useState<StockBalanceRow[]>([]);
   const [viewLoading, setViewLoading] = useState(false);
-  const [createForm] = Form.useForm();
-  const [editForm] = Form.useForm();
-  const [transferForm] = Form.useForm();
-  const [transferModalOpen, setTransferModalOpen] = useState(false);
-  const [transferFromLocation, setTransferFromLocation] = useState<StockLocation | null>(null);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
       setLocations(await apiClient.getStockLocations());
     } catch {
-      message.error("Error al cargar ubicaciones");
+      showToast({ type: "error", msg: "Error al cargar ubicaciones" });
       setLocations([]);
     } finally {
       setLoading(false);
     }
-  }, [message]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const closeView = () => {
-    setViewModalOpen(false);
-    setViewingLocation(null);
-    setViewBalances([]);
+  const openCreate = () => {
+    setFname(""); setFisDefault(false); setFnameErr(false);
+    setDrawerMode("create");
+  };
+
+  const openEdit = (loc: StockLocation) => {
+    setEditingLocation(loc);
+    setFname(loc.name); setFisDefault(loc.isDefault); setFnameErr(false);
+    setDrawerMode("edit");
+  };
+
+  const openTransfer = (loc: StockLocation) => {
+    setTransferFromLocation(loc);
+    setFTransferTo(""); setFTransferErr(false);
+    setDrawerMode("transfer");
+  };
+
+  const closeDrawer = () => {
+    setDrawerMode(null); setEditingLocation(null); setTransferFromLocation(null);
   };
 
   const openView = async (loc: StockLocation) => {
-    setViewingLocation(loc);
-    setViewModalOpen(true);
-    setViewLoading(true);
-    setViewBalances([]);
+    setViewingLocation(loc); setViewModalOpen(true); setViewLoading(true); setViewBalances([]);
     try {
       const rows = await apiClient.getStockBalancesAtLocation(loc.id, selectedLineId ?? undefined);
       setViewBalances(rows);
     } catch {
-      message.error("No se pudo cargar el stock de la ubicación");
-      setViewBalances([]);
+      showToast({ type: "error", msg: "No se pudo cargar el stock de la ubicación" });
     } finally {
       setViewLoading(false);
     }
   };
 
-  const openEdit = (loc: StockLocation) => {
-    setEditingLocation(loc);
-    editForm.setFieldsValue({ name: loc.name, isDefault: loc.isDefault });
-    setEditModalOpen(true);
-  };
-
-  const handleCreate = async (values: { name: string; isDefault?: boolean }) => {
-    setSubmitting(true);
+  const saveLocation = async () => {
+    if (!fname.trim()) { setFnameErr(true); return; }
+    setFnameErr(false); setSubmitting(true);
     try {
-      await apiClient.createStockLocation({
-        name: values.name.trim(),
-        isDefault: values.isDefault === true,
-      });
-      message.success("Ubicación creada");
-      setCreateModalOpen(false);
-      createForm.resetFields();
+      if (drawerMode === "create") {
+        await apiClient.createStockLocation({ name: fname.trim(), isDefault: fisDefault });
+        showToast({ type: "success", msg: "Ubicación creada" });
+      } else if (editingLocation) {
+        await apiClient.updateStockLocation(editingLocation.id, { name: fname.trim(), isDefault: fisDefault });
+        showToast({ type: "success", msg: "Ubicación actualizada" });
+      }
+      closeDrawer();
       await load();
     } catch {
-      message.error("No se pudo crear la ubicación");
+      showToast({ type: "error", msg: "No se pudo guardar la ubicación" });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEdit = async (values: { name: string; isDefault?: boolean }) => {
-    if (!editingLocation) return;
-    setSubmitting(true);
-    try {
-      await apiClient.updateStockLocation(editingLocation.id, {
-        name: values.name.trim(),
-        isDefault: values.isDefault === true,
-      });
-      message.success("Ubicación actualizada");
-      setEditModalOpen(false);
-      setEditingLocation(null);
-      editForm.resetFields();
-      await load();
-    } catch {
-      message.error("No se pudo actualizar la ubicación");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const openTransferAll = (loc: StockLocation) => {
-    setTransferFromLocation(loc);
-    transferForm.resetFields();
-    setTransferModalOpen(true);
-  };
-
-  const handleTransferAll = async (values: { toLocationId: string }) => {
-    if (!transferFromLocation) return;
-    setSubmitting(true);
+  const doTransfer = async () => {
+    if (!fTransferTo || !transferFromLocation) { setFTransferErr(true); return; }
+    setFTransferErr(false); setSubmitting(true);
     try {
       const res = await apiClient.transferAllStockBetweenLocations(transferFromLocation.id, {
-        toLocationId: values.toLocationId,
+        toLocationId: fTransferTo,
       });
       if (res.movementsCreated === 0) {
-        message.info(res.message ?? "No había stock para mover en el origen");
+        showToast({ type: "info", msg: res.message ?? "No había stock para mover en el origen" });
       } else {
-        message.success(`Traspasados ${res.movementsCreated} productos (movimientos registrados)`);
+        showToast({ type: "success", msg: `Traspasados ${res.movementsCreated} productos` });
       }
-      setTransferModalOpen(false);
-      setTransferFromLocation(null);
-      transferForm.resetFields();
+      closeDrawer();
       await load();
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "";
-      message.error(msg || "No se pudo completar el traspaso");
+      showToast({ type: "error", msg: msg || "No se pudo completar el traspaso" });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (loc: StockLocation) => {
+  const doDelete = async () => {
+    if (!confirmDelete) return;
+    const loc = confirmDelete;
+    setConfirmDelete(null);
     try {
       await apiClient.deleteStockLocation(loc.id);
-      message.success("Ubicación eliminada");
+      showToast({ type: "success", msg: "Ubicación eliminada" });
       await load();
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "";
-      message.error(msg || "No se pudo eliminar la ubicación");
+      showToast({ type: "error", msg: msg || "No se pudo eliminar la ubicación" });
     }
   };
 
   return (
     <div>
-      <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Ubicaciones de stock</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-          Nueva ubicación
-        </Button>
+      {toast && (
+        <div
+          style={{
+            position: "fixed", bottom: 24, right: 24, zIndex: 200,
+            padding: "10px 18px", borderRadius: 10, fontSize: 14, fontWeight: 500,
+            background: toast.type === "success"
+              ? "var(--ha-green-soft)" : toast.type === "info"
+              ? "var(--ha-amber-soft)" : "var(--ha-red-soft)",
+            color: toast.type === "success"
+              ? "var(--ha-green)" : toast.type === "info"
+              ? "var(--ha-amber)" : "var(--ha-red)",
+            border: "1px solid",
+            borderColor: toast.type === "success"
+              ? "var(--ha-green)" : toast.type === "info"
+              ? "var(--ha-amber)" : "var(--ha-red)",
+          }}
+        >
+          {toast.msg}
+        </div>
+      )}
+
+      <div className="ha-page-header">
+        <h1 className="ha-pagetitle">Ubicaciones de stock</h1>
+        <button className="ha-btn ha-btn--primary" onClick={openCreate}>
+          <Plus size={15} /> Nueva ubicación
+        </button>
       </div>
 
       <ScreenInfoPanel title="Cómo funcionan las ubicaciones de stock">
         <div>
           <p style={{ margin: "0 0 8px 0" }}>
-            Cada ubicación es un depósito o lugar donde tenés inventario (local, tu casa, casa de un socio). Los
-            movimientos y los pedidos eligen desde cuál se descuenta o hacia cuál ingresa.
+            Cada ubicación es un depósito o lugar donde tenés inventario. Los movimientos y pedidos
+            eligen desde cuál se descuenta o hacia cuál ingresa.
           </p>
           <p style={{ margin: "0 0 8px 0" }}>
-            Usá la <strong>misma unidad</strong> de cantidad que definiste al cargar el producto (enteros o decimales,
-            ej. 10,5 kg).
+            Usá la <strong>misma unidad</strong> de cantidad que definiste al cargar el producto.
           </p>
           <p style={{ margin: 0 }}>
-            Podés <strong>traspasar todo el stock</strong> para consolidar depósitos. Solo podés eliminar una ubicación
-            si no tiene stock.
+            Podés <strong>traspasar todo el stock</strong> para consolidar depósitos. Solo podés
+            eliminar una ubicación si no tiene stock.
           </p>
         </div>
       </ScreenInfoPanel>
 
       {loading ? (
-        <Spin />
+        <div className="ha-empty"><span className="ha-empty__t">Cargando...</span></div>
       ) : (
-        <Table
-          rowKey="id"
-          dataSource={locations}
-          pagination={false}
-          style={{ backgroundColor: "#1f2937" }}
-          columns={[
-            { title: "Nombre", dataIndex: "name", key: "name" },
-            {
-              title: "Predeterminada",
-              dataIndex: "isDefault",
-              key: "isDefault",
-              render: (v: boolean) => (v ? <Tag color="green">Sí</Tag> : <Tag>No</Tag>),
-            },
-            {
-              title: "Alta",
-              dataIndex: "createdAt",
-              key: "createdAt",
-              render: (d: string) => new Date(d).toLocaleDateString("es-AR"),
-            },
-            {
-              title: "Acciones",
-              key: "actions",
-              width: 200,
-              render: (_: unknown, record: StockLocation) => (
-                <Space>
-                  <Button
-                    type="default"
-                    size="small"
-                    icon={<EyeOutlined />}
-                    title="Ver stock"
-                    aria-label="Ver stock"
-                    onClick={() => openView(record)}
-                  />
-                  <Button
-                    type="primary"
-                    size="small"
-                    icon={<EditOutlined />}
-                    title="Editar"
-                    aria-label="Editar"
-                    onClick={() => openEdit(record)}
-                  />
-                  <Button
-                    type="default"
-                    size="small"
-                    icon={<SwapOutlined />}
-                    title="Traspasar todo el stock"
-                    aria-label="Traspasar todo el stock"
+        <>
+          <div className="ha-table-wrap">
+            <table className="ha-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Predeterminada</th>
+                  <th>Alta</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {locations.map((loc) => (
+                  <tr key={loc.id}>
+                    <td>{loc.name}</td>
+                    <td>
+                      <span className={`ha-badge ${loc.isDefault ? "ha-badge--paid" : "ha-badge--draft"}`}>
+                        {loc.isDefault ? "Sí" : "No"}
+                      </span>
+                    </td>
+                    <td>{new Date(loc.createdAt).toLocaleDateString("es-AR")}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="ha-btn ha-btn--sm" title="Ver stock" onClick={() => openView(loc)}>
+                          <Eye size={13} />
+                        </button>
+                        <button className="ha-btn ha-btn--sm ha-btn--primary" title="Editar" onClick={() => openEdit(loc)}>
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          className="ha-btn ha-btn--sm"
+                          title="Traspasar todo"
+                          disabled={locations.length < 2}
+                          onClick={() => openTransfer(loc)}
+                        >
+                          <ArrowLeftRight size={13} />
+                        </button>
+                        <button
+                          className="ha-btn ha-btn--sm ha-btn--destructive"
+                          title="Eliminar"
+                          onClick={() => setConfirmDelete(loc)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="ha-cardlist">
+            {locations.map((loc) => (
+              <div key={loc.id} className="ha-ordcard">
+                <div className="ha-ordcard__header">
+                  <span className="ha-ordcard__id">{loc.name}</span>
+                  {loc.isDefault && <span className="ha-badge ha-badge--paid">Predeterminada</span>}
+                </div>
+                <div className="ha-ordcard__meta">
+                  Alta: {new Date(loc.createdAt).toLocaleDateString("es-AR")}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button className="ha-btn ha-btn--sm" onClick={() => openView(loc)}>
+                    <Eye size={13} /> Ver stock
+                  </button>
+                  <button className="ha-btn ha-btn--sm ha-btn--primary" onClick={() => openEdit(loc)}>
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    className="ha-btn ha-btn--sm"
                     disabled={locations.length < 2}
-                    onClick={() => openTransferAll(record)}
-                  />
-                  <Popconfirm
-                    title="¿Eliminar esta ubicación?"
-                    description="Solo se puede si no hay stock. Los movimientos y pedidos viejos quedarán sin ubicación asociada."
-                    onConfirm={() => handleDelete(record)}
-                    okText="Sí, eliminar"
-                    cancelText="Cancelar"
-                    okButtonProps={{ danger: true }}
+                    onClick={() => openTransfer(loc)}
                   >
-                    <Button danger size="small" icon={<DeleteOutlined />} title="Eliminar" aria-label="Eliminar" />
-                  </Popconfirm>
-                </Space>
-              ),
-            },
-          ]}
-        />
+                    <ArrowLeftRight size={13} />
+                  </button>
+                  <button
+                    className="ha-btn ha-btn--sm ha-btn--destructive"
+                    onClick={() => setConfirmDelete(loc)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
-      <Modal
-        title={transferFromLocation ? `Traspasar todo desde «${transferFromLocation.name}»` : "Traspasar stock"}
-        open={transferModalOpen}
-        onCancel={() => {
-          setTransferModalOpen(false);
-          setTransferFromLocation(null);
-          transferForm.resetFields();
-        }}
-        footer={null}
-        destroyOnClose
-      >
-        <p style={{ color: "#9ca3af", marginBottom: 16 }}>
-          Se mueven todas las cantidades distintas de cero del origen al destino. El total por producto no cambia; queda
-          registro en movimientos de stock (traslado).
-        </p>
-        <Form form={transferForm} layout="vertical" onFinish={handleTransferAll}>
-          <Form.Item
-            name="toLocationId"
-            label="Ubicación destino"
-            rules={[{ required: true, message: "Elegí el destino" }]}
-          >
-            <Select
-              placeholder="Destino"
-              options={locations
-                .filter((l) => l.id !== transferFromLocation?.id)
-                .map((l) => ({
-                  label: l.isDefault ? `${l.name} (predeterminada)` : l.name,
-                  value: l.id,
-                }))}
-            />
-          </Form.Item>
-          <Space>
-            <Button
-              onClick={() => {
-                setTransferModalOpen(false);
-                setTransferFromLocation(null);
-                transferForm.resetFields();
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button type="primary" htmlType="submit" loading={submitting}>
-              Traspasar todo
-            </Button>
-          </Space>
-        </Form>
-      </Modal>
+      {/* Create / Edit drawer */}
+      {(drawerMode === "create" || drawerMode === "edit") && (
+        <>
+          <div className="ha-overlay" onClick={closeDrawer} />
+          <div className="ha-drawer">
+            <div className="ha-sheet__handle" />
+            <div className="ha-drawer__head">
+              <span className="ha-drawer__title">
+                {drawerMode === "create" ? "Nueva ubicación" : `Editar: ${editingLocation?.name}`}
+              </span>
+              <button className="ha-iconbtn" onClick={closeDrawer} aria-label="Cerrar">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="ha-drawer__body">
+              <div className="ha-field">
+                <label className="ha-label">Nombre <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <input
+                  className={`ha-input${fnameErr ? " ha-input--error" : ""}`}
+                  value={fname}
+                  onChange={(e) => { setFname(e.target.value); if (fnameErr) setFnameErr(false); }}
+                  placeholder="Ej. Local, Casa Centro, Depósito Norte"
+                  autoFocus
+                />
+                {fnameErr && <span className="ha-error">Ingresá un nombre</span>}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
+                <input
+                  type="checkbox"
+                  id="chk-default"
+                  checked={fisDefault}
+                  onChange={(e) => setFisDefault(e.target.checked)}
+                />
+                <label htmlFor="chk-default" className="ha-label" style={{ margin: 0 }}>
+                  Marcar como ubicación predeterminada
+                </label>
+              </div>
+            </div>
+            <div className="ha-drawer__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={closeDrawer}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={saveLocation} disabled={submitting}>
+                {submitting ? "Guardando…" : drawerMode === "create" ? "Guardar" : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
-      <Modal
-        title="Nueva ubicación"
-        open={createModalOpen}
-        onCancel={() => setCreateModalOpen(false)}
-        footer={null}
-        destroyOnClose
-      >
-        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
-          <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "Ingresá un nombre" }]}>
-            <Input placeholder="Ej. Local, Casa Centro, Depósito Norte" />
-          </Form.Item>
-          <Form.Item name="isDefault" valuePropName="checked">
-            <Checkbox>Marcar como ubicación predeterminada</Checkbox>
-          </Form.Item>
-          <Space>
-            <Button onClick={() => setCreateModalOpen(false)}>Cancelar</Button>
-            <Button type="primary" htmlType="submit" loading={submitting}>
-              Guardar
-            </Button>
-          </Space>
-        </Form>
-      </Modal>
+      {/* Transfer drawer */}
+      {drawerMode === "transfer" && (
+        <>
+          <div className="ha-overlay" onClick={closeDrawer} />
+          <div className="ha-drawer">
+            <div className="ha-sheet__handle" />
+            <div className="ha-drawer__head">
+              <span className="ha-drawer__title">
+                Traspasar todo desde «{transferFromLocation?.name}»
+              </span>
+              <button className="ha-iconbtn" onClick={closeDrawer} aria-label="Cerrar">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="ha-drawer__body">
+              <p style={{ color: "var(--ha-text-3)", marginBottom: 16, fontSize: 14 }}>
+                Se mueven todas las cantidades distintas de cero del origen al destino. El total por
+                producto no cambia; queda registro en movimientos de stock.
+              </p>
+              <div className="ha-field">
+                <label className="ha-label">Ubicación destino</label>
+                <select
+                  className={`ha-select${fTransferErr ? " ha-input--error" : ""}`}
+                  value={fTransferTo}
+                  onChange={(e) => { setFTransferTo(e.target.value); if (fTransferErr) setFTransferErr(false); }}
+                >
+                  <option value="">Elegí el destino</option>
+                  {locations
+                    .filter((l) => l.id !== transferFromLocation?.id)
+                    .map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}{l.isDefault ? " (predeterminada)" : ""}
+                      </option>
+                    ))}
+                </select>
+                {fTransferErr && <span className="ha-error">Elegí el destino</span>}
+              </div>
+            </div>
+            <div className="ha-drawer__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={closeDrawer}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={doTransfer} disabled={submitting}>
+                {submitting ? "Traspasando…" : "Traspasar todo"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
-      <Modal
-        title={editingLocation ? `Editar: ${editingLocation.name}` : "Editar ubicación"}
-        open={editModalOpen}
-        onCancel={() => {
-          setEditModalOpen(false);
-          setEditingLocation(null);
-          editForm.resetFields();
-        }}
-        footer={null}
-        destroyOnClose
-      >
-        <Form form={editForm} layout="vertical" onFinish={handleEdit}>
-          <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "Ingresá un nombre" }]}>
-            <Input placeholder="Nombre" />
-          </Form.Item>
-          <Form.Item name="isDefault" valuePropName="checked">
-            <Checkbox>Ubicación predeterminada</Checkbox>
-          </Form.Item>
-          <Space>
-            <Button
-              onClick={() => {
-                setEditModalOpen(false);
-                setEditingLocation(null);
-                editForm.resetFields();
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button type="primary" htmlType="submit" loading={submitting}>
-              Guardar cambios
-            </Button>
-          </Space>
-        </Form>
-      </Modal>
+      {/* Delete confirm dialog */}
+      {confirmDelete && (
+        <div className="ha-dialog-back" onClick={() => setConfirmDelete(null)}>
+          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="ha-dialog__head">
+              <h3 className="ha-dialog__title">¿Eliminar esta ubicación?</h3>
+              <p className="ha-dialog__sub">
+                Solo se puede si no hay stock. Los movimientos viejos quedarán sin ubicación.
+              </p>
+            </div>
+            <div className="ha-dialog__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setConfirmDelete(null)}>
+                Cancelar
+              </button>
+              <button className="ha-btn ha-btn--destructive" onClick={doDelete}>
+                Sí, eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <LocationStockModal
         open={viewModalOpen}
         locationName={viewingLocation?.name ?? null}
         loading={viewLoading}
         balances={viewBalances}
-        onClose={closeView}
+        onClose={() => {
+          setViewModalOpen(false);
+          setViewingLocation(null);
+          setViewBalances([]);
+        }}
       />
     </div>
   );

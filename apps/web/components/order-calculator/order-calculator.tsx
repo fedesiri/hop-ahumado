@@ -9,11 +9,10 @@ import {
   isPromoGiftComboName,
 } from "@/lib/order-calculator/order-promo";
 import { PRICE_TYPE_LABELS, getPriceForType, type PriceType } from "@/lib/order-calculator/price-types";
+import { toast } from "@/lib/toast";
 import type { Price, Product } from "@/lib/types";
-import { SearchOutlined } from "@ant-design/icons";
-import { Col, Empty, Input, Row, Select, Spin } from "antd";
+import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { PriceSelector } from "./price-selector";
 import { ProductRow } from "./product-row";
 import { StickyFooter } from "./sticky-footer";
@@ -24,45 +23,21 @@ const STORAGE_KEYS = {
   quantities: "order-calc-quantities",
 };
 
-const SECTION_STYLE: React.CSSProperties = {
-  borderBottom: "1px solid #2d3748",
-  backgroundColor: "rgba(10, 10, 10, 0.95)",
-  padding: "12px 16px",
-  position: "sticky",
-  top: 0,
-  zIndex: 40,
-};
-
-const CONTAINER_STYLE: React.CSSProperties = {
-  maxWidth: 1200,
-  margin: "0 auto",
-};
-
 export interface OrderCalculatorProps {
-  /** Productos cargados desde la API */
   products: Product[];
-  /** Precios por productId (agrupados desde la API) */
   pricesByProductId: Record<string, Price[]>;
-  /** Clientes de la DB para elegir en la calculadora */
   customers: { id: string; name: string }[];
-  /** Si se pasa, se muestra el botón "Confirmar pedido"; incluye lista de precios para validar promo en el API. */
   onConfirmOrder?: (
     items: { productId: string; quantity: number; price: number }[],
     total: number,
     customerId?: string | null,
     priceListType?: PriceType,
   ) => void;
-  /** Cantidades iniciales por productId (p. ej. al editar una orden) */
   initialQuantities?: Record<string, number>;
-  /** Cliente inicial (p. ej. orden en edición) */
   initialCustomerId?: string | null;
-  /** Título de la pantalla */
   title?: string;
-  /** Texto del botón de confirmar en el footer */
   confirmButtonLabel?: string;
-  /** Si es false, no persiste tipo de precio / cliente / cantidades en localStorage */
   persistToLocalStorage?: boolean;
-  /** Si se pasa (p. ej. inferido desde las líneas de una orden), evita caer siempre en mayorista sin localStorage */
   initialPriceType?: PriceType;
 }
 
@@ -73,29 +48,19 @@ function getInitialQuantities(productIds: string[], readFromStorage: boolean): R
       if (stored) {
         const parsed = JSON.parse(stored) as Record<string, number>;
         const out: Record<string, number> = {};
-        productIds.forEach((id) => {
-          out[id] = typeof parsed[id] === "number" ? parsed[id] : 0;
-        });
+        productIds.forEach((id) => { out[id] = typeof parsed[id] === "number" ? parsed[id] : 0; });
         return out;
       }
     } catch {}
   }
-  return productIds.reduce(
-    (acc, id) => {
-      acc[id] = 0;
-      return acc;
-    },
-    {} as Record<string, number>,
-  );
+  return productIds.reduce((acc, id) => { acc[id] = 0; return acc; }, {} as Record<string, number>);
 }
 
 function getInitialPriceType(readFromStorage: boolean): PriceType {
   if (readFromStorage && typeof window !== "undefined") {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.priceType);
-      if (stored && ["mayorista", "minorista", "fabrica"].includes(stored)) {
-        return stored as PriceType;
-      }
+      if (stored && ["mayorista", "minorista", "fabrica"].includes(stored)) return stored as PriceType;
     } catch {}
   }
   return "mayorista";
@@ -151,9 +116,7 @@ export function OrderCalculator({
   );
 
   const promoFooterNote = useMemo(() => {
-    if (priceType === "fabrica") {
-      return "Lista fábrica: no aplica la promo por umbral de compra.";
-    }
+    if (priceType === "fabrica") return "Lista fábrica: no aplica la promo por umbral de compra.";
     const base =
       promoCategoryNames.length > 0
         ? `Subtotal para promo (categorías: ${promoCategoryNames.join(", ")}): ${formatCurrency(thresholdSubtotal)}. Umbral: ${formatCurrency(ORDER_PROMO_THRESHOLD_ARS)}.`
@@ -161,19 +124,14 @@ export function OrderCalculator({
     return promoActive ? `${base} Aplicando precio promo en combos regalo (${promoVolumeTag}).` : base;
   }, [priceType, promoCategoryNames, thresholdSubtotal, promoActive, promoVolumeTag]);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     setQuantities((prev) => {
       const next = { ...prev };
       let changed = false;
       productIds.forEach((id) => {
-        if (next[id] === undefined) {
-          next[id] = 0;
-          changed = true;
-        }
+        if (next[id] === undefined) { next[id] = 0; changed = true; }
       });
       return changed ? next : prev;
     });
@@ -183,14 +141,10 @@ export function OrderCalculator({
     if (initialQuantitiesProp === undefined && initialCustomerIdProp === undefined) return;
     setQuantities((prev) => {
       const next = { ...prev };
-      productIds.forEach((id) => {
-        next[id] = initialQuantitiesProp?.[id] ?? next[id] ?? 0;
-      });
+      productIds.forEach((id) => { next[id] = initialQuantitiesProp?.[id] ?? next[id] ?? 0; });
       return next;
     });
-    if (initialCustomerIdProp !== undefined) {
-      setSelectedCustomerId(initialCustomerIdProp);
-    }
+    if (initialCustomerIdProp !== undefined) setSelectedCustomerId(initialCustomerIdProp);
   }, [initialQuantitiesProp, initialCustomerIdProp, productIds]);
 
   const filteredProducts = useMemo(() => {
@@ -210,7 +164,8 @@ export function OrderCalculator({
   }, [selectedCustomerId, mounted, persistToLocalStorage]);
 
   useEffect(() => {
-    if (mounted && persistToLocalStorage) localStorage.setItem(STORAGE_KEYS.quantities, JSON.stringify(quantities));
+    if (mounted && persistToLocalStorage)
+      localStorage.setItem(STORAGE_KEYS.quantities, JSON.stringify(quantities));
   }, [quantities, mounted, persistToLocalStorage]);
 
   const hasItems = products.some((p) => (quantities[p.id] ?? 0) > 0);
@@ -239,50 +194,26 @@ export function OrderCalculator({
       parts.push(`- ${qty} ${name} --> ${formatCurrency(subtotal)}`);
     });
     if (lines.length > 0) {
-      parts.push("");
-      parts.push("-------------------");
-      parts.push(`Total ${formatCurrency(total)}`);
+      parts.push("", "-------------------", `Total ${formatCurrency(total)}`);
     }
     const text = parts.join("\n");
-    if (text === nameLine + "\n\n" + `Precio: ${PRICE_TYPE_LABELS[priceType].toUpperCase()}\n\n`) {
-      toast.error("Agregá al menos un ítem para copiar");
-      return;
-    }
+    if (lines.length === 0) { toast.error("Agregá al menos un ítem para copiar"); return; }
     navigator.clipboard
       .writeText(text)
-      .then(() => {
-        if (navigator.vibrate) navigator.vibrate(30);
-        toast.success("Pedido copiado");
-      })
+      .then(() => { if (navigator.vibrate) navigator.vibrate(30); toast.success("Pedido copiado"); })
       .catch(() => toast.error("No se pudo copiar"));
   }, [products, quantities, pricesByProductId, priceType, total, customerNameForCopy, promoActive]);
 
   const handleClear = useCallback(() => {
     if (navigator.vibrate) navigator.vibrate(30);
     setSelectedCustomerId(null);
-    setQuantities(
-      productIds.reduce(
-        (acc, id) => {
-          acc[id] = 0;
-          return acc;
-        },
-        {} as Record<string, number>,
-      ),
-    );
+    setQuantities(productIds.reduce((acc, id) => { acc[id] = 0; return acc; }, {} as Record<string, number>));
   }, [productIds]);
 
   const handleNewOrder = useCallback(() => {
     if (navigator.vibrate) navigator.vibrate(30);
     setSelectedCustomerId(null);
-    setQuantities(
-      productIds.reduce(
-        (acc, id) => {
-          acc[id] = 0;
-          return acc;
-        },
-        {} as Record<string, number>,
-      ),
-    );
+    setQuantities(productIds.reduce((acc, id) => { acc[id] = 0; return acc; }, {} as Record<string, number>));
     setPriceType("mayorista");
     toast.info("Nueva orden");
   }, [productIds]);
@@ -302,99 +233,78 @@ export function OrderCalculator({
       items.push({ productId: p.id, quantity: qty, price: unitPrice });
     });
     onConfirmOrder(items, total, selectedCustomerId, priceType);
-  }, [
-    onConfirmOrder,
-    hasItems,
-    products,
-    quantities,
-    pricesByProductId,
-    priceType,
-    total,
-    selectedCustomerId,
-    promoActive,
-  ]);
+  }, [onConfirmOrder, hasItems, products, quantities, pricesByProductId, priceType, total, selectedCustomerId, promoActive]);
 
   if (!mounted) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
-        <Spin size="large" />
-      </div>
-    );
+    return <div className="ha-spin-wrap"><div className="ha-spin-el" /></div>;
   }
 
   return (
-    <div style={{ paddingBottom: 140 }}>
-      {/* Header: título + filtros */}
-      <div style={SECTION_STYLE}>
-        <div style={CONTAINER_STYLE}>
-          <h1 style={{ margin: "0 0 12px 0", color: "#ffffff", fontSize: 18 }}>{title}</h1>
-          <Row gutter={[12, 12]}>
-            <Col xs={24} md={12} lg={6}>
-              <Select
-                placeholder="Cliente"
-                value={selectedCustomerId || undefined}
-                onChange={(v) => setSelectedCustomerId(v ?? null)}
-                allowClear
-                style={{ width: "100%" }}
-                options={customers.map((c) => ({ label: c.name, value: c.id }))}
-                showSearch
-                optionFilterProp="label"
-                filterOption={(input, option) =>
-                  (option?.label ?? "").toString().toLowerCase().includes(input.toLowerCase())
-                }
-              />
-            </Col>
-            <Col xs={24} md={12} lg={10}>
-              <PriceSelector selected={priceType} onSelect={setPriceType} />
-            </Col>
-            <Col xs={24} lg={8}>
-              <Input
+    <div className="oc-screen">
+      <div className="oc-scroll">
+        <div className="oc-header">
+          <div className="oc-htop">
+            <h1 className="oc-title">{title}</h1>
+          </div>
+          <div className="oc-controls">
+            <select
+              className="oc-input ha-select"
+              value={selectedCustomerId ?? ""}
+              onChange={(e) => setSelectedCustomerId(e.target.value || null)}
+            >
+              <option value="">Cliente (opcional)</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <PriceSelector selected={priceType} onSelect={setPriceType} />
+            <div className="oc-input">
+              <span className="oc-input__ic"><Search size={16} /></span>
+              <input
                 placeholder="Buscar producto..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                prefix={<SearchOutlined style={{ color: "#9ca3af" }} />}
-                allowClear
               />
-            </Col>
-          </Row>
+              {search && (
+                <button className="oc-clear" onClick={() => setSearch("")}>✕</button>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Lista de productos */}
-      <main style={{ padding: "16px", ...CONTAINER_STYLE }}>
-        {filteredProducts.length === 0 ? (
-          <Empty
-            description={products.length === 0 ? "No hay productos cargados" : "No se encontraron productos"}
-            style={{ color: "#9ca3af", marginTop: 48 }}
-          />
-        ) : (
-          <Row gutter={[12, 12]}>
-            {filteredProducts.map((product) => {
+        <div className="oc-grid">
+          {filteredProducts.length === 0 ? (
+            <div className="oc-empty">
+              <Search size={32} strokeWidth={1.5} />
+              <p className="oc-empty__t">
+                {products.length === 0 ? "No hay productos cargados" : "No se encontraron productos"}
+              </p>
+            </div>
+          ) : (
+            filteredProducts.map((product) => {
               const prices = pricesByProductId[product.id] ?? [];
               if (prices.length === 0) return null;
               const list = getPriceForType(prices, priceType);
               const effective = effectiveUnitPriceForOrderLine(product, prices, priceType, promoActive);
-              const showPromoRow =
-                promoActive && isPromoGiftComboName(product.name) && Math.abs(effective - list) > 0.02;
+              const showPromoRow = promoActive && isPromoGiftComboName(product.name) && Math.abs(effective - list) > 0.02;
               return (
-                <Col xs={24} sm={24} md={12} xl={8} key={product.id}>
-                  <ProductRow
-                    productId={product.id}
-                    productName={product.name}
-                    prices={prices}
-                    priceType={priceType}
-                    quantity={quantities[product.id] ?? 0}
-                    onQuantityChange={(qty) => updateQuantity(product.id, qty)}
-                    unitPriceOverride={showPromoRow ? effective : undefined}
-                    listUnitPrice={list}
-                    promoTag={promoVolumeTag}
-                  />
-                </Col>
+                <ProductRow
+                  key={product.id}
+                  productId={product.id}
+                  productName={product.name}
+                  prices={prices}
+                  priceType={priceType}
+                  quantity={quantities[product.id] ?? 0}
+                  onQuantityChange={(qty) => updateQuantity(product.id, qty)}
+                  unitPriceOverride={showPromoRow ? effective : undefined}
+                  listUnitPrice={list}
+                  promoTag={promoVolumeTag}
+                />
               );
-            })}
-          </Row>
-        )}
-      </main>
+            })
+          )}
+        </div>
+      </div>
 
       <StickyFooter
         total={total}

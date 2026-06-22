@@ -4,10 +4,10 @@ import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
+import { toast } from "@/lib/toast";
 import type { CreateExpenseRequest, Expense } from "@/lib/types";
-import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, InputNumber, Modal, Space, Spin, Table } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Plus, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ExpenseGroup = {
   groupId: string;
@@ -26,13 +26,17 @@ export default function ExpensesPage() {
 }
 
 function ExpensesContent() {
-  const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form] = Form.useForm();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState("");
+  const [fdesc, setFdesc] = useState("");
+  const [fcash, setFcash] = useState("");
+  const [fcard, setFcard] = useState("");
+  const descRef = useRef<HTMLInputElement>(null);
 
   const groups: ExpenseGroup[] = useMemo(() => {
     const byGroup = new Map<string, { description: string; createdAt: string; cashAmount: number; cardAmount: number }>();
@@ -49,13 +53,7 @@ function ExpensesContent() {
       byGroup.set(e.groupId, group);
     }
 
-    return [...byGroup.entries()].map(([groupId, v]) => ({
-      groupId,
-      description: v.description,
-      createdAt: v.createdAt,
-      cashAmount: v.cashAmount,
-      cardAmount: v.cardAmount,
-    }));
+    return [...byGroup.entries()].map(([groupId, v]) => ({ groupId, ...v }));
   }, [expenses]);
 
   const fetchAllExpenses = useCallback(async () => {
@@ -78,156 +76,224 @@ function ExpensesContent() {
         setLoading(true);
         await fetchAllExpenses();
       } catch {
-        message.error("Error al cargar egresos");
+        toast.error("Error al cargar egresos");
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, [fetchAllExpenses, message]);
+  }, [fetchAllExpenses]);
 
-  const handleCreate = () => {
-    form.resetFields();
-    setModalOpen(true);
+  useEffect(() => {
+    if (drawerOpen) setTimeout(() => descRef.current?.focus(), 80);
+  }, [drawerOpen]);
+
+  const openCreate = () => {
+    setFdesc(""); setFcash(""); setFcard("");
+    setDrawerOpen(true);
   };
 
-  const handleSubmit = async (values: any) => {
-    if (!selectedLineId) {
-      message.error("Seleccioná una línea de negocio");
+  const handleSubmit = async () => {
+    if (!selectedLineId) { toast.error("Seleccioná una línea de negocio"); return; }
+    const cashAmount = Number(fcash) || 0;
+    const cardAmount = Number(fcard) || 0;
+    if (cashAmount <= 0 && cardAmount <= 0) {
+      toast.error("Debe ingresar un monto mayor a 0");
       return;
     }
     const data: CreateExpenseRequest = {
       businessLineId: selectedLineId,
-      description: values.description ?? undefined,
-      cashAmount: values.cashAmount ?? 0,
-      cardAmount: values.cardAmount ?? 0,
+      description: fdesc || undefined,
+      cashAmount,
+      cardAmount,
     };
-
-    if ((data.cashAmount ?? 0) <= 0 && (data.cardAmount ?? 0) <= 0) {
-      message.error("Debe ingresar un monto mayor a 0");
-      return;
-    }
-
     setSubmitting(true);
     try {
       await apiClient.createExpense(data);
-      message.success("Egreso registrado");
-      setModalOpen(false);
+      toast.success("Egreso registrado");
+      setDrawerOpen(false);
       await fetchAllExpenses();
     } catch {
-      message.error("Error al registrar egreso");
+      toast.error("Error al registrar egreso");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDeleteGroup = (groupId: string) => {
-    modal.confirm({
-      title: "Confirmar eliminación",
-      content: "¿Eliminar este egreso? (se borrarán también sus splits en efectivo y transferencia)",
-      okText: "Eliminar",
-      cancelText: "Cancelar",
-      onOk: async () => {
-        try {
-          await apiClient.deleteExpenseGroup(groupId);
-          message.success("Egreso eliminado");
-          await fetchAllExpenses();
-        } catch {
-          message.error("Error al eliminar egreso");
-        }
-      },
-    });
-  };
-
-  const columns = [
-    {
-      title: "Descripción",
-      dataIndex: "description",
-      key: "description",
-      render: (v: string) => v || "-",
-    },
-    {
-      title: "Fecha",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      render: (date: string) => new Date(date).toLocaleDateString("es-AR"),
-    },
-    {
-      title: "Efectivo",
-      dataIndex: "cashAmount",
-      key: "cashAmount",
-      render: (v: number) => formatCurrency(v),
-    },
-    {
-      title: "Transferencia",
-      dataIndex: "cardAmount",
-      key: "cardAmount",
-      render: (v: number) => formatCurrency(v),
-    },
-    {
-      title: "Total",
-      key: "total",
-      render: (_: unknown, record: ExpenseGroup) => formatCurrency(record.cashAmount + record.cardAmount),
-    },
-    {
-      title: "Acciones",
-      key: "actions",
-      width: 120,
-      render: (_: unknown, record: ExpenseGroup) => (
-        <Space>
-          <Button
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            title="Eliminar"
-            aria-label="Eliminar"
-            onClick={() => handleDeleteGroup(record.groupId)}
-          />
-        </Space>
-      ),
-    },
-  ];
-
   return (
     <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Egresos</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} disabled={!selectedLineId}>
-          Nuevo egreso
-        </Button>
+      <div className="ha-page-header">
+        <h1 className="ha-pagetitle">Egresos</h1>
+        <button className="ha-btn ha-btn--primary" onClick={openCreate} disabled={!selectedLineId}>
+          <Plus size={15} /> Nuevo egreso
+        </button>
       </div>
 
       {loading ? (
-        <Spin />
-      ) : groups.length > 0 ? (
-        <Table
-          columns={columns}
-          dataSource={groups}
-          rowKey="groupId"
-          style={{ backgroundColor: "#1f2937" }}
-          pagination={false}
-        />
-      ) : (
-        <div>
-          <p style={{ color: "#9ca3af" }}>No hay egresos.</p>
+        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
+          <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
         </div>
+      ) : groups.length === 0 ? (
+        <div className="ha-empty">
+          <p className="ha-empty__t">Sin egresos</p>
+          <p className="ha-empty__s">Registrá el primer egreso con el botón de arriba.</p>
+        </div>
+      ) : (
+        <>
+          <div className="ha-table-wrap">
+            <table className="ha-table">
+              <thead>
+                <tr>
+                  <th>Descripción</th>
+                  <th>Fecha</th>
+                  <th>Efectivo</th>
+                  <th>Transferencia</th>
+                  <th>Total</th>
+                  <th style={{ width: 60 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((g) => (
+                  <tr key={g.groupId}>
+                    <td style={{ fontWeight: 500 }}>{g.description || "—"}</td>
+                    <td className="ha-mono" style={{ color: "var(--ha-text-2)" }}>
+                      {new Date(g.createdAt).toLocaleDateString("es-AR")}
+                    </td>
+                    <td className="ha-mono">{formatCurrency(g.cashAmount)}</td>
+                    <td className="ha-mono">{formatCurrency(g.cardAmount)}</td>
+                    <td className="ha-mono" style={{ fontWeight: 600 }}>
+                      {formatCurrency(g.cashAmount + g.cardAmount)}
+                    </td>
+                    <td>
+                      <button
+                        onClick={() => { setDeleteId(g.groupId); setDeleteTarget(g.description); }}
+                        style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-red)", background: "transparent", borderRadius: 7, color: "var(--ha-red)", cursor: "pointer" }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="ha-cardlist">
+            {groups.map((g) => (
+              <div key={g.groupId} className="ha-ordcard">
+                <div className="ha-ordcard__top">
+                  <span className="ha-ordcard__name">{g.description || "Egreso"}</span>
+                  <button
+                    onClick={() => { setDeleteId(g.groupId); setDeleteTarget(g.description); }}
+                    style={{ width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--ha-red)", background: "transparent", borderRadius: 8, color: "var(--ha-red)", cursor: "pointer" }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+                <div className="ha-ordcard__grid">
+                  <div><div className="ha-kv__l">Fecha</div><div className="ha-kv__v ha-mono">{new Date(g.createdAt).toLocaleDateString("es-AR")}</div></div>
+                  <div><div className="ha-kv__l">Total</div><div className="ha-kv__v ha-mono" style={{ color: "var(--ha-amber)" }}>{formatCurrency(g.cashAmount + g.cardAmount)}</div></div>
+                  <div><div className="ha-kv__l">Efectivo</div><div className="ha-kv__v ha-mono">{formatCurrency(g.cashAmount)}</div></div>
+                  <div><div className="ha-kv__l">Transferencia</div><div className="ha-kv__v ha-mono">{formatCurrency(g.cardAmount)}</div></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
-      <Modal title="Nuevo egreso" open={modalOpen} onOk={() => form.submit()} onCancel={() => setModalOpen(false)} okButtonProps={{ loading: submitting, disabled: submitting }}>
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="description" label="Descripción">
-            <Input placeholder="Ej. Productos - pallet / Transporte" />
-          </Form.Item>
+      <button className="ha-fab" onClick={openCreate} aria-label="Nuevo egreso">
+        <Plus size={24} />
+      </button>
 
-          <Form.Item name="cashAmount" label="Efectivo" rules={[{ required: false }]}>
-            <InputNumber min={0} step={0.01} placeholder="0" />
-          </Form.Item>
+      {drawerOpen && (
+        <>
+          <div className="ha-overlay" onClick={() => setDrawerOpen(false)} />
+          <div className="ha-drawer">
+            <div className="ha-sheet__handle" />
+            <div className="ha-drawer__head">
+              <span className="ha-drawer__title">Nuevo egreso</span>
+              <button className="ha-iconbtn" onClick={() => setDrawerOpen(false)} aria-label="Cerrar"><X size={18} /></button>
+            </div>
+            <div className="ha-drawer__body">
+              <div className="ha-formgrid">
+                <div className="ha-field">
+                  <label className="ha-label">Descripción</label>
+                  <input
+                    ref={descRef}
+                    className="ha-input"
+                    placeholder="Ej. Productos - pallet / Transporte"
+                    value={fdesc}
+                    onChange={(e) => setFdesc(e.target.value)}
+                  />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="ha-field">
+                    <label className="ha-label">Efectivo</label>
+                    <input
+                      type="number"
+                      className="ha-input"
+                      placeholder="0"
+                      min={0}
+                      step={0.01}
+                      value={fcash}
+                      onChange={(e) => setFcash(e.target.value)}
+                    />
+                  </div>
+                  <div className="ha-field">
+                    <label className="ha-label">Transferencia</label>
+                    <input
+                      type="number"
+                      className="ha-input"
+                      placeholder="0"
+                      min={0}
+                      step={0.01}
+                      value={fcard}
+                      onChange={(e) => setFcard(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="ha-drawer__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setDrawerOpen(false)}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? "Guardando…" : "Registrar"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
-          <Form.Item name="cardAmount" label="Transferencia" rules={[{ required: false }]}>
-            <InputNumber min={0} step={0.01} placeholder="0" />
-          </Form.Item>
-        </Form>
-      </Modal>
+      {deleteId && (
+        <div className="ha-dialog-back" onClick={() => setDeleteId(null)}>
+          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="ha-dialog__head">
+              <h3 className="ha-dialog__title">¿Eliminar egreso?</h3>
+              <p className="ha-dialog__sub">Se borrarán también sus splits en efectivo y transferencia.</p>
+            </div>
+            <div className="ha-dialog__body">
+              <p style={{ color: "var(--ha-text-2)", margin: 0, fontSize: 14 }}>
+                Se eliminará <strong style={{ color: "var(--ha-text)" }}>{deleteTarget || "este egreso"}</strong>.
+              </p>
+            </div>
+            <div className="ha-dialog__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
+              <button className="ha-btn ha-btn--destructive" onClick={async () => {
+                try {
+                  await apiClient.deleteExpenseGroup(deleteId!);
+                  toast.success("Egreso eliminado");
+                  setDeleteId(null);
+                  await fetchAllExpenses();
+                } catch {
+                  toast.error("Error al eliminar egreso");
+                  setDeleteId(null);
+                }
+              }}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

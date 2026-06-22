@@ -4,8 +4,14 @@ import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
 import { orderPaymentStatusLabel } from "@/lib/order-labels";
-import { OrderPaymentStatus, PaymentMethod, type Order, type OrderItem, type OrderPayment } from "@/lib/types";
-import { App, Button, Card, Col, InputNumber, Modal, Row, Select, Space, Spin, Table as AntTable, Tag } from "antd";
+import { toast } from "@/lib/toast";
+import {
+  OrderPaymentStatus,
+  PaymentMethod,
+  type Order,
+  type OrderItem,
+  type OrderPayment,
+} from "@/lib/types";
 import { useEffect, useState } from "react";
 
 type Props = {
@@ -25,29 +31,50 @@ type DevolverItem = {
   quantity: number | null;
 };
 
+const PAYMENT_STATUS_COLOR: Record<string, string> = {
+  [OrderPaymentStatus.PAID]: "#4ade80",
+  [OrderPaymentStatus.PARTIALLY_PAID]: "#fbbf24",
+  [OrderPaymentStatus.PENDING_PRICING]: "#f97316",
+  [OrderPaymentStatus.CANCELLED]: "#f87171",
+};
+
+function statusBadge(status: string) {
+  const color = PAYMENT_STATUS_COLOR[status] ?? "var(--ha-text-3)";
+  return (
+    <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 5, fontSize: 12, fontWeight: 500, background: `${color}22`, color, border: `1px solid ${color}55` }}>
+      {orderPaymentStatusLabel(status)}
+    </span>
+  );
+}
+
+function Spinner() {
+  return (
+    <span
+      style={{ display: "inline-block", width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite", verticalAlign: "middle" }}
+    />
+  );
+}
+
 export function OrderDetailView({ order, onOrderUpdated }: Props) {
-  const { message } = App.useApp();
-  const [paymentAmount, setPaymentAmount] = useState<number | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [addingPayment, setAddingPayment] = useState(false);
   const [updatingPaymentId, setUpdatingPaymentId] = useState<string | null>(null);
 
-  // Cobrar modal state
   const [cobrarModalOpen, setCobrarModalOpen] = useState(false);
   const [cobrarItems, setCobrarItems] = useState<CobrarItem[]>([]);
-  const [cobrarPaymentAmount, setCobrarPaymentAmount] = useState<number | null>(null);
+  const [cobrarPaymentAmount, setCobrarPaymentAmount] = useState<string>("");
   const [cobrarPaymentMethod, setCobrarPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [cobrarLoading, setCobrarLoading] = useState(false);
   const [cobrarPricesLoading, setCobrarPricesLoading] = useState(false);
 
-  // Devolver modal state
   const [devolverModalOpen, setDevolverModalOpen] = useState(false);
   const [devolverItems, setDevolverItems] = useState<DevolverItem[]>([]);
   const [devolverLoading, setDevolverLoading] = useState(false);
 
   useEffect(() => {
     const r = Number(order.remainingAmount ?? 0);
-    setPaymentAmount(r > 0 ? r : null);
+    setPaymentAmount(r > 0 ? String(r) : "");
   }, [order.id, order.remainingAmount]);
 
   const openCobrarModal = async () => {
@@ -59,7 +86,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       unsoldDisposition: null,
     }));
     setCobrarItems(initialItems);
-    setCobrarPaymentAmount(null);
+    setCobrarPaymentAmount("");
     setCobrarPaymentMethod(PaymentMethod.CASH);
     setCobrarModalOpen(true);
     setCobrarPricesLoading(true);
@@ -100,21 +127,20 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
 
   useEffect(() => {
     if (cobrarModalOpen && cobrarTotal > 0) {
-      setCobrarPaymentAmount(cobrarTotal);
+      setCobrarPaymentAmount(String(cobrarTotal));
     }
   }, [cobrarTotal, cobrarModalOpen]);
 
   const handleCobrar = async () => {
-    const hasUnpricedItem = cobrarItems.some((i) => i.price === null || i.price < 0);
-    if (hasUnpricedItem) {
-      message.error("Ingresá el precio para todos los ítems antes de confirmar");
+    if (cobrarItems.some((i) => i.price === null || i.price < 0)) {
+      toast.error("Ingresá el precio para todos los ítems antes de confirmar");
       return;
     }
     for (const i of cobrarItems) {
       const oi = (order.orderItems ?? []).find((oi) => oi.id === i.orderItemId);
       const qty = i.quantitySold ?? Number(oi?.quantity ?? 0);
       if (qty < Number(oi?.quantity ?? 0) && !i.unsoldDisposition) {
-        message.error("Seleccioná qué hacer con las unidades no vendidas de cada ítem");
+        toast.error("Seleccioná qué hacer con las unidades no vendidas de cada ítem");
         return;
       }
     }
@@ -136,30 +162,20 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
           };
         }),
       });
-      if (
-        cobrarPaymentAmount &&
-        cobrarPaymentAmount > 0 &&
-        updatedOrder.paymentStatus !== OrderPaymentStatus.PENDING_PRICING
-      ) {
+      const amt = Number(cobrarPaymentAmount);
+      if (amt > 0 && updatedOrder.paymentStatus !== OrderPaymentStatus.PENDING_PRICING) {
         updatedOrder = await apiClient.createOrderPayment(order.id, {
-          amount: cobrarPaymentAmount,
+          amount: amt,
           method: cobrarPaymentMethod,
         });
       }
       onOrderUpdated(updatedOrder);
       setCobrarModalOpen(false);
       const stillPending = updatedOrder.paymentStatus === OrderPaymentStatus.PENDING_PRICING;
-      message.success(
-        stillPending
-          ? "Precios fijados. Los ítems restantes quedan en consignación."
-          : "Consignación cobrada",
-      );
+      toast.success(stillPending ? "Precios fijados. Los ítems restantes quedan en consignación." : "Consignación cobrada");
     } catch (error: unknown) {
-      const msg =
-        error && typeof error === "object" && "message" in error
-          ? String((error as { message: string }).message)
-          : "No se pudo registrar el cobro";
-      message.error(msg);
+      const msg = error && typeof error === "object" && "message" in error ? String((error as { message: string }).message) : "No se pudo registrar el cobro";
+      toast.error(msg);
     } finally {
       setCobrarLoading(false);
     }
@@ -174,7 +190,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
   const handleDevolver = async () => {
     const itemsToReturn = devolverItems.filter((i) => i.quantity && i.quantity > 0);
     if (itemsToReturn.length === 0) {
-      message.error("Ingresá al menos una cantidad mayor a 0 para devolver");
+      toast.error("Ingresá al menos una cantidad mayor a 0 para devolver");
       return;
     }
     setDevolverLoading(true);
@@ -184,36 +200,28 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       });
       onOrderUpdated(updated);
       setDevolverModalOpen(false);
-      message.success("Devolución registrada");
+      toast.success("Devolución registrada");
     } catch (error: unknown) {
-      const msg =
-        error && typeof error === "object" && "message" in error
-          ? String((error as { message: string }).message)
-          : "No se pudo registrar la devolución";
-      message.error(msg);
+      const msg = error && typeof error === "object" && "message" in error ? String((error as { message: string }).message) : "No se pudo registrar la devolución";
+      toast.error(msg);
     } finally {
       setDevolverLoading(false);
     }
   };
 
   const handleAddPayment = async () => {
-    if (!paymentAmount || paymentAmount <= 0) return;
+    const amt = Number(paymentAmount);
+    if (!amt || amt <= 0) return;
     try {
       setAddingPayment(true);
-      const updated = await apiClient.createOrderPayment(order.id, {
-        amount: Number(paymentAmount),
-        method: paymentMethod,
-      });
+      const updated = await apiClient.createOrderPayment(order.id, { amount: amt, method: paymentMethod });
       onOrderUpdated(updated);
       const nextRemaining = Number(updated.remainingAmount ?? 0);
-      setPaymentAmount(nextRemaining > 0 ? nextRemaining : null);
-      message.success("Pago registrado");
+      setPaymentAmount(nextRemaining > 0 ? String(nextRemaining) : "");
+      toast.success("Pago registrado");
     } catch (error: unknown) {
-      const msg =
-        error && typeof error === "object" && "message" in error
-          ? String((error as { message: string }).message)
-          : "No se pudo registrar el pago";
-      message.error(msg);
+      const msg = error && typeof error === "object" && "message" in error ? String((error as { message: string }).message) : "No se pudo registrar el pago";
+      toast.error(msg);
     } finally {
       setAddingPayment(false);
     }
@@ -225,13 +233,10 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       setUpdatingPaymentId(paymentId);
       const updated = await apiClient.updateOrderPayment(order.id, paymentId, { method });
       onOrderUpdated(updated);
-      message.success("Medio de pago actualizado");
+      toast.success("Medio de pago actualizado");
     } catch (error: unknown) {
-      const msg =
-        error && typeof error === "object" && "message" in error
-          ? String((error as { message: string }).message)
-          : "No se pudo actualizar el medio de pago";
-      message.error(msg);
+      const msg = error && typeof error === "object" && "message" in error ? String((error as { message: string }).message) : "No se pudo actualizar el medio de pago";
+      toast.error(msg);
     } finally {
       setUpdatingPaymentId(null);
     }
@@ -240,402 +245,357 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
   const isCancelled = order.paymentStatus === OrderPaymentStatus.CANCELLED;
   const isPendingPricing = order.isConsignment && order.paymentStatus === OrderPaymentStatus.PENDING_PRICING;
   const pendingOrderItems = (order.orderItems ?? []).filter((i) => i.price === null || i.price === undefined);
-
-  const itemColumns = [
-    { title: "Producto", dataIndex: ["product", "name"], key: "product" },
-    ...(order.isConsignment
-      ? [
-          {
-            title: "Consignado",
-            key: "originalQuantity",
-            render: (_: unknown, record: OrderItem) =>
-              record.originalQuantity != null ? formatQuantity(record.originalQuantity) : "—",
-          },
-        ]
-      : []),
-    {
-      title: "Cantidad",
-      dataIndex: "quantity",
-      key: "quantity",
-      render: (q: number) => formatQuantity(q),
-    },
-    {
-      title: "Precio",
-      dataIndex: "price",
-      key: "price",
-      render: (v: number | string | null) => (v === null || v === undefined ? "—" : formatCurrency(v)),
-    },
-    {
-      title: "Subtotal",
-      key: "subtotal",
-      render: (_: unknown, record: OrderItem) =>
-        record.price === null || record.price === undefined
-          ? "—"
-          : formatCurrency(Number(record.price) * Number(record.quantity)),
-    },
-  ];
+  const isPaid = order.paymentStatus === OrderPaymentStatus.PAID;
 
   return (
     <div>
-      <Card style={{ marginBottom: 16, background: "#1f2937" }}>
-        <Row gutter={[16, 12]}>
-          <Col xs={24} sm={12}>
-            <strong>Cliente:</strong> {order.customer?.name || "—"}
-          </Col>
-          <Col xs={24} sm={12}>
-            <strong>Vendedor:</strong> {order.user?.name || "—"}
-          </Col>
-          <Col xs={24} sm={12}>
-            <strong>Total:</strong> {formatCurrency(order.total)}
-          </Col>
-          <Col xs={24} sm={12}>
-            <strong>Total calculado:</strong> {formatCurrency(order.totalPrice)}
-          </Col>
-          <Col xs={24} sm={12}>
+      <div style={{ marginBottom: 16, padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "8px 24px" }}>
+          <div><strong>Cliente:</strong> {order.customer?.name || "—"}</div>
+          <div><strong>Vendedor:</strong> {order.user?.name || "—"}</div>
+          <div><strong>Total:</strong> {formatCurrency(order.total)}</div>
+          <div><strong>Total calculado:</strong> {formatCurrency(order.totalPrice)}</div>
+          <div>
             <strong>Estado de pago:</strong>{" "}
-            <Tag
-              color={
-                order.paymentStatus === OrderPaymentStatus.PAID
-                  ? "green"
-                  : order.paymentStatus === OrderPaymentStatus.PARTIALLY_PAID
-                    ? "gold"
-                    : order.paymentStatus === OrderPaymentStatus.PENDING_PRICING
-                      ? "orange"
-                      : order.paymentStatus === OrderPaymentStatus.CANCELLED
-                        ? "red"
-                        : "default"
-              }
-            >
-              {orderPaymentStatusLabel(order.paymentStatus)}
-            </Tag>
-            {order.isConsignment && <Tag color="purple" style={{ marginLeft: 4 }}>Consignación</Tag>}
-          </Col>
-          <Col xs={24} sm={12}>
-            <strong>Pagado:</strong> {formatCurrency(order.paidAmount)}
-          </Col>
-          <Col xs={24} sm={12}>
-            <strong>Pendiente:</strong> {formatCurrency(order.remainingAmount)}
-          </Col>
-          <Col xs={24} sm={12}>
-            <strong>Lista de precios:</strong> {orderPriceListDisplayLabel(order.priceListType)}
-          </Col>
-          <Col xs={24} sm={12}>
-            <strong>Creada:</strong> {new Date(order.createdAt).toLocaleDateString("es-AR")}
-          </Col>
-          {isCancelled && order.cancelledAt && (
-            <Col xs={24} sm={12}>
-              <strong>Cancelada el:</strong>{" "}
-              <span style={{ color: "#ef4444" }}>
-                {new Date(order.cancelledAt).toLocaleDateString("es-AR")}
+            {statusBadge(order.paymentStatus)}
+            {order.isConsignment && (
+              <span style={{ display: "inline-block", marginLeft: 4, padding: "2px 8px", borderRadius: 5, fontSize: 12, fontWeight: 500, background: "#7c3aed22", color: "#a78bfa", border: "1px solid #7c3aed55" }}>
+                Consignación
               </span>
-            </Col>
+            )}
+          </div>
+          <div><strong>Pagado:</strong> {formatCurrency(order.paidAmount)}</div>
+          <div><strong>Pendiente:</strong> {formatCurrency(order.remainingAmount)}</div>
+          <div><strong>Lista de precios:</strong> {orderPriceListDisplayLabel(order.priceListType)}</div>
+          <div><strong>Creada:</strong> {new Date(order.createdAt).toLocaleDateString("es-AR")}</div>
+          {isCancelled && order.cancelledAt && (
+            <div><strong>Cancelada el:</strong> <span style={{ color: "#ef4444" }}>{new Date(order.cancelledAt).toLocaleDateString("es-AR")}</span></div>
           )}
-          <Col xs={24} sm={12}>
-            <strong>Entrega programada:</strong>{" "}
-            {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString("es-AR") : "—"}
-          </Col>
-          <Col xs={24} sm={12}>
-            <strong>Entregada:</strong> {order.isDelivered ? "Sí" : "No"}
-          </Col>
-          <Col xs={24} sm={12}>
-            <strong>Entregada el:</strong>{" "}
-            {order.deliveredAt ? new Date(order.deliveredAt).toLocaleString("es-AR") : "—"}
-          </Col>
-          <Col xs={24} sm={12}>
-            <strong>Ubicación de stock:</strong> {order.fulfillmentLocation?.name ?? "—"}
-          </Col>
+          <div><strong>Entrega programada:</strong> {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString("es-AR") : "—"}</div>
+          <div><strong>Entregada:</strong> {order.isDelivered ? "Sí" : "No"}</div>
+          <div><strong>Entregada el:</strong> {order.deliveredAt ? new Date(order.deliveredAt).toLocaleString("es-AR") : "—"}</div>
+          <div><strong>Ubicación de stock:</strong> {order.fulfillmentLocation?.name ?? "—"}</div>
           {order.comment ? (
-            <Col xs={24}>
-              <strong>Comentario:</strong> <span style={{ whiteSpace: "pre-wrap" }}>{order.comment}</span>
-            </Col>
+            <div style={{ gridColumn: "1 / -1" }}><strong>Comentario:</strong> <span style={{ whiteSpace: "pre-wrap" }}>{order.comment}</span></div>
           ) : null}
-        </Row>
-      </Card>
+        </div>
+      </div>
 
-      <h3 style={{ color: "#ffffff" }}>Ítems</h3>
-      <AntTable
-        style={{ marginBottom: 24 }}
-        columns={itemColumns}
-        dataSource={(order.orderItems || []) as OrderItem[]}
-        rowKey="id"
-        pagination={false}
-      />
+      <h3 style={{ color: "#fff", marginBottom: 8 }}>Ítems</h3>
+      <div className="ha-table-wrap" style={{ marginBottom: 24 }}>
+        <table className="ha-table">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              {order.isConsignment && <th>Consignado</th>}
+              <th>Cantidad</th>
+              <th>Precio</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(order.orderItems ?? []).map((item) => (
+              <tr key={item.id}>
+                <td>{item.product?.name ?? "—"}</td>
+                {order.isConsignment && <td>{item.originalQuantity != null ? formatQuantity(item.originalQuantity) : "—"}</td>}
+                <td>{formatQuantity(item.quantity)}</td>
+                <td>{item.price === null || item.price === undefined ? "—" : formatCurrency(item.price)}</td>
+                <td>{item.price === null || item.price === undefined ? "—" : formatCurrency(Number(item.price) * Number(item.quantity))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      <h3 style={{ color: "#ffffff" }}>Pagos</h3>
+      <h3 style={{ color: "#fff", marginBottom: 8 }}>Pagos</h3>
 
       {isPendingPricing ? (
-        <Card style={{ marginBottom: 16, background: "#1f2937" }}>
-          <p style={{ color: "#9ca3af", marginBottom: 12 }}>
-            Esta orden está pendiente de cobro. Ingresá los precios del día para cada ítem y registrá el pago.
-          </p>
-          <Space wrap>
-            <Button type="primary" onClick={openCobrarModal}>
-              Cobrar consignación
-            </Button>
-            <Button onClick={openDevolverModal}>
-              Registrar devolución
-            </Button>
-          </Space>
-        </Card>
+        <div style={{ marginBottom: 16, padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
+          <p style={{ color: "#9ca3af", marginBottom: 12 }}>Esta orden está pendiente de cobro. Ingresá los precios del día para cada ítem y registrá el pago.</p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="ha-btn ha-btn--primary" onClick={() => void openCobrarModal()}>Cobrar consignación</button>
+            <button className="ha-btn ha-btn--secondary" onClick={openDevolverModal}>Registrar devolución</button>
+          </div>
+        </div>
       ) : isCancelled ? (
-        <Card style={{ marginBottom: 16, background: "#1f2937" }}>
-          <p style={{ color: "#9ca3af" }}>
-            Esta orden fue cancelada. No se pueden registrar pagos ni devoluciones.
-          </p>
-        </Card>
+        <div style={{ marginBottom: 16, padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
+          <p style={{ color: "#9ca3af" }}>Esta orden fue cancelada. No se pueden registrar pagos ni devoluciones.</p>
+        </div>
       ) : (
-        <Card style={{ marginBottom: 16, background: "#1f2937" }}>
-          <Space wrap>
-            <InputNumber
+        <div style={{ marginBottom: 16, padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <input
+              type="number"
               min={0.01}
-              value={paymentAmount ?? undefined}
-              onChange={(v) => setPaymentAmount(v ?? null)}
+              step={0.01}
+              className="ha-input"
+              style={{ width: 140 }}
               placeholder="Monto"
-              disabled={order.paymentStatus === OrderPaymentStatus.PAID}
+              value={paymentAmount}
+              onChange={(e) => setPaymentAmount(e.target.value)}
+              disabled={isPaid}
             />
-            <Select
-              value={paymentMethod}
-              onChange={(v) => setPaymentMethod(v)}
+            <select
+              className="ha-input"
               style={{ width: 200 }}
-              options={[
-                { label: "Efectivo", value: PaymentMethod.CASH },
-                { label: "Transferencia", value: PaymentMethod.CARD },
-              ]}
-              disabled={order.paymentStatus === OrderPaymentStatus.PAID}
-            />
-            <Button
-              type="primary"
-              onClick={() => void handleAddPayment()}
-              loading={addingPayment}
-              disabled={order.paymentStatus === OrderPaymentStatus.PAID || !paymentAmount || paymentAmount <= 0}
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+              disabled={isPaid}
             >
-              Registrar pago
-            </Button>
-          </Space>
-        </Card>
+              <option value={PaymentMethod.CASH}>Efectivo</option>
+              <option value={PaymentMethod.CARD}>Transferencia</option>
+            </select>
+            <button
+              className="ha-btn ha-btn--primary"
+              onClick={() => void handleAddPayment()}
+              disabled={isPaid || !paymentAmount || Number(paymentAmount) <= 0 || addingPayment}
+            >
+              {addingPayment ? <><Spinner /> Registrando…</> : "Registrar pago"}
+            </button>
+          </div>
+        </div>
       )}
 
-      <AntTable
-        columns={[
-          {
-            title: "Medio",
-            dataIndex: "method",
-            key: "method",
-            width: 220,
-            render: (_: unknown, record: OrderPayment) => (
-              <Select
-                size="small"
-                value={record.method}
-                style={{ minWidth: 180 }}
-                loading={updatingPaymentId === record.id}
-                disabled={updatingPaymentId !== null}
-                onChange={(v) => void handleUpdatePaymentMethod(record.id, v as PaymentMethod)}
-                options={[
-                  { label: "Efectivo", value: PaymentMethod.CASH },
-                  { label: "Transferencia", value: PaymentMethod.CARD },
-                ]}
-                aria-label="Medio de pago"
-              />
-            ),
-          },
-          {
-            title: "Monto",
-            dataIndex: "amount",
-            key: "amount",
-            render: (v: number | string) => formatCurrency(v),
-          },
-        ]}
-        dataSource={(order.payments || []) as OrderPayment[]}
-        rowKey="id"
-        pagination={false}
-        locale={{ emptyText: "Sin pagos registrados" }}
-      />
+      <div className="ha-table-wrap" style={{ marginBottom: 24 }}>
+        <table className="ha-table">
+          <thead>
+            <tr>
+              <th>Medio</th>
+              <th>Monto</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(order.payments ?? []).length === 0 ? (
+              <tr><td colSpan={2} style={{ color: "var(--ha-text-3)", textAlign: "center" }}>Sin pagos registrados</td></tr>
+            ) : (order.payments ?? []).map((payment) => (
+              <tr key={payment.id}>
+                <td>
+                  <select
+                    className="ha-input"
+                    style={{ minWidth: 180 }}
+                    value={payment.method}
+                    disabled={updatingPaymentId !== null}
+                    onChange={(e) => void handleUpdatePaymentMethod(payment.id, e.target.value as PaymentMethod)}
+                    aria-label="Medio de pago"
+                  >
+                    <option value={PaymentMethod.CASH}>Efectivo</option>
+                    <option value={PaymentMethod.CARD}>Transferencia</option>
+                  </select>
+                  {updatingPaymentId === payment.id && <Spinner />}
+                </td>
+                <td>{formatCurrency(payment.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {/* Modal Cobrar consignación */}
-      <Modal
-        title="Cobrar consignación"
-        open={cobrarModalOpen}
-        onCancel={() => setCobrarModalOpen(false)}
-        footer={[
-          <Button key="cancel" onClick={() => setCobrarModalOpen(false)}>
-            Cancelar
-          </Button>,
-          <Button key="confirm" type="primary" loading={cobrarLoading} onClick={() => void handleCobrar()}>
-            Confirmar cobro
-          </Button>,
-        ]}
-      >
-        <p style={{ color: "#9ca3af", marginBottom: 16 }}>
-          Precios pre-llenados con la lista activa ({(order.priceListType as string) ?? "mayorista"}). Podés editarlos antes de confirmar.
-        </p>
-        {cobrarPricesLoading && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, color: "#9ca3af" }}>
-            <Spin size="small" /> Cargando precios actuales…
+      {cobrarModalOpen && (
+        <div className="ha-modal-backdrop" onClick={() => setCobrarModalOpen(false)}>
+          <div className="ha-modal" style={{ maxWidth: 740 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">Cobrar consignación</span>
+              <button className="ha-iconbtn" onClick={() => setCobrarModalOpen(false)} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body" style={{ maxHeight: "calc(100vh - 220px)", overflowY: "auto" }}>
+              <p style={{ color: "#9ca3af", marginBottom: 16 }}>
+                Precios pre-llenados con la lista activa ({(order.priceListType as string) ?? "mayorista"}). Podés editarlos antes de confirmar.
+              </p>
+              {cobrarPricesLoading && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, color: "#9ca3af" }}>
+                  <Spinner /> Cargando precios actuales…
+                </div>
+              )}
+              <div className="ha-table-wrap" style={{ marginBottom: 16 }}>
+                <table className="ha-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Disponible</th>
+                      <th>Cant. vendida</th>
+                      <th>Remanente</th>
+                      <th>Precio unitario</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingOrderItems.map((oi) => {
+                      const ci = cobrarItems.find((c) => c.orderItemId === oi.id);
+                      const cobrarQty = ci?.quantitySold ?? Number(oi.quantity);
+                      const cobrarDisposition = ci?.unsoldDisposition ?? null;
+                      const cobrarPrice = ci?.price ?? null;
+                      const remaining = Number(oi.quantity) - cobrarQty;
+                      return (
+                        <tr key={oi.id}>
+                          <td>{oi.product?.name ?? "—"}</td>
+                          <td>{formatQuantity(oi.quantity)}</td>
+                          <td>
+                            <input
+                              type="number"
+                              min={0}
+                              max={Number(oi.quantity)}
+                              step={1}
+                              className="ha-input"
+                              style={{ width: 80 }}
+                              value={cobrarQty}
+                              onChange={(e) => {
+                                const v = Number(e.target.value);
+                                setCobrarItems((prev) => prev.map((i) =>
+                                  i.orderItemId === oi.id
+                                    ? { ...i, quantitySold: v, unsoldDisposition: v === Number(oi.quantity) ? null : i.unsoldDisposition }
+                                    : i,
+                                ));
+                              }}
+                            />
+                          </td>
+                          <td>
+                            {remaining <= 0 ? (
+                              <span style={{ color: "#6b7280" }}>—</span>
+                            ) : (
+                              <select
+                                className="ha-input"
+                                style={{ width: 170 }}
+                                value={cobrarDisposition ?? ""}
+                                onChange={(e) => {
+                                  const v = e.target.value as "RETURN_TO_STOCK" | "KEEP_ON_CONSIGNMENT";
+                                  setCobrarItems((prev) => prev.map((i) =>
+                                    i.orderItemId === oi.id ? { ...i, unsoldDisposition: v } : i,
+                                  ));
+                                }}
+                              >
+                                <option value="">¿Qué hacemos?</option>
+                                <option value="RETURN_TO_STOCK">Devolver al stock</option>
+                                <option value="KEEP_ON_CONSIGNMENT">Dejar en consignación</option>
+                              </select>
+                            )}
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              className="ha-input"
+                              style={{ width: 110 }}
+                              placeholder="0.00"
+                              value={cobrarPrice ?? ""}
+                              onChange={(e) => {
+                                const v = e.target.value === "" ? null : Number(e.target.value);
+                                setCobrarItems((prev) => prev.map((i) =>
+                                  i.orderItemId === oi.id ? { ...i, price: v } : i,
+                                ));
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <strong style={{ color: "#e5e7eb" }}>Total: {formatCurrency(cobrarTotal)}</strong>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <input
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  className="ha-input"
+                  style={{ width: 160 }}
+                  placeholder="Monto del pago"
+                  value={cobrarPaymentAmount}
+                  onChange={(e) => setCobrarPaymentAmount(e.target.value)}
+                />
+                <select
+                  className="ha-input"
+                  style={{ width: 180 }}
+                  value={cobrarPaymentMethod}
+                  onChange={(e) => setCobrarPaymentMethod(e.target.value as PaymentMethod)}
+                >
+                  <option value={PaymentMethod.CASH}>Efectivo</option>
+                  <option value={PaymentMethod.CARD}>Transferencia</option>
+                </select>
+              </div>
+              <p style={{ color: "#9ca3af", marginTop: 8, fontSize: 12 }}>
+                Dejá el monto en blanco si querés fijar los precios sin registrar el pago todavía.
+              </p>
+            </div>
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setCobrarModalOpen(false)}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" disabled={cobrarLoading} onClick={() => void handleCobrar()}>
+                {cobrarLoading ? <><Spinner /> Confirmando…</> : "Confirmar cobro"}
+              </button>
+            </div>
           </div>
-        )}
-        <AntTable
-          size="small"
-          pagination={false}
-          style={{ marginBottom: 16 }}
-          dataSource={pendingOrderItems.map((oi) => {
-            const ci = cobrarItems.find((c) => c.orderItemId === oi.id);
-            return { ...oi, cobrarPrice: ci?.price ?? null, cobrarQty: ci?.quantitySold ?? Number(oi.quantity), cobrarDisposition: ci?.unsoldDisposition ?? null };
-          })}
-          rowKey="id"
-          columns={[
-            { title: "Producto", dataIndex: ["product", "name"], key: "product" },
-            {
-              title: "Disponible",
-              dataIndex: "quantity",
-              key: "quantity",
-              render: (q: number) => formatQuantity(q),
-            },
-            {
-              title: "Cant. vendida",
-              key: "cantVendida",
-              render: (_: unknown, record: OrderItem & { cobrarQty: number; cobrarDisposition: string | null }) => (
-                <InputNumber
-                  min={0}
-                  max={Number(record.quantity)}
-                  value={record.cobrarQty}
-                  onChange={(v) =>
-                    setCobrarItems((prev) =>
-                      prev.map((i) =>
-                        i.orderItemId === record.id
-                          ? { ...i, quantitySold: v ?? 0, unsoldDisposition: v === Number(record.quantity) ? null : i.unsoldDisposition }
-                          : i,
-                      ),
-                    )
-                  }
-                  style={{ width: 80 }}
-                />
-              ),
-            },
-            {
-              title: "Remanente",
-              key: "remanente",
-              render: (_: unknown, record: OrderItem & { cobrarQty: number; cobrarDisposition: string | null }) => {
-                const sold = record.cobrarQty;
-                const remaining = Number(record.quantity) - sold;
-                if (remaining <= 0) return <span style={{ color: "#6b7280" }}>—</span>;
-                return (
-                  <Select
-                    placeholder="¿Qué hacemos?"
-                    value={record.cobrarDisposition ?? undefined}
-                    style={{ width: 170 }}
-                    onChange={(v) =>
-                      setCobrarItems((prev) =>
-                        prev.map((i) =>
-                          i.orderItemId === record.id ? { ...i, unsoldDisposition: v as "RETURN_TO_STOCK" | "KEEP_ON_CONSIGNMENT" } : i,
-                        ),
-                      )
-                    }
-                    options={[
-                      { label: "Devolver al stock", value: "RETURN_TO_STOCK" },
-                      { label: "Dejar en consignación", value: "KEEP_ON_CONSIGNMENT" },
-                    ]}
-                  />
-                );
-              },
-            },
-            {
-              title: "Precio unitario",
-              key: "price",
-              render: (_: unknown, record: OrderItem & { cobrarPrice: number | null }) => (
-                <InputNumber
-                  min={0}
-                  value={record.cobrarPrice ?? undefined}
-                  placeholder="0.00"
-                  onChange={(v) =>
-                    setCobrarItems((prev) =>
-                      prev.map((i) => (i.orderItemId === record.id ? { ...i, price: v ?? null } : i)),
-                    )
-                  }
-                  style={{ width: 110 }}
-                />
-              ),
-            },
-          ]}
-        />
-        <div style={{ marginBottom: 16 }}>
-          <strong style={{ color: "#e5e7eb" }}>Total: {formatCurrency(cobrarTotal)}</strong>
         </div>
-        <Space wrap>
-          <InputNumber
-            min={0.01}
-            value={cobrarPaymentAmount ?? undefined}
-            onChange={(v) => setCobrarPaymentAmount(v ?? null)}
-            placeholder="Monto del pago"
-          />
-          <Select
-            value={cobrarPaymentMethod}
-            onChange={(v) => setCobrarPaymentMethod(v)}
-            style={{ width: 180 }}
-            options={[
-              { label: "Efectivo", value: PaymentMethod.CASH },
-              { label: "Transferencia", value: PaymentMethod.CARD },
-            ]}
-          />
-        </Space>
-        <p style={{ color: "#9ca3af", marginTop: 8, fontSize: 12 }}>
-          Dejá el monto en blanco si querés fijar los precios sin registrar el pago todavía.
-        </p>
-      </Modal>
+      )}
 
       {/* Modal Registrar devolución */}
-      <Modal
-        title="Registrar devolución"
-        open={devolverModalOpen}
-        onCancel={() => setDevolverModalOpen(false)}
-        footer={[
-          <Button key="cancel" onClick={() => setDevolverModalOpen(false)}>
-            Cancelar
-          </Button>,
-          <Button key="confirm" danger loading={devolverLoading} onClick={() => void handleDevolver()}>
-            Confirmar devolución
-          </Button>,
-        ]}
-      >
-        <p style={{ color: "#9ca3af", marginBottom: 16 }}>
-          Ingresá la cantidad que devuelve el cliente por cada ítem. El stock se reincorporará al inventario.
-        </p>
-        <AntTable
-          size="small"
-          pagination={false}
-          style={{ marginBottom: 16 }}
-          dataSource={pendingOrderItems.map((oi) => ({
-            ...oi,
-            devolverQty: devolverItems.find((d) => d.orderItemId === oi.id)?.quantity ?? Number(oi.quantity),
-          }))}
-          rowKey="id"
-          columns={[
-            { title: "Producto", dataIndex: ["product", "name"], key: "product" },
-            {
-              title: "En consignación",
-              dataIndex: "quantity",
-              key: "quantity",
-              render: (q: number) => formatQuantity(q),
-            },
-            {
-              title: "Cant. a devolver",
-              key: "cantDevolver",
-              render: (_: unknown, record: OrderItem & { devolverQty: number }) => (
-                <InputNumber
-                  min={0}
-                  max={Number(record.quantity)}
-                  value={record.devolverQty}
-                  onChange={(v) =>
-                    setDevolverItems((prev) =>
-                      prev.map((d) => (d.orderItemId === record.id ? { ...d, quantity: v ?? 0 } : d)),
-                    )
-                  }
-                  style={{ width: 100 }}
-                />
-              ),
-            },
-          ]}
-        />
-      </Modal>
+      {devolverModalOpen && (
+        <div className="ha-modal-backdrop" onClick={() => setDevolverModalOpen(false)}>
+          <div className="ha-modal" style={{ maxWidth: 600 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">Registrar devolución</span>
+              <button className="ha-iconbtn" onClick={() => setDevolverModalOpen(false)} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body">
+              <p style={{ color: "#9ca3af", marginBottom: 16 }}>
+                Ingresá la cantidad que devuelve el cliente por cada ítem. El stock se reincorporará al inventario.
+              </p>
+              <div className="ha-table-wrap" style={{ marginBottom: 16 }}>
+                <table className="ha-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>En consignación</th>
+                      <th>Cant. a devolver</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingOrderItems.map((oi) => {
+                      const devolverQty = devolverItems.find((d) => d.orderItemId === oi.id)?.quantity ?? Number(oi.quantity);
+                      return (
+                        <tr key={oi.id}>
+                          <td>{oi.product?.name ?? "—"}</td>
+                          <td>{formatQuantity(oi.quantity)}</td>
+                          <td>
+                            <input
+                              type="number"
+                              min={0}
+                              max={Number(oi.quantity)}
+                              step={1}
+                              className="ha-input"
+                              style={{ width: 100 }}
+                              value={devolverQty}
+                              onChange={(e) => {
+                                const v = Number(e.target.value);
+                                setDevolverItems((prev) => prev.map((d) =>
+                                  d.orderItemId === oi.id ? { ...d, quantity: v } : d,
+                                ));
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setDevolverModalOpen(false)}>Cancelar</button>
+              <button
+                className="ha-btn"
+                style={{ background: "#dc2626", color: "#fff", borderColor: "#dc2626" }}
+                disabled={devolverLoading}
+                onClick={() => void handleDevolver()}
+              >
+                {devolverLoading ? <><Spinner /> Confirmando…</> : "Confirmar devolución"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

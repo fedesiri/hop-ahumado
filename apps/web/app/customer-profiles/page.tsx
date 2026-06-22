@@ -2,8 +2,7 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
-import type { Dayjs } from "@/lib/dayjs";
-import dayjs from "@/lib/dayjs";
+import { toast } from "@/lib/toast";
 import type {
   CreateCustomerProfileRequest,
   Customer,
@@ -11,20 +10,44 @@ import type {
   UpdateCustomerProfileRequest,
   User,
 } from "@/lib/types";
-import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Col, DatePicker, Empty, Form, Input, Modal, Row, Select, Space, Spin, Table } from "antd";
+import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function CustomerProfilesPage() {
   return (
     <AppLayout>
-        <CustomerProfilesContent />
-      </AppLayout>
+      <CustomerProfilesContent />
+    </AppLayout>
   );
 }
 
+interface FormState {
+  customerId: string;
+  contactName: string;
+  phone: string;
+  email: string;
+  customerType: string;
+  status: string;
+  source: string;
+  responsibleId: string;
+  generalNotes: string;
+  nextFollowUpAt: string;
+}
+
+const EMPTY_FORM: FormState = {
+  customerId: "",
+  contactName: "",
+  phone: "",
+  email: "",
+  customerType: "",
+  status: "",
+  source: "",
+  responsibleId: "",
+  generalNotes: "",
+  nextFollowUpAt: "",
+};
+
 function CustomerProfilesContent() {
-  const { message, modal } = App.useApp();
   const [profiles, setProfiles] = useState<CustomerProfile[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -32,285 +55,306 @@ function CustomerProfilesContent() {
   const [submitting, setSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form] = Form.useForm();
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
 
   useEffect(() => {
-    fetchProfiles();
-    fetchCustomers();
-    fetchUsers();
+    void fetchProfiles();
+    void fetchCustomers();
+    void fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.limit]);
 
-  const fetchProfiles = async () => {
+  async function fetchProfiles() {
     try {
       setLoading(true);
       const response = await apiClient.getCustomerProfiles(pagination.page, pagination.limit);
       setProfiles(response.data);
       setMeta(response.meta);
-    } catch (error) {
-      message.error("Error al cargar perfiles");
-      console.error(error);
+    } catch {
+      toast.error("Error al cargar perfiles");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const fetchCustomers = async () => {
+  async function fetchCustomers() {
     try {
       const response = await apiClient.getCustomers(1, 100);
       setCustomers(response.data);
-    } catch (error) {
-      console.error(error);
-    }
-  };
+    } catch {}
+  }
 
-  const fetchUsers = async () => {
+  async function fetchUsers() {
     try {
       const response = await apiClient.getUsers(1, 100);
       setUsers(response.data);
-    } catch (error) {
-      message.error("Error al cargar usuarios para responsables");
-      console.error(error);
+    } catch {
+      toast.error("Error al cargar usuarios");
     }
-  };
+  }
 
-  const handleCreate = () => {
+  function handleCreate() {
     setEditingId(null);
-    form.resetFields();
+    setForm(EMPTY_FORM);
     setModalOpen(true);
-  };
+  }
 
-  const handleEdit = (record: CustomerProfile) => {
+  function handleEdit(record: CustomerProfile) {
     setEditingId(record.id);
-    form.setFieldsValue({
-      customerId: record.customerId,
-      contactName: record.contactName,
-      phone: record.phone,
-      email: record.email,
-      customerType: record.customerType,
-      status: record.status,
-      source: record.source,
-      responsibleId: record.responsibleId,
-      generalNotes: record.generalNotes,
-      nextFollowUpAt: record.nextFollowUpAt ? dayjs(record.nextFollowUpAt) : null,
+    setForm({
+      customerId: record.customerId ?? "",
+      contactName: record.contactName ?? "",
+      phone: record.phone ?? "",
+      email: record.email ?? "",
+      customerType: record.customerType ?? "",
+      status: record.status ?? "",
+      source: record.source ?? "",
+      responsibleId: record.responsibleId ?? "",
+      generalNotes: record.generalNotes ?? "",
+      nextFollowUpAt: record.nextFollowUpAt ? record.nextFollowUpAt.substring(0, 10) : "",
     });
     setModalOpen(true);
-  };
+  }
 
-  const handleDelete = (id: string) => {
-    modal.confirm({
-      title: "Confirmar eliminacion",
-      content: "Estas seguro de que deseas eliminar este perfil?",
-      okText: "Si",
-      cancelText: "No",
-      onOk: async () => {
-        try {
-          await apiClient.deleteCustomerProfile(id);
-          message.success("Perfil eliminado");
-          fetchProfiles();
-        } catch (error) {
-          message.error("Error al eliminar perfil");
-        }
-      },
-    });
-  };
+  async function handleDelete() {
+    if (!confirmDeleteId) return;
+    try {
+      await apiClient.deleteCustomerProfile(confirmDeleteId);
+      toast.success("Perfil eliminado");
+      setConfirmDeleteId(null);
+      void fetchProfiles();
+    } catch {
+      toast.error("Error al eliminar perfil");
+    }
+  }
 
-  const handleSubmit = async (values: {
-    customerId: string;
-    contactName?: string;
-    phone?: string;
-    email?: string;
-    customerType?: string;
-    status?: string;
-    source?: string;
-    responsibleId?: string;
-    generalNotes?: string;
-    nextFollowUpAt?: Dayjs;
-  }) => {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.customerId) { toast.error("El cliente es requerido"); return; }
     setSubmitting(true);
     try {
       const data: CreateCustomerProfileRequest = {
-        customerId: values.customerId,
-        contactName: values.contactName,
-        phone: values.phone,
-        email: values.email,
-        customerType: values.customerType,
-        status: values.status,
-        source: values.source,
-        responsibleId: values.responsibleId,
-        generalNotes: values.generalNotes,
-        nextFollowUpAt: values.nextFollowUpAt?.toISOString(),
+        customerId: form.customerId,
+        contactName: form.contactName || undefined,
+        phone: form.phone || undefined,
+        email: form.email || undefined,
+        customerType: form.customerType || undefined,
+        status: form.status || undefined,
+        source: form.source || undefined,
+        responsibleId: form.responsibleId || undefined,
+        generalNotes: form.generalNotes || undefined,
+        nextFollowUpAt: form.nextFollowUpAt ? new Date(form.nextFollowUpAt).toISOString() : undefined,
       };
-
       if (editingId) {
         await apiClient.updateCustomerProfile(editingId, data as UpdateCustomerProfileRequest);
-        message.success("Perfil actualizado");
+        toast.success("Perfil actualizado");
       } else {
         await apiClient.createCustomerProfile(data);
-        message.success("Perfil creado");
+        toast.success("Perfil creado");
       }
       setModalOpen(false);
-      fetchProfiles();
-    } catch (error) {
-      message.error("Error al guardar perfil");
+      void fetchProfiles();
+    } catch {
+      toast.error("Error al guardar perfil");
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
-  const columns = [
-    {
-      title: "Cliente",
-      dataIndex: ["customer", "name"],
-      key: "customer",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Contacto",
-      dataIndex: "contactName",
-      key: "contactName",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Tipo",
-      dataIndex: "customerType",
-      key: "customerType",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Estado",
-      dataIndex: "status",
-      key: "status",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Responsable",
-      dataIndex: ["responsible", "name"],
-      key: "responsible",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Acciones",
-      key: "actions",
-      width: 120,
-      render: (_: any, record: CustomerProfile) => (
-        <Space>
-          <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
-        </Space>
-      ),
-    },
-  ];
+  const totalPages = meta ? Math.ceil(meta.total / pagination.limit) : 1;
 
   return (
     <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Perfiles de Clientes</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-          Nuevo Perfil
-        </Button>
+      <div className="cf-pagehd">
+        <div>
+          <h1 className="cf-pagetitle">Perfiles de Clientes</h1>
+        </div>
+        <button className="ha-btn ha-btn--primary" onClick={handleCreate}>
+          <Plus size={16} /> Nuevo Perfil
+        </button>
       </div>
 
       {loading ? (
-        <Spin />
-      ) : profiles.length > 0 ? (
-        <Table
-          columns={columns}
-          dataSource={profiles}
-          rowKey="id"
-          style={{ backgroundColor: "#1f2937" }}
-          pagination={{
-            current: pagination.page,
-            pageSize: pagination.limit,
-            total: meta?.total || 0,
-            onChange: (page, pageSize) => {
-              setPagination({ page, limit: pageSize });
-            },
-          }}
-        />
+        <div className="ha-spin-wrap"><div className="ha-spin-el" /></div>
       ) : (
-        <Empty description="No hay perfiles" style={{ color: "#9ca3af" }} />
+        <div className="cf-card">
+          <div className="cf-tablewrap">
+            <table className="cf-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Contacto</th>
+                  <th>Tipo</th>
+                  <th>Estado</th>
+                  <th>Responsable</th>
+                  <th className="r">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profiles.length === 0 ? (
+                  <tr><td colSpan={6} className="cf-empty">No hay perfiles</td></tr>
+                ) : (
+                  profiles.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <div className="cf-cl">
+                          <div className="cf-cl__av">{(p.customer?.name ?? "?")[0]?.toUpperCase()}</div>
+                          <span className="cf-cl__n">{p.customer?.name ?? "-"}</span>
+                        </div>
+                      </td>
+                      <td>{p.contactName ?? "-"}</td>
+                      <td>{p.customerType ? <span className="cf-badge cf-badge--amber">{p.customerType}</span> : "-"}</td>
+                      <td>{p.status ? <span className="cf-badge cf-badge--green">{p.status}</span> : "-"}</td>
+                      <td><span className="cf-resp">{p.responsible?.name ?? <span className="none">—</span>}</span></td>
+                      <td className="r">
+                        <div className="cf-acts">
+                          <button className="cf-minibtn" onClick={() => handleEdit(p)} title="Editar"><Edit2 size={13} /></button>
+                          <button className="cf-minibtn cf-minibtn--del" onClick={() => setConfirmDeleteId(p.id)} title="Eliminar"><Trash2 size={13} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="cf-cardlist">
+            {profiles.length === 0 ? (
+              <div className="cf-empty">No hay perfiles</div>
+            ) : (
+              profiles.map((p) => (
+                <div key={p.id} className="cf-crow">
+                  <div className="cf-crow__top">
+                    <div className="cf-cl__av">{(p.customer?.name ?? "?")[0]?.toUpperCase()}</div>
+                    <span className="cf-crow__name">{p.customer?.name ?? "-"}</span>
+                    {p.status && <span className="cf-badge cf-badge--green">{p.status}</span>}
+                  </div>
+                  <div className="cf-crow__mid">
+                    {p.contactName && <span className="cf-resp">{p.contactName}</span>}
+                    {p.customerType && <span className="cf-badge cf-badge--amber">{p.customerType}</span>}
+                  </div>
+                  <div className="cf-crow__bot">
+                    <span className="cf-resp">{p.responsible?.name ?? "Sin responsable"}</span>
+                  </div>
+                  <div className="cf-crow__acts">
+                    <button className="cf-minibtn" onClick={() => handleEdit(p)}><Edit2 size={13} /></button>
+                    <button className="cf-minibtn cf-minibtn--del" onClick={() => setConfirmDeleteId(p.id)}><Trash2 size={13} /></button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {meta && meta.total > pagination.limit && (
+            <div className="cf-pag" style={{ padding: "16px" }}>
+              <span className="cf-pag__info">{meta.total} resultados</span>
+              <div className="cf-pag__btns">
+                <button className="cf-pgbtn" disabled={pagination.page === 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>←</button>
+                <span className="cf-pgbtn act">{pagination.page}</span>
+                <button className="cf-pgbtn" disabled={pagination.page >= totalPages} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>→</button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
-      <Modal
-        title={editingId ? "Editar Perfil" : "Nuevo Perfil"}
-        open={modalOpen}
-        onOk={() => form.submit()}
-        onCancel={() => setModalOpen(false)}
-        okButtonProps={{ loading: submitting, disabled: submitting }}
-        width={680}
-        styles={{ body: { maxHeight: "70vh", overflowY: "auto", paddingRight: 4 } }}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="customerId" label="Cliente" rules={[{ required: true, message: "El cliente es requerido" }]}>
-            <Select
-              placeholder="Selecciona un cliente"
-              options={customers.map((c) => ({ label: c.name, value: c.id }))}
-            />
-          </Form.Item>
+      {/* Form modal */}
+      {modalOpen && (
+        <div className="ha-dialog-back" onClick={(e) => e.target === e.currentTarget && setModalOpen(false)}>
+          <div className="ha-dialog ha-dialog--wide">
+            <div className="ha-dialog__head">
+              <h2 className="ha-dialog__title">{editingId ? "Editar Perfil" : "Nuevo Perfil"}</h2>
+              <button className="ha-iconbtn" onClick={() => setModalOpen(false)}><X size={18} /></button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="ha-dialog__body" style={{ display: "flex", flexDirection: "column", gap: 14, maxHeight: "65vh", overflowY: "auto" }}>
+                <div className="cf-field">
+                  <label className="cf-label">Cliente <span className="req">*</span></label>
+                  <select className="cf-fselect" value={form.customerId} onChange={(e) => setForm((f) => ({ ...f, customerId: e.target.value }))} required>
+                    <option value="">Selecciona un cliente</option>
+                    {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div className="cf-grid2">
+                  <div className="cf-field">
+                    <label className="cf-label">Nombre del contacto</label>
+                    <input className="cf-input" placeholder="Persona de contacto" value={form.contactName} onChange={(e) => setForm((f) => ({ ...f, contactName: e.target.value }))} />
+                  </div>
+                  <div className="cf-field">
+                    <label className="cf-label">Teléfono</label>
+                    <input className="cf-input" placeholder="Teléfono" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="cf-grid2">
+                  <div className="cf-field">
+                    <label className="cf-label">Email</label>
+                    <input className="cf-input" type="email" placeholder="Email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+                  </div>
+                  <div className="cf-field">
+                    <label className="cf-label">Tipo de cliente</label>
+                    <input className="cf-input" placeholder="Tipo de cliente" value={form.customerType} onChange={(e) => setForm((f) => ({ ...f, customerType: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="cf-grid2">
+                  <div className="cf-field">
+                    <label className="cf-label">Estado</label>
+                    <input className="cf-input" placeholder="Estado" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} />
+                  </div>
+                  <div className="cf-field">
+                    <label className="cf-label">Fuente</label>
+                    <input className="cf-input" placeholder="Fuente del cliente" value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="cf-grid2">
+                  <div className="cf-field">
+                    <label className="cf-label">Responsable</label>
+                    <select className="cf-fselect" value={form.responsibleId} onChange={(e) => setForm((f) => ({ ...f, responsibleId: e.target.value }))}>
+                      <option value="">Sin responsable</option>
+                      {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="cf-field">
+                    <label className="cf-label">Próximo seguimiento</label>
+                    <input className="cf-input" type="date" value={form.nextFollowUpAt} onChange={(e) => setForm((f) => ({ ...f, nextFollowUpAt: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="cf-field">
+                  <label className="cf-label">Notas generales</label>
+                  <textarea className="cf-textarea" placeholder="Notas" rows={2} value={form.generalNotes} onChange={(e) => setForm((f) => ({ ...f, generalNotes: e.target.value }))} />
+                </div>
+              </div>
+              <div className="ha-dialog__foot">
+                <button type="button" className="ha-btn ha-btn--secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
+                <button type="submit" className="ha-btn ha-btn--primary" disabled={submitting}>
+                  {submitting ? "Guardando..." : editingId ? "Guardar" : "Crear"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-          <Row gutter={16}>
-            <Col xs={24} sm={14}>
-              <Form.Item name="contactName" label="Nombre del contacto">
-                <Input placeholder="Persona de contacto" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={10}>
-              <Form.Item name="phone" label="Teléfono">
-                <Input placeholder="Teléfono" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col xs={24} sm={14}>
-              <Form.Item name="email" label="Email">
-                <Input type="email" placeholder="Email" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={10}>
-              <Form.Item name="customerType" label="Tipo de cliente">
-                <Input placeholder="Tipo de cliente" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col xs={24} sm={8}>
-              <Form.Item name="status" label="Estado">
-                <Input placeholder="Estado" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Form.Item name="source" label="Fuente">
-                <Input placeholder="Fuente del cliente" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Form.Item name="responsibleId" label="Responsable">
-                <Select
-                  placeholder="Responsable"
-                  options={users.map((u) => ({ label: u.name, value: u.id }))}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item name="nextFollowUpAt" label="Próximo seguimiento">
-                <DatePicker style={{ width: "100%" }} placeholder="Fecha de seguimiento" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="generalNotes" label="Notas generales">
-                <Input.TextArea rows={1} placeholder="Notas" />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Form>
-      </Modal>
+      {/* Confirm delete */}
+      {confirmDeleteId && (
+        <div className="ha-dialog-back" onClick={(e) => e.target === e.currentTarget && setConfirmDeleteId(null)}>
+          <div className="ha-dialog">
+            <div className="ha-dialog__head">
+              <h2 className="ha-dialog__title">Confirmar eliminación</h2>
+            </div>
+            <div className="ha-dialog__body">
+              <p style={{ margin: 0 }}>¿Estás seguro de que deseas eliminar este perfil?</p>
+            </div>
+            <div className="ha-dialog__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setConfirmDeleteId(null)}>Cancelar</button>
+              <button className="ha-btn ha-btn--destructive" onClick={handleDelete}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
