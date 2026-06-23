@@ -36,14 +36,16 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 /* app shell */
 .ha-app{container-type:inline-size;display:grid;grid-template-areas:"header" "content";grid-template-rows:56px 1fr;grid-template-columns:1fr;height:100vh;background:var(--ha-bg);color:var(--ha-text);font-size:14px}
 .ha-sidebar{display:none}
-@container (min-width:768px){
+@media (min-width:768px){
   .ha-app{grid-template-areas:"sidebar header" "sidebar content";grid-template-columns:64px 1fr;grid-template-rows:64px 1fr}
-  .ha-sidebar{display:flex}
-  .ha-hamburger{display:none !important}
 }
-@container (min-width:1024px){
+@media (min-width:1024px){
   .ha-app{grid-template-columns:250px 1fr}
   .ha-app.is-collapsed{grid-template-columns:64px 1fr}
+}
+@container (min-width:768px){
+  .ha-sidebar{display:flex}
+  .ha-hamburger{display:none !important}
 }
 
 /* sidebar */
