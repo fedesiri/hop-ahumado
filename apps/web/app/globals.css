@@ -238,9 +238,14 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .ha-filter-input{height:36px;background:var(--ha-bg-raised);border:1px solid var(--ha-border);border-radius:8px;color:var(--ha-text);font-family:inherit;font-size:13px;padding:0 10px;outline:none;min-width:0}
 .ha-filter-input:focus{border-color:var(--ha-amber);box-shadow:0 0 0 2px var(--ha-amber-soft)}
 .ha-filter-input::placeholder{color:var(--ha-text-3)}
+@container (min-width:768px){ .ha-filters__row{flex-wrap:nowrap} }
 
 /* page header row */
 .ha-page-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+
+/* responsive visibility helpers */
+@container (max-width:767px){ .ha-desktop-only{display:none!important} }
+@container (min-width:768px){ .ha-mobile-only{display:none!important} }
 
 /* FAB (mobile floating action button) */
 .ha-fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--ha-amber);color:#0f1117;border:none;cursor:pointer;display:grid;place-items:center;box-shadow:0 6px 20px rgba(245,166,35,0.45);z-index:40}

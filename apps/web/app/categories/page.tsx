@@ -122,7 +122,7 @@ function CategoriesContent() {
     <div>
       <div className="ha-page-header">
         <h1 className="ha-pagetitle">Categorías</h1>
-        <button className="ha-btn ha-btn--primary" onClick={openCreate} disabled={!selectedLineId}>
+        <button className="ha-btn ha-btn--primary ha-desktop-only" onClick={openCreate} disabled={!selectedLineId}>
           <Plus size={15} /> Nueva categoría
         </button>
       </div>
