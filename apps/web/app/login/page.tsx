@@ -3,6 +3,7 @@
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth } from "@/lib/firebase";
+import { Eye, EyeOff, TriangleAlert } from "lucide-react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -18,6 +19,9 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [emailErr, setEmailErr] = useState(false);
+  const [passErr, setPassErr] = useState(false);
 
   const getFromPath = () => {
     if (typeof window === "undefined") return "/";
@@ -46,112 +50,109 @@ export default function LoginPage() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!email) { setError("Ingresá tu email"); return; }
-    if (!password) { setError("Ingresá tu contraseña"); return; }
+    setEmailErr(false);
+    setPassErr(false);
+    if (!email) { setEmailErr(true); return; }
+    if (!password) { setPassErr(true); return; }
     setSubmitting(true);
     try {
       const auth = getFirebaseAuth();
       await signInWithEmailAndPassword(auth, email, password);
       await refresh();
       router.replace(getFromPath());
-    } catch (e: any) {
-      setError(e?.message || "Error al iniciar sesión");
+    } catch {
+      setError("Correo o contraseña incorrectos.");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 20,
-      background: "var(--ha-bg, #0f1117)",
-    }}>
-      <div style={{
-        width: "100%",
-        maxWidth: 400,
-        background: "var(--ha-bg-card, #161b25)",
-        border: "1px solid var(--ha-border, rgba(255,255,255,0.08))",
-        borderRadius: 14,
-        padding: 32,
-      }}>
-        {/* Brand */}
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 12,
-            background: "var(--ha-amber, #f5a623)",
-            display: "inline-grid", placeItems: "center",
-            fontSize: 22, fontWeight: 700, color: "#0f1117",
-            marginBottom: 14,
-          }}>H</div>
-          <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: "var(--ha-text, rgba(255,255,255,0.92))", letterSpacing: "-.02em" }}>
-            Hop · Alumo
-          </h1>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--ha-text-3, rgba(255,255,255,0.40))" }}>
-            Acceso para usuarios autorizados
-          </p>
+    <div className="lg-page">
+      {/* Left brand panel — desktop only */}
+      <div className="lg-left">
+        <div className="lg-logo">Hop · Alumo</div>
+        <div className="lg-tag">Sistema de gestión interna</div>
+        <div className="lg-pills">
+          <span className="lg-pill">🍺 Hop</span>
+          <span className="lg-pill">🥩 Alumo</span>
         </div>
+      </div>
 
+      {/* Top brand — mobile only */}
+      <div className="lg-brandtop">
+        <div className="lg-logo">Hop · Alumo</div>
+        <div className="lg-tag">Sistema de gestión interna</div>
+        <div className="lg-pills">
+          <span className="lg-pill">🍺 Hop</span>
+          <span className="lg-pill">🥩 Alumo</span>
+        </div>
+      </div>
+
+      {/* Form area */}
+      <div className="lg-right">
         {checkingSession ? (
-          <div style={{ textAlign: "center", padding: "24px 0" }}>
-            <div style={{
-              width: 24, height: 24, margin: "0 auto",
-              borderRadius: "50%", border: "2px solid var(--ha-border-2)",
-              borderTopColor: "var(--ha-amber)",
-              animation: "ha-spin .7s linear infinite",
-            }} />
+          <div style={{ display: "grid", placeItems: "center", padding: 48 }}>
+            <span className="lg-spin" />
           </div>
         ) : (
-          <form onSubmit={onSubmit} className="ha-formgrid" noValidate>
-            <div className="ha-field">
-              <label className="ha-label" htmlFor="email">Email</label>
-              <input
-                id="email"
-                type="email"
-                className={`ha-input${error && !email ? " ha-input--error" : ""}`}
-                placeholder="tu@email.com"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
+          <div className="lg-card">
+            <h1 className="lg-card__title">Iniciar sesión</h1>
+            <p className="lg-card__sub">Ingresá con tu cuenta de empresa.</p>
 
-            <div className="ha-field">
-              <label className="ha-label" htmlFor="password">Contraseña</label>
-              <input
-                id="password"
-                type="password"
-                className={`ha-input${error && !password ? " ha-input--error" : ""}`}
-                placeholder="••••••••"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
+            {error && (
+              <div className="lg-alert">
+                <TriangleAlert size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                {error}
+              </div>
+            )}
 
-            {error && <p className="ha-error" style={{ margin: 0 }}>{error}</p>}
+            <form onSubmit={onSubmit} noValidate>
+              <div className="lg-field">
+                <label className="lg-label" htmlFor="email">Correo electrónico</label>
+                <input
+                  id="email"
+                  type="email"
+                  className={`lg-input${emailErr ? " has-err" : ""}`}
+                  placeholder="vos@empresa.com"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); setEmailErr(false); }}
+                  disabled={submitting}
+                />
+                {emailErr && <span className="lg-err">Requerido</span>}
+              </div>
 
-            <button
-              type="submit"
-              className="ha-btn ha-btn--primary ha-btn--lg"
-              style={{ width: "100%", marginTop: 4 }}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <span style={{
-                  display: "inline-block", width: 18, height: 18,
-                  borderRadius: "50%", border: "2px solid rgba(15,17,23,.3)",
-                  borderTopColor: "#0f1117",
-                  animation: "ha-spin .7s linear infinite",
-                }} />
-              ) : "Entrar"}
-            </button>
-          </form>
+              <div className="lg-field">
+                <label className="lg-label" htmlFor="password">Contraseña</label>
+                <div className="lg-inputwrap">
+                  <input
+                    id="password"
+                    type={showPass ? "text" : "password"}
+                    className={`lg-input lg-input--pass${passErr ? " has-err" : ""}`}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setPassErr(false); }}
+                    disabled={submitting}
+                  />
+                  <button
+                    type="button"
+                    className="lg-eye"
+                    onClick={() => setShowPass((s) => !s)}
+                    aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  >
+                    {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {passErr && <span className="lg-err">Requerido</span>}
+              </div>
+
+              <button type="submit" className="lg-btn" disabled={submitting}>
+                {submitting ? <span className="lg-spin" /> : "Entrar"}
+              </button>
+            </form>
+          </div>
         )}
       </div>
     </div>

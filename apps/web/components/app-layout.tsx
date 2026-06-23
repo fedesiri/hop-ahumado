@@ -147,8 +147,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           />
         </button>
 
-        <span className="ha-header__brand">{brandName}</span>
-
         <div className="ha-header__spacer" />
 
         <BusinessLineSelector />
