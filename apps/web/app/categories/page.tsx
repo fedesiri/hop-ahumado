@@ -199,7 +199,6 @@ function CategoriesContent() {
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
                         <button
-                          className="ha-actbtn"
                           onClick={() => openEdit(cat)}
                           aria-label="Editar"
                           style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}
@@ -260,7 +259,6 @@ function CategoriesContent() {
         <>
           <div className="ha-overlay" onClick={closeDrawer} />
           <div className="ha-drawer">
-            <div className="ha-sheet__handle" />
             <div className="ha-drawer__head">
               <span className="ha-drawer__title">{editingId ? "Editar categoría" : "Nueva categoría"}</span>
               <button className="ha-iconbtn" onClick={closeDrawer} aria-label="Cerrar">
