@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
 import type { Category, CreateCategoryRequest, UpdateCategoryRequest } from "@/lib/types";
+import { toast } from "@/lib/toast";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -14,8 +15,6 @@ export default function CategoriesPage() {
     </AppLayout>
   );
 }
-
-type Toast = { msg: string; type: "success" | "error" };
 
 function CategoriesContent() {
   const { selectedLineId } = useLineContext();
@@ -29,15 +28,7 @@ function CategoriesContent() {
   const [nameErr, setNameErr] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState("");
-  const [toast, setToast] = useState<Toast | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
-
-  const showToast = (msg: string, type: "success" | "error") => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast({ msg, type });
-    toastTimer.current = setTimeout(() => setToast(null), 3000);
-  };
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -45,7 +36,7 @@ function CategoriesContent() {
       const response = await apiClient.getCategories(1, 100, selectedLineId ?? undefined);
       setCategories(response.data);
     } catch {
-      showToast("Error al cargar categorías", "error");
+      toast.error("Error al cargar categorías");
     } finally {
       setLoading(false);
     }
@@ -62,7 +53,7 @@ function CategoriesContent() {
   }, [drawerOpen]);
 
   const openCreate = () => {
-    if (!selectedLineId) { showToast("Seleccioná una línea de negocio", "error"); return; }
+    if (!selectedLineId) { toast.error("Seleccioná una línea de negocio"); return; }
     setEditingId(null);
     setDrawerName("");
     setNameErr(false);
@@ -90,16 +81,16 @@ function CategoriesContent() {
     try {
       if (editingId) {
         await apiClient.updateCategory(editingId, { name: trimmed } as UpdateCategoryRequest);
-        showToast("Categoría actualizada", "success");
+        toast.success("Categoría actualizada");
       } else {
         const payload: CreateCategoryRequest = { businessLineId: selectedLineId!, name: trimmed };
         await apiClient.createCategory(payload);
-        showToast("Categoría creada", "success");
+        toast.success("Categoría creada");
       }
       closeDrawer();
       fetchCategories();
     } catch {
-      showToast("Error al guardar categoría", "error");
+      toast.error("Error al guardar categoría");
     } finally {
       setSubmitting(false);
     }
@@ -114,11 +105,11 @@ function CategoriesContent() {
     if (!deleteId) return;
     try {
       await apiClient.deleteCategory(deleteId);
-      showToast("Categoría eliminada", "success");
+      toast.success("Categoría eliminada");
       setDeleteId(null);
       fetchCategories();
     } catch {
-      showToast("Error al eliminar categoría", "error");
+      toast.error("Error al eliminar categoría");
       setDeleteId(null);
     }
   };
@@ -129,21 +120,6 @@ function CategoriesContent() {
 
   return (
     <div>
-      {/* Toast notification */}
-      {toast && (
-        <div style={{
-          position: "fixed", top: 16, right: 16, zIndex: 100,
-          background: toast.type === "success" ? "var(--ha-green-soft)" : "var(--ha-red-soft)",
-          color: toast.type === "success" ? "var(--ha-green)" : "var(--ha-red)",
-          border: "1px solid", borderColor: toast.type === "success" ? "var(--ha-green)" : "var(--ha-red)",
-          borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 500,
-          boxShadow: "0 8px 24px rgba(0,0,0,.3)",
-          animation: "ha-scalein .2s ease",
-        }}>
-          {toast.msg}
-        </div>
-      )}
-
       <div className="ha-page-header">
         <h1 className="ha-pagetitle">Categorías</h1>
         <button className="ha-btn ha-btn--primary" onClick={openCreate} disabled={!selectedLineId}>

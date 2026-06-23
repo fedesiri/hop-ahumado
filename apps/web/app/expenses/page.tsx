@@ -210,7 +210,6 @@ function ExpensesContent() {
         <>
           <div className="ha-overlay" onClick={() => setDrawerOpen(false)} />
           <div className="ha-drawer">
-            <div className="ha-sheet__handle" />
             <div className="ha-drawer__head">
               <span className="ha-drawer__title">Nuevo egreso</span>
               <button className="ha-iconbtn" onClick={() => setDrawerOpen(false)} aria-label="Cerrar"><X size={18} /></button>

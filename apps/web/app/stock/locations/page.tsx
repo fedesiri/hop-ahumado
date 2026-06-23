@@ -6,10 +6,9 @@ import { LocationStockModal } from "@/components/stock/location-stock-modal";
 import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
 import type { StockBalanceRow, StockLocation } from "@/lib/types";
+import { toast } from "@/lib/toast";
 import { ArrowLeftRight, Eye, Pencil, Plus, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-
-type Toast = { type: "success" | "error" | "info"; msg: string };
+import { useCallback, useEffect, useState } from "react";
 
 export default function StockLocationsPage() {
   return (
@@ -24,14 +23,6 @@ function StockLocationsContent() {
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-
-  const [toast, setToast] = useState<Toast | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showToast = (t: Toast) => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast(t);
-    toastTimer.current = setTimeout(() => setToast(null), 3000);
-  };
 
   type DrawerMode = "create" | "edit" | "transfer" | null;
   const [drawerMode, setDrawerMode] = useState<DrawerMode>(null);
@@ -56,7 +47,7 @@ function StockLocationsContent() {
       setLoading(true);
       setLocations(await apiClient.getStockLocations());
     } catch {
-      showToast({ type: "error", msg: "Error al cargar ubicaciones" });
+      toast.error("Error al cargar ubicaciones");
       setLocations([]);
     } finally {
       setLoading(false);
@@ -94,7 +85,7 @@ function StockLocationsContent() {
       const rows = await apiClient.getStockBalancesAtLocation(loc.id, selectedLineId ?? undefined);
       setViewBalances(rows);
     } catch {
-      showToast({ type: "error", msg: "No se pudo cargar el stock de la ubicación" });
+      toast.error("No se pudo cargar el stock de la ubicación");
     } finally {
       setViewLoading(false);
     }
@@ -106,15 +97,15 @@ function StockLocationsContent() {
     try {
       if (drawerMode === "create") {
         await apiClient.createStockLocation({ name: fname.trim(), isDefault: fisDefault });
-        showToast({ type: "success", msg: "Ubicación creada" });
+        toast.success("Ubicación creada");
       } else if (editingLocation) {
         await apiClient.updateStockLocation(editingLocation.id, { name: fname.trim(), isDefault: fisDefault });
-        showToast({ type: "success", msg: "Ubicación actualizada" });
+        toast.success("Ubicación actualizada");
       }
       closeDrawer();
       await load();
     } catch {
-      showToast({ type: "error", msg: "No se pudo guardar la ubicación" });
+      toast.error("No se pudo guardar la ubicación");
     } finally {
       setSubmitting(false);
     }
@@ -128,16 +119,16 @@ function StockLocationsContent() {
         toLocationId: fTransferTo,
       });
       if (res.movementsCreated === 0) {
-        showToast({ type: "info", msg: res.message ?? "No había stock para mover en el origen" });
+        toast.info(res.message ?? "No había stock para mover en el origen");
       } else {
-        showToast({ type: "success", msg: `Traspasados ${res.movementsCreated} productos` });
+        toast.success(`Traspasados ${res.movementsCreated} productos`);
       }
       closeDrawer();
       await load();
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "";
-      showToast({ type: "error", msg: msg || "No se pudo completar el traspaso" });
+      toast.error(msg || "No se pudo completar el traspaso");
     } finally {
       setSubmitting(false);
     }
@@ -149,38 +140,17 @@ function StockLocationsContent() {
     setConfirmDelete(null);
     try {
       await apiClient.deleteStockLocation(loc.id);
-      showToast({ type: "success", msg: "Ubicación eliminada" });
+      toast.success("Ubicación eliminada");
       await load();
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "";
-      showToast({ type: "error", msg: msg || "No se pudo eliminar la ubicación" });
+      toast.error(msg || "No se pudo eliminar la ubicación");
     }
   };
 
   return (
     <div>
-      {toast && (
-        <div
-          style={{
-            position: "fixed", bottom: 24, right: 24, zIndex: 200,
-            padding: "10px 18px", borderRadius: 10, fontSize: 14, fontWeight: 500,
-            background: toast.type === "success"
-              ? "var(--ha-green-soft)" : toast.type === "info"
-              ? "var(--ha-amber-soft)" : "var(--ha-red-soft)",
-            color: toast.type === "success"
-              ? "var(--ha-green)" : toast.type === "info"
-              ? "var(--ha-amber)" : "var(--ha-red)",
-            border: "1px solid",
-            borderColor: toast.type === "success"
-              ? "var(--ha-green)" : toast.type === "info"
-              ? "var(--ha-amber)" : "var(--ha-red)",
-          }}
-        >
-          {toast.msg}
-        </div>
-      )}
-
       <div className="ha-page-header">
         <h1 className="ha-pagetitle">Ubicaciones de stock</h1>
         <button className="ha-btn ha-btn--primary" onClick={openCreate}>
@@ -301,7 +271,6 @@ function StockLocationsContent() {
         <>
           <div className="ha-overlay" onClick={closeDrawer} />
           <div className="ha-drawer">
-            <div className="ha-sheet__handle" />
             <div className="ha-drawer__head">
               <span className="ha-drawer__title">
                 {drawerMode === "create" ? "Nueva ubicación" : `Editar: ${editingLocation?.name}`}
@@ -349,7 +318,6 @@ function StockLocationsContent() {
         <>
           <div className="ha-overlay" onClick={closeDrawer} />
           <div className="ha-drawer">
-            <div className="ha-sheet__handle" />
             <div className="ha-drawer__head">
               <span className="ha-drawer__title">
                 Traspasar todo desde «{transferFromLocation?.name}»

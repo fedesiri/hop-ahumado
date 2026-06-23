@@ -435,7 +435,6 @@ function ProductsContent() {
         <>
           <div className="ha-overlay" onClick={closeDrawer} />
           <div className="ha-drawer" style={{ width: "min(90vw, 480px)" }}>
-            <div className="ha-sheet__handle" />
             <div className="ha-drawer__head">
               <span className="ha-drawer__title">{editingId ? "Editar producto" : "Nuevo producto"}</span>
               <button className="ha-iconbtn" onClick={closeDrawer} aria-label="Cerrar"><X size={18} /></button>
