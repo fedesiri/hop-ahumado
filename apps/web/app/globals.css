@@ -50,6 +50,7 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 
 /* sidebar */
 .ha-sidebar{grid-area:sidebar;flex-direction:column;background:var(--ha-sidebar-bg);border-right:1px solid rgba(255,255,255,0.06);overflow:hidden}
+.ha-app.is-collapsed .ha-brandtext{display:none}
 .ha-sidebar__brand{height:64px;flex:none;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid rgba(255,255,255,0.06)}
 .ha-logo{width:30px;height:30px;flex:none;border-radius:8px;background:var(--ha-amber);display:grid;place-items:center;font-size:17px}
 .ha-brandtext{font-weight:600;font-size:15px;color:#fff;white-space:nowrap;letter-spacing:-.01em}

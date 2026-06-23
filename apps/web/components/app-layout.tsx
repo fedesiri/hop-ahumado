@@ -13,7 +13,9 @@ import {
   LogOut,
   MapPin,
   Menu,
+  Moon,
   ShoppingBag,
+  Sun,
   Tag,
   TrendingDown,
   TrendingUp,
@@ -245,7 +247,7 @@ function HeaderUserMenu({
               fontSize: 13, cursor: "pointer", textAlign: "left",
             }}
           >
-            {theme === "dark" ? "☀️" : "🌙"} {theme === "dark" ? "Modo claro" : "Modo oscuro"}
+            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />} {theme === "dark" ? "Modo claro" : "Modo oscuro"}
           </button>
           <button
             onClick={() => { router.push("/users"); setOpen(false); }}
