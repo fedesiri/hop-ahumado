@@ -152,6 +152,9 @@ export default function LoginPage() {
                 {submitting ? <span className="lg-spin" /> : "Entrar"}
               </button>
             </form>
+            <div className="lg-foot">
+              <a href="#">¿Olvidaste tu contraseña?</a>
+            </div>
           </div>
         )}
       </div>
