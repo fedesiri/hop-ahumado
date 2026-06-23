@@ -243,7 +243,13 @@ function StockContent() {
 
       // Si es una entrada (IN), registramos egreso monetario en `expenses`.
       if (type === "IN") {
+        if (!selectedLineId) {
+          message.error("Seleccioná una línea de negocio antes de registrar una entrada.");
+          return;
+        }
+
         await apiClient.createExpense({
+          businessLineId: selectedLineId,
           description: productsDescription,
           cashAmount: productsCashAmount,
           cardAmount: productsCardAmount,
@@ -253,6 +259,7 @@ function StockContent() {
         for (const extra of validExtras) {
           const description = (extra.description || "").trim();
           await apiClient.createExpense({
+            businessLineId: selectedLineId,
             description: reason ? `${description} - ${reason}` : description,
             cashAmount: Number(extra.cash ?? 0),
             cardAmount: Number(extra.card ?? 0),
