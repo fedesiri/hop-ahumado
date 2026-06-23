@@ -3,7 +3,7 @@
 import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
-import { formatQuantity } from "@/lib/format-currency";
+import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import {
   ProductUnit,
@@ -16,7 +16,8 @@ import {
   type UpdateProductRequest,
 } from "@/lib/types";
 import { toast } from "@/lib/toast";
-import { Edit2, Filter, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { Eye, ListFilter, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -29,12 +30,19 @@ const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
 ];
 
 const UNIT_SHORT_LABEL: Record<ProductUnit, string> = {
-  [ProductUnit.UNIT]: "un",
-  [ProductUnit.KG]: "kg",
-  [ProductUnit.G]: "gr",
-  [ProductUnit.L]: "l",
-  [ProductUnit.ML]: "ml",
+  [ProductUnit.UNIT]: "UN",
+  [ProductUnit.KG]: "KG",
+  [ProductUnit.G]: "GR",
+  [ProductUnit.L]: "L",
+  [ProductUnit.ML]: "ML",
 };
+
+type PriceMap = Record<string, {
+  costo?: number;
+  mayorista?: number;
+  minorista?: number;
+  fabrica?: number;
+}>;
 
 export default function ProductsPage() {
   return (
@@ -48,8 +56,10 @@ function ProductsContent() {
   const { selectedLineId } = useLineContext();
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [priceMap, setPriceMap] = useState<PriceMap>({});
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -61,6 +71,7 @@ function ProductsContent() {
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
+
   const [showDeactivated, setShowDeactivated] = useState(
     () => searchParams.get("showDeactivated") === "true",
   );
@@ -70,6 +81,12 @@ function ProductsContent() {
     () => searchParams.get("category") ?? "",
   );
 
+  // Mobile filter sheet draft state
+  const [draftSearch, setDraftSearch] = useState(search);
+  const [draftCategory, setDraftCategory] = useState(categoryFilter);
+  const [draftDeactivated, setDraftDeactivated] = useState(showDeactivated);
+
+  // Form state
   const [fname, setFname] = useState("");
   const [funit, setFunit] = useState<ProductUnit>(ProductUnit.UNIT);
   const [fcategoryId, setFcategoryId] = useState("");
@@ -84,7 +101,7 @@ function ProductsContent() {
   const [fpriceFabrica, setFpriceFabrica] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  const activeFilterCount = (categoryFilter ? 1 : 0) + (showDeactivated ? 1 : 0);
+  const activeFilterCount = (categoryFilter ? 1 : 0) + (showDeactivated ? 1 : 0) + (search ? 1 : 0);
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -127,10 +144,39 @@ function ProductsContent() {
     }
   }, [selectedLineId]);
 
+  const fetchPricesAndCosts = useCallback(async () => {
+    if (!selectedLineId) return;
+    try {
+      const [pricesRes, costsRes] = await Promise.all([
+        apiClient.getPrices(1, 500, undefined, true, undefined, undefined, selectedLineId),
+        apiClient.getCosts(1, 500, undefined, true, undefined, selectedLineId),
+      ]);
+      const map: PriceMap = {};
+      for (const cost of costsRes.data) {
+        if (!map[cost.productId]) map[cost.productId] = {};
+        map[cost.productId].costo = cost.value;
+      }
+      for (const price of pricesRes.data) {
+        if (!map[price.productId]) map[price.productId] = {};
+        const t = price.description;
+        if (t === "mayorista") map[price.productId].mayorista = price.value;
+        else if (t === "minorista") map[price.productId].minorista = price.value;
+        else if (t === "fabrica") map[price.productId].fabrica = price.value;
+      }
+      setPriceMap(map);
+    } catch {
+      // prices are supplementary — don't block the UI
+    }
+  }, [selectedLineId]);
+
   useEffect(() => {
     fetchProducts();
+  }, [fetchProducts]);
+
+  useEffect(() => {
     fetchCategories();
-  }, [fetchProducts, fetchCategories]);
+    fetchPricesAndCosts();
+  }, [fetchCategories, fetchPricesAndCosts]);
 
   useEffect(() => {
     if (drawerOpen) setTimeout(() => nameInputRef.current?.focus(), 80);
@@ -214,6 +260,7 @@ function ProductsContent() {
       }
       closeDrawer();
       fetchProducts();
+      fetchPricesAndCosts();
     } catch {
       toast.error("Error al guardar producto");
     } finally {
@@ -226,6 +273,29 @@ function ProductsContent() {
     if (n < 5) return { bg: "var(--ha-red-soft)", color: "var(--ha-red)" };
     if (n < 10) return { bg: "rgba(251,146,60,0.16)", color: "var(--ha-orange)" };
     return { bg: "var(--ha-green-soft)", color: "var(--ha-green)" };
+  };
+
+  const p = (v?: number) => v != null ? formatCurrency(v) : "–";
+
+  const openFilterSheet = () => {
+    setDraftSearch(search);
+    setDraftCategory(categoryFilter);
+    setDraftDeactivated(showDeactivated);
+    setFilterSheetOpen(true);
+  };
+
+  const applyFilters = () => {
+    setPagination((prev) => ({ ...prev, page: 1 }));
+    setSearch(draftSearch);
+    setSearchInput(draftSearch);
+    setCategoryFilter(draftCategory);
+    setShowDeactivated(draftDeactivated);
+    updateParams({
+      search: draftSearch || null,
+      category: draftCategory || null,
+      showDeactivated: draftDeactivated ? "true" : null,
+    });
+    setFilterSheetOpen(false);
   };
 
   return (
@@ -250,8 +320,8 @@ function ProductsContent() {
         </div>
       </ScreenInfoPanel>
 
-      {/* Filters */}
-      <div className="ha-filters" style={{ marginBottom: 16 }}>
+      {/* Desktop filters */}
+      <div className="ha-filters ha-desktop-only" style={{ marginBottom: 16 }}>
         <div className="ha-filters__row">
           <input
             className="ha-filter-input"
@@ -262,19 +332,18 @@ function ProductsContent() {
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 const trimmed = searchInput.trim();
-                setPagination((p) => ({ ...p, page: 1 }));
+                setPagination((prev) => ({ ...prev, page: 1 }));
                 setSearch(trimmed);
                 updateParams({ search: trimmed || null });
               }
             }}
           />
-          {/* Desktop: inline filters */}
           <select
-            className="ha-filter-input ha-select ha-desktop-only"
-            style={{ width: 200, height: 36, padding: "0 30px 0 10px", flex: "none" }}
+            className="ha-filter-input ha-select"
+            style={{ flex: 1, height: 36, padding: "0 30px 0 10px" }}
             value={categoryFilter}
             onChange={(e) => {
-              setPagination((p) => ({ ...p, page: 1 }));
+              setPagination((prev) => ({ ...prev, page: 1 }));
               setCategoryFilter(e.target.value);
               updateParams({ category: e.target.value || null });
             }}
@@ -283,37 +352,50 @@ function ProductsContent() {
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <button
-            className={`ha-btn ha-btn--sm ha-desktop-only ${showDeactivated ? "ha-btn--primary" : "ha-btn--secondary"}`}
-            style={{ flex: "none" }}
+            className={`ha-btn ${showDeactivated ? "ha-btn--primary" : "ha-btn--secondary"}`}
+            style={{ flex: "none", gap: 8 }}
             onClick={() => {
-              setPagination((p) => ({ ...p, page: 1 }));
+              setPagination((prev) => ({ ...prev, page: 1 }));
               const next = !showDeactivated;
               setShowDeactivated(next);
               updateParams({ showDeactivated: next ? "true" : null });
             }}
           >
-            {showDeactivated ? "Ver activos" : "Ver desactivados"}
-          </button>
-          {/* Mobile: Filtros button */}
-          <button
-            className="ha-btn ha-btn--secondary ha-btn--sm ha-mobile-only"
-            style={{ flex: "none", gap: 6, display: "flex", alignItems: "center" }}
-            onClick={() => setFilterSheetOpen(true)}
-          >
-            <Filter size={14} />
-            Filtros
-            {activeFilterCount > 0 && (
-              <span style={{
-                display: "inline-flex", alignItems: "center", justifyContent: "center",
-                width: 18, height: 18, borderRadius: "50%",
-                background: "var(--ha-amber)", color: "#0f1117",
-                fontSize: 11, fontWeight: 700,
-              }}>
-                {activeFilterCount}
-              </span>
-            )}
+            <Eye size={15} /> Mostrar desactivados
           </button>
         </div>
+      </div>
+
+      {/* Mobile filter button */}
+      <div className="ha-mobile-only" style={{ marginBottom: 12 }}>
+        <button
+          onClick={openFilterSheet}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            height: 40, padding: "0 16px", border: "1.5px solid var(--ha-border-2)",
+            borderRadius: 10, background: "transparent", color: "var(--ha-text)",
+            fontSize: 14, fontWeight: 600, cursor: "pointer",
+            ...(activeFilterCount > 0 ? { borderColor: "var(--ha-amber)", color: "var(--ha-amber)" } : {}),
+          }}
+        >
+          <ListFilter size={16} />
+          Filtros
+          {activeFilterCount > 0 && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              width: 18, height: 18, borderRadius: "50%",
+              background: "var(--ha-amber)", color: "#0f1117",
+              fontSize: 11, fontWeight: 700,
+            }}>
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+        {meta && (
+          <div style={{ marginTop: 6, fontSize: 13, color: "var(--ha-text-3)" }}>
+            {meta.total} productos
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -332,50 +414,66 @@ function ProductsContent() {
             <table className="ha-table">
               <thead>
                 <tr>
-                  <th>Producto</th>
+                  <th>Nombre</th>
                   <th>Categoría</th>
+                  <th>Unidad</th>
                   <th>Stock</th>
-                  <th style={{ textAlign: "right", width: 100 }}>Acciones</th>
+                  <th>Costo</th>
+                  <th>Mayorista</th>
+                  <th>Minorista</th>
+                  <th>Fábrica</th>
+                  <th>Estado</th>
+                  <th style={{ textAlign: "right" }}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {products.map((p) => {
-                  const sc = stockColor(p.stock);
+                {products.map((prod) => {
+                  const sc = stockColor(prod.stock);
+                  const prices = priceMap[prod.id] ?? {};
+                  const isActive = !prod.deactivationDate;
                   return (
-                    <tr key={p.id}>
+                    <tr key={prod.id}>
+                      <td style={{ fontWeight: 500 }}>{prod.name}</td>
+                      <td style={{ color: "var(--ha-text-2)" }}>{prod.category?.name || "—"}</td>
+                      <td style={{ color: "var(--ha-text-2)" }} className="ha-mono">{UNIT_SHORT_LABEL[prod.unit]}</td>
                       <td>
-                        <div style={{ fontWeight: 500 }}>{p.name}</div>
-                        {p.sku && (
-                          <div className="ha-mono" style={{ fontSize: 11, color: "var(--ha-text-3)", marginTop: 2 }}>
-                            {p.sku}
-                          </div>
-                        )}
+                        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 36, padding: "2px 8px", borderRadius: 6, fontSize: 12, fontWeight: 700, background: sc.bg, color: sc.color }}>
+                          {formatQuantity(prod.stock)}
+                        </span>
                       </td>
-                      <td style={{ color: "var(--ha-text-2)" }}>{p.category?.name || "—"}</td>
+                      <td style={{ color: "var(--ha-text)" }}>{p(prices.costo)}</td>
+                      <td style={{ color: "var(--ha-text-2)" }}>{p(prices.mayorista)}</td>
+                      <td style={{ color: "var(--ha-text-2)" }}>{p(prices.minorista)}</td>
+                      <td style={{ color: "var(--ha-text-2)" }}>{p(prices.fabrica)}</td>
                       <td>
-                        <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600, background: sc.bg, color: sc.color }}>
-                          {formatQuantity(p.stock)} {UNIT_SHORT_LABEL[p.unit] ?? ""}
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", padding: "2px 10px",
+                          borderRadius: 999, fontSize: 12, fontWeight: 600,
+                          background: isActive ? "var(--ha-green-soft)" : "var(--ha-bg-raised)",
+                          color: isActive ? "var(--ha-green)" : "var(--ha-text-3)",
+                        }}>
+                          {isActive ? "Activo" : "Inactivo"}
                         </span>
                       </td>
                       <td style={{ textAlign: "right" }}>
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
                           <button
-                            onClick={() => openEdit(p)}
+                            onClick={() => openEdit(prod)}
                             style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}
                           >
-                            <Edit2 size={14} />
+                            <Pencil size={14} />
                           </button>
                           {showDeactivated ? (
                             <button
-                              onClick={() => { setReactivateId(p.id); setReactivateTarget(p.name); }}
-                              style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}
+                              onClick={() => { setReactivateId(prod.id); setReactivateTarget(prod.name); }}
                               title="Reactivar"
+                              style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}
                             >
                               <RotateCcw size={14} />
                             </button>
                           ) : (
                             <button
-                              onClick={() => { setDeleteId(p.id); setDeleteTarget(p.name); }}
+                              onClick={() => { setDeleteId(prod.id); setDeleteTarget(prod.name); }}
                               style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-red)", background: "transparent", borderRadius: 7, color: "var(--ha-red)", cursor: "pointer" }}
                             >
                               <Trash2 size={14} />
@@ -392,36 +490,49 @@ function ProductsContent() {
 
           {/* Mobile card list */}
           <div className="ha-cardlist">
-            {products.map((p) => {
-              const sc = stockColor(p.stock);
+            {products.map((prod) => {
+              const sc = stockColor(prod.stock);
+              const prices = priceMap[prod.id] ?? {};
+              const isActive = !prod.deactivationDate;
               return (
-                <div key={p.id} className="ha-ordcard">
+                <div key={prod.id} className="ha-ordcard">
                   <div className="ha-ordcard__top">
                     <div>
-                      <div className="ha-ordcard__name">{p.name}</div>
-                      {(p.sku || p.category?.name) && (
-                        <div style={{ display: "flex", gap: 8, marginTop: 3, fontSize: 12, color: "var(--ha-text-3)" }}>
-                          {p.sku && <span className="ha-mono">{p.sku}</span>}
-                          {p.category?.name && <span>{p.category.name}</span>}
-                        </div>
-                      )}
+                      <div className="ha-ordcard__name">{prod.name}</div>
+                      <div style={{ fontSize: 12, color: "var(--ha-text-3)", marginTop: 2 }}>
+                        {[prod.category?.name, UNIT_SHORT_LABEL[prod.unit]].filter(Boolean).join(" · ")}
+                      </div>
                     </div>
-                    <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600, background: sc.bg, color: sc.color, flexShrink: 0 }}>
-                      {formatQuantity(p.stock)} {UNIT_SHORT_LABEL[p.unit] ?? ""}
+                    <span style={{
+                      padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600, flexShrink: 0,
+                      background: isActive ? "var(--ha-green-soft)" : "var(--ha-bg-raised)",
+                      color: isActive ? "var(--ha-green)" : "var(--ha-text-3)",
+                    }}>
+                      {isActive ? "Activo" : "Inactivo"}
                     </span>
                   </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 36, padding: "4px 10px", borderRadius: 8, fontSize: 13, fontWeight: 700, background: sc.bg, color: sc.color }}>
+                      {formatQuantity(prod.stock)}
+                    </span>
+                    {prices.mayorista != null && (
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--ha-text)" }}>
+                        {formatCurrency(prices.mayorista)}
+                      </span>
+                    )}
+                  </div>
                   <div className="ha-ordcard__actions">
-                    <button className="ha-actbtn" onClick={() => openEdit(p)}>
-                      <Edit2 size={15} />
+                    <button className="ha-actbtn" onClick={() => openEdit(prod)}>
+                      <Pencil size={15} />
                     </button>
                     {showDeactivated ? (
-                      <button className="ha-actbtn" onClick={() => { setReactivateId(p.id); setReactivateTarget(p.name); }}>
+                      <button className="ha-actbtn" onClick={() => { setReactivateId(prod.id); setReactivateTarget(prod.name); }}>
                         <RotateCcw size={15} />
                       </button>
                     ) : (
                       <button
                         className="ha-actbtn"
-                        onClick={() => { setDeleteId(p.id); setDeleteTarget(p.name); }}
+                        onClick={() => { setDeleteId(prod.id); setDeleteTarget(prod.name); }}
                         style={{ borderColor: "var(--ha-red)", color: "var(--ha-red)" }}
                       >
                         <Trash2 size={15} />
@@ -435,23 +546,28 @@ function ProductsContent() {
 
           {/* Pagination */}
           {meta && meta.totalPages > 1 && (
-            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 20, flexWrap: "wrap" }}>
               <button
-                className="ha-btn ha-btn--secondary ha-btn--sm"
+                className="ha-btn ha-btn--secondary"
                 disabled={pagination.page <= 1}
-                onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
+                onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
               >
-                Anterior
+                ← Anterior
               </button>
-              <span style={{ fontSize: 13, color: "var(--ha-text-3)" }}>
-                Página {pagination.page} de {meta.totalPages}
+              <span style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 36, height: 36, borderRadius: "50%",
+                background: "var(--ha-amber)", color: "#0f1117",
+                fontWeight: 700, fontSize: 14,
+              }}>
+                {pagination.page}
               </span>
               <button
-                className="ha-btn ha-btn--secondary ha-btn--sm"
+                className="ha-btn ha-btn--secondary"
                 disabled={pagination.page >= meta.totalPages}
-                onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
+                onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
               >
-                Siguiente
+                Siguiente →
               </button>
             </div>
           )}
@@ -477,50 +593,55 @@ function ProductsContent() {
             </div>
             <div className="ha-sheet__body">
               <div className="ha-field">
-                <label className="ha-label">Categoría</label>
+                <div style={{ position: "relative" }}>
+                  <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--ha-text-3)", pointerEvents: "none" }} />
+                  <input
+                    className="ha-input"
+                    style={{ paddingLeft: 36 }}
+                    placeholder="Buscar productos…"
+                    value={draftSearch}
+                    onChange={(e) => setDraftSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="ha-field" style={{ marginTop: 12 }}>
                 <select
                   className="ha-input ha-select"
-                  value={categoryFilter}
-                  onChange={(e) => {
-                    setPagination((p) => ({ ...p, page: 1 }));
-                    setCategoryFilter(e.target.value);
-                    updateParams({ category: e.target.value || null });
-                  }}
+                  value={draftCategory}
+                  onChange={(e) => setDraftCategory(e.target.value)}
                 >
                   <option value="">Todas las categorías</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 20 }}>
-                <input
-                  type="checkbox"
-                  id="chk-deactivated"
-                  checked={showDeactivated}
-                  onChange={(e) => {
-                    setPagination((p) => ({ ...p, page: 1 }));
-                    setShowDeactivated(e.target.checked);
-                    updateParams({ showDeactivated: e.target.checked ? "true" : null });
-                  }}
-                />
-                <label htmlFor="chk-deactivated" className="ha-label" style={{ margin: 0 }}>
-                  Mostrar productos desactivados
-                </label>
-              </div>
+              <button
+                onClick={() => setDraftDeactivated((v) => !v)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12, width: "100%",
+                  marginTop: 12, padding: "12px 14px", border: "1px solid var(--ha-border)",
+                  borderRadius: 10, background: draftDeactivated ? "var(--ha-amber-soft)" : "var(--ha-bg-raised)",
+                  color: draftDeactivated ? "var(--ha-amber)" : "var(--ha-text-2)",
+                  cursor: "pointer", fontSize: 14, fontWeight: 500,
+                }}
+              >
+                <Eye size={16} />
+                Mostrar desactivados
+              </button>
             </div>
             <div className="ha-sheet__foot">
-              <button className="ha-btn ha-btn--primary" onClick={() => setFilterSheetOpen(false)}>
-                Aplicar
+              <button className="ha-btn ha-btn--primary" onClick={applyFilters}>
+                Aplicar filtros
               </button>
             </div>
           </div>
         </>
       )}
 
-      {/* Drawer */}
+      {/* Drawer — create / edit */}
       {drawerOpen && (
         <>
           <div className="ha-overlay" onClick={closeDrawer} />
-          <div className="ha-drawer" style={{ width: "min(90vw, 480px)" }}>
+          <div className="ha-drawer ha-drawer--adaptive" style={{ width: "min(90vw, 520px)" }}>
             <div className="ha-drawer__head">
               <span className="ha-drawer__title">{editingId ? "Editar producto" : "Nuevo producto"}</span>
               <button className="ha-iconbtn" onClick={closeDrawer} aria-label="Cerrar"><X size={18} /></button>
