@@ -146,16 +146,28 @@ function ProductsContent() {
 
   const fetchPricesAndCosts = useCallback(async () => {
     try {
-      const [pricesRes, costsRes] = await Promise.all([
-        apiClient.getPrices(1, 1000, undefined, true),
-        apiClient.getCosts(1, 1000, undefined, true),
+      const fetchAllPages = async <T,>(
+        fetcher: (page: number) => Promise<{ data: T[]; meta: PaginationMeta }>,
+      ): Promise<T[]> => {
+        const first = await fetcher(1);
+        if (first.meta.totalPages <= 1) return first.data;
+        const rest = await Promise.all(
+          Array.from({ length: first.meta.totalPages - 1 }, (_, i) => fetcher(i + 2)),
+        );
+        return [first, ...rest].flatMap((r) => r.data);
+      };
+
+      const [allPrices, allCosts] = await Promise.all([
+        fetchAllPages((page) => apiClient.getPrices(page, 100, undefined, true)),
+        fetchAllPages((page) => apiClient.getCosts(page, 100, undefined, true)),
       ]);
+
       const map: PriceMap = {};
-      for (const cost of costsRes.data) {
+      for (const cost of allCosts) {
         if (!map[cost.productId]) map[cost.productId] = {};
         map[cost.productId].costo = cost.value;
       }
-      for (const price of pricesRes.data) {
+      for (const price of allPrices) {
         if (!map[price.productId]) map[price.productId] = {};
         const t = price.description;
         if (t === "mayorista") map[price.productId].mayorista = price.value;
