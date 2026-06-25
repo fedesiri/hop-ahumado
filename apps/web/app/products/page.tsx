@@ -365,6 +365,11 @@ function ProductsContent() {
             <option value="">Todas las categorías</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          {meta && (
+            <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--ha-text-3)", whiteSpace: "nowrap" }}>
+              {meta.total} productos
+            </span>
+          )}
           <button
             className={`ha-btn ${showDeactivated ? "ha-btn--primary" : "ha-btn--secondary"}`}
             style={{ flex: "none", gap: 8 }}
