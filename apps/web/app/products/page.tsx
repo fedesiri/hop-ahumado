@@ -339,7 +339,7 @@ function ProductsContent() {
         <div className="ha-filters__row">
           <input
             className="ha-filter-input"
-            style={{ flex: 1 }}
+            style={{ width: 280 }}
             placeholder="Buscar por nombre, SKU o código…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
@@ -354,7 +354,7 @@ function ProductsContent() {
           />
           <select
             className="ha-filter-input ha-select"
-            style={{ flex: 1, height: 36, padding: "0 30px 0 10px" }}
+            style={{ width: 200, height: 36, padding: "0 30px 0 10px" }}
             value={categoryFilter}
             onChange={(e) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
