@@ -145,11 +145,10 @@ function ProductsContent() {
   }, [selectedLineId]);
 
   const fetchPricesAndCosts = useCallback(async () => {
-    if (!selectedLineId) return;
     try {
       const [pricesRes, costsRes] = await Promise.all([
-        apiClient.getPrices(1, 500, undefined, true, undefined, undefined, selectedLineId),
-        apiClient.getCosts(1, 500, undefined, true, undefined, selectedLineId),
+        apiClient.getPrices(1, 1000, undefined, true),
+        apiClient.getCosts(1, 1000, undefined, true),
       ]);
       const map: PriceMap = {};
       for (const cost of costsRes.data) {
@@ -164,10 +163,10 @@ function ProductsContent() {
         else if (t === "fabrica") map[price.productId].fabrica = price.value;
       }
       setPriceMap(map);
-    } catch {
-      // prices are supplementary — don't block the UI
+    } catch (err) {
+      console.error("fetchPricesAndCosts failed:", err);
     }
-  }, [selectedLineId]);
+  }, []);
 
   useEffect(() => {
     fetchProducts();
@@ -175,8 +174,11 @@ function ProductsContent() {
 
   useEffect(() => {
     fetchCategories();
+  }, [fetchCategories]);
+
+  useEffect(() => {
     fetchPricesAndCosts();
-  }, [fetchCategories, fetchPricesAndCosts]);
+  }, [fetchPricesAndCosts]);
 
   useEffect(() => {
     if (drawerOpen) setTimeout(() => nameInputRef.current?.focus(), 80);

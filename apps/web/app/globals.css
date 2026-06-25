@@ -121,7 +121,7 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 
 /* table */
 .ha-table-wrap{display:none}
-@container (min-width:768px){ .ha-table-wrap{display:block;border:1px solid var(--ha-border);border-radius:12px;overflow:hidden;background:var(--ha-bg-card)} }
+@container (min-width:768px){ .ha-table-wrap{display:block;border:1px solid var(--ha-border);border-radius:12px;overflow-x:auto;background:var(--ha-bg-card)} }
 .ha-table{width:100%;border-collapse:collapse;font-size:14px}
 .ha-table thead th{position:sticky;top:0;background:var(--ha-bg-raised);text-align:left;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ha-text-3);padding:0 16px;height:40px;cursor:pointer;user-select:none;white-space:nowrap}
 .ha-table thead th.is-active{color:var(--ha-amber)}
