@@ -9,10 +9,8 @@ import {
   OrderPaymentStatus,
   PaymentMethod,
   type Order,
-  type OrderItem,
-  type OrderPayment,
 } from "@/lib/types";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 type Props = {
   order: Order;
@@ -52,6 +50,26 @@ function Spinner() {
     <span
       style={{ display: "inline-block", width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite", verticalAlign: "middle" }}
     />
+  );
+}
+
+function InfoRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--ha-text-3)", fontWeight: 600, marginBottom: 3 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 14, color: "var(--ha-text)", lineHeight: 1.4 }}>{children}</div>
+    </div>
+  );
+}
+
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 0 12px" }}>
+      <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--ha-text-3)", whiteSpace: "nowrap" }}>{label}</span>
+      <div style={{ flex: 1, height: 1, background: "var(--ha-border)" }} />
+    </div>
   );
 }
 
@@ -246,43 +264,62 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
   const isPendingPricing = order.isConsignment && order.paymentStatus === OrderPaymentStatus.PENDING_PRICING;
   const pendingOrderItems = (order.orderItems ?? []).filter((i) => i.price === null || i.price === undefined);
   const isPaid = order.paymentStatus === OrderPaymentStatus.PAID;
+  const remaining = Number(order.remainingAmount ?? 0);
 
   return (
     <div>
-      <div style={{ marginBottom: 16, padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "8px 24px" }}>
-          <div><strong>Cliente:</strong> {order.customer?.name || "—"}</div>
-          <div><strong>Vendedor:</strong> {order.user?.name || "—"}</div>
-          <div><strong>Total:</strong> {formatCurrency(order.total)}</div>
-          <div><strong>Total calculado:</strong> {formatCurrency(order.totalPrice)}</div>
-          <div>
-            <strong>Estado de pago:</strong>{" "}
-            {statusBadge(order.paymentStatus)}
-            {order.isConsignment && (
-              <span style={{ display: "inline-block", marginLeft: 4, padding: "2px 8px", borderRadius: 5, fontSize: 12, fontWeight: 500, background: "#7c3aed22", color: "#a78bfa", border: "1px solid #7c3aed55" }}>
-                Consignación
-              </span>
-            )}
-          </div>
-          <div><strong>Pagado:</strong> {formatCurrency(order.paidAmount)}</div>
-          <div><strong>Pendiente:</strong> {formatCurrency(order.remainingAmount)}</div>
-          <div><strong>Lista de precios:</strong> {orderPriceListDisplayLabel(order.priceListType)}</div>
-          <div><strong>Creada:</strong> {new Date(order.createdAt).toLocaleDateString("es-AR")}</div>
-          {isCancelled && order.cancelledAt && (
-            <div><strong>Cancelada el:</strong> <span style={{ color: "#ef4444" }}>{new Date(order.cancelledAt).toLocaleDateString("es-AR")}</span></div>
+      {/* Info card */}
+      <div style={{ marginBottom: 4, padding: "16px 20px", borderRadius: 12, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+        {/* Header row: customer + badges */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--ha-text)" }}>{order.customer?.name || "Sin cliente"}</span>
+          {statusBadge(order.paymentStatus)}
+          {order.isConsignment && (
+            <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 5, fontSize: 12, fontWeight: 500, background: "#7c3aed22", color: "#a78bfa", border: "1px solid #7c3aed55" }}>
+              Consignación
+            </span>
           )}
-          <div><strong>Entrega programada:</strong> {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString("es-AR") : "—"}</div>
-          <div><strong>Entregada:</strong> {order.isDelivered ? "Sí" : "No"}</div>
-          <div><strong>Entregada el:</strong> {order.deliveredAt ? new Date(order.deliveredAt).toLocaleString("es-AR") : "—"}</div>
-          <div><strong>Ubicación de stock:</strong> {order.fulfillmentLocation?.name ?? "—"}</div>
-          {order.comment ? (
-            <div style={{ gridColumn: "1 / -1" }}><strong>Comentario:</strong> <span style={{ whiteSpace: "pre-wrap" }}>{order.comment}</span></div>
-          ) : null}
+        </div>
+
+        {/* KPI strip */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--ha-border)" }}>
+          {([
+            { label: "Total", value: formatCurrency(order.total), color: undefined },
+            { label: "Pagado", value: formatCurrency(order.paidAmount), color: "#4ade80" },
+            { label: "Pendiente", value: formatCurrency(order.remainingAmount), color: remaining > 0 ? "#f97316" : undefined },
+          ] as const).map(({ label, value, color }) => (
+            <div key={label} style={{ textAlign: "center", padding: "10px 8px", borderRadius: 8 }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--ha-text-3)", fontWeight: 600, marginBottom: 5 }}>{label}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: color ?? "var(--ha-text)", fontFamily: "ui-monospace,monospace" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Details grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "14px 24px" }}>
+          <InfoRow label="Vendedor">{order.user?.name || "—"}</InfoRow>
+          <InfoRow label="Lista de precios">{orderPriceListDisplayLabel(order.priceListType)}</InfoRow>
+          <InfoRow label="Total calculado">{formatCurrency(order.totalPrice)}</InfoRow>
+          <InfoRow label="Creada">{new Date(order.createdAt).toLocaleDateString("es-AR")}</InfoRow>
+          <InfoRow label="Entrega programada">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString("es-AR") : "—"}</InfoRow>
+          <InfoRow label="Entregada">{order.isDelivered ? "Sí" : "No"}</InfoRow>
+          <InfoRow label="Entregada el">{order.deliveredAt ? new Date(order.deliveredAt).toLocaleDateString("es-AR") : "—"}</InfoRow>
+          <InfoRow label="Ubicación de stock">{order.fulfillmentLocation?.name ?? "—"}</InfoRow>
+          {isCancelled && order.cancelledAt && (
+            <InfoRow label="Cancelada el">
+              <span style={{ color: "var(--ha-red)" }}>{new Date(order.cancelledAt).toLocaleDateString("es-AR")}</span>
+            </InfoRow>
+          )}
+          {order.comment && (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <InfoRow label="Comentario"><span style={{ whiteSpace: "pre-wrap" }}>{order.comment}</span></InfoRow>
+            </div>
+          )}
         </div>
       </div>
 
-      <h3 style={{ color: "#fff", marginBottom: 8 }}>Ítems</h3>
-      <div className="ha-table-wrap" style={{ marginBottom: 24 }}>
+      <SectionDivider label="Ítems" />
+      <div className="ha-table-wrap" style={{ marginBottom: 4 }}>
         <table className="ha-table">
           <thead>
             <tr>
@@ -307,22 +344,22 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
         </table>
       </div>
 
-      <h3 style={{ color: "#fff", marginBottom: 8 }}>Pagos</h3>
+      <SectionDivider label="Pagos" />
 
       {isPendingPricing ? (
-        <div style={{ marginBottom: 16, padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
-          <p style={{ color: "#9ca3af", marginBottom: 12 }}>Esta orden está pendiente de cobro. Ingresá los precios del día para cada ítem y registrá el pago.</p>
+        <div style={{ marginBottom: 4, padding: "14px 16px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+          <p style={{ color: "var(--ha-text-3)", marginBottom: 12, fontSize: 14 }}>Esta orden está pendiente de cobro. Ingresá los precios del día para cada ítem y registrá el pago.</p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button className="ha-btn ha-btn--primary" onClick={() => void openCobrarModal()}>Cobrar consignación</button>
             <button className="ha-btn ha-btn--secondary" onClick={openDevolverModal}>Registrar devolución</button>
           </div>
         </div>
       ) : isCancelled ? (
-        <div style={{ marginBottom: 16, padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
-          <p style={{ color: "#9ca3af" }}>Esta orden fue cancelada. No se pueden registrar pagos ni devoluciones.</p>
+        <div style={{ marginBottom: 4, padding: "14px 16px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+          <p style={{ color: "var(--ha-text-3)", fontSize: 14 }}>Esta orden fue cancelada. No se pueden registrar pagos ni devoluciones.</p>
         </div>
       ) : (
-        <div style={{ marginBottom: 16, padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
+        <div style={{ marginBottom: 4, padding: "14px 16px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <input
               type="number"
@@ -399,11 +436,11 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
               <button className="ha-iconbtn" onClick={() => setCobrarModalOpen(false)} aria-label="Cerrar">✕</button>
             </div>
             <div className="ha-modal__body" style={{ maxHeight: "calc(100vh - 220px)", overflowY: "auto" }}>
-              <p style={{ color: "#9ca3af", marginBottom: 16 }}>
+              <p style={{ color: "var(--ha-text-3)", marginBottom: 16, fontSize: 14 }}>
                 Precios pre-llenados con la lista activa ({(order.priceListType as string) ?? "mayorista"}). Podés editarlos antes de confirmar.
               </p>
               {cobrarPricesLoading && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, color: "#9ca3af" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, color: "var(--ha-text-3)" }}>
                   <Spinner /> Cargando precios actuales…
                 </div>
               )}
@@ -450,7 +487,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
                           </td>
                           <td>
                             {remaining <= 0 ? (
-                              <span style={{ color: "#6b7280" }}>—</span>
+                              <span style={{ color: "var(--ha-text-3)" }}>—</span>
                             ) : (
                               <select
                                 className="ha-input"
@@ -493,7 +530,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
                 </table>
               </div>
               <div style={{ marginBottom: 16 }}>
-                <strong style={{ color: "#e5e7eb" }}>Total: {formatCurrency(cobrarTotal)}</strong>
+                <strong style={{ color: "var(--ha-text)" }}>Total: {formatCurrency(cobrarTotal)}</strong>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <input
@@ -516,7 +553,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
                   <option value={PaymentMethod.CARD}>Transferencia</option>
                 </select>
               </div>
-              <p style={{ color: "#9ca3af", marginTop: 8, fontSize: 12 }}>
+              <p style={{ color: "var(--ha-text-3)", marginTop: 8, fontSize: 12 }}>
                 Dejá el monto en blanco si querés fijar los precios sin registrar el pago todavía.
               </p>
             </div>
@@ -539,7 +576,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
               <button className="ha-iconbtn" onClick={() => setDevolverModalOpen(false)} aria-label="Cerrar">✕</button>
             </div>
             <div className="ha-modal__body">
-              <p style={{ color: "#9ca3af", marginBottom: 16 }}>
+              <p style={{ color: "var(--ha-text-3)", marginBottom: 16, fontSize: 14 }}>
                 Ingresá la cantidad que devuelve el cliente por cada ítem. El stock se reincorporará al inventario.
               </p>
               <div className="ha-table-wrap" style={{ marginBottom: 16 }}>
@@ -586,7 +623,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
               <button className="ha-btn ha-btn--secondary" onClick={() => setDevolverModalOpen(false)}>Cancelar</button>
               <button
                 className="ha-btn"
-                style={{ background: "#dc2626", color: "#fff", borderColor: "#dc2626" }}
+                style={{ background: "var(--ha-red)", color: "#fff", borderColor: "var(--ha-red)" }}
                 disabled={devolverLoading}
                 onClick={() => void handleDevolver()}
               >
