@@ -1,11 +1,19 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
-import type { CrmCustomerListItem, CrmDashboardResponse } from "@/lib/types";
+import type { CrmCustomerListItem, CrmDashboardResponse, CustomerInteraction } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
 import { MessageSquare, Users, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+
+const CHANNEL_LABEL: Record<string, string> = {
+  CALL: "Llamada",
+  EMAIL: "Email",
+  WHATSAPP: "WhatsApp",
+  MEETING: "Reunión",
+  OTHER: "Otro",
+};
 
 type StatusStyle = { color: string; bg: string; border: string };
 
@@ -28,14 +36,26 @@ export default function CrmDashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<CrmDashboardResponse | null>(null);
   const [stale, setStale] = useState<CrmCustomerListItem[]>([]);
+  const [byChannel, setByChannel] = useState<{ channel: string; label: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const fetchAllInteractions = async (): Promise<CustomerInteraction[]> => {
+      const first = await apiClient.getCustomerInteractions(1, 100);
+      const all = [...first.data];
+      for (let p = 2; p <= first.meta.totalPages; p++) {
+        const more = await apiClient.getCustomerInteractions(p, 100);
+        all.push(...more.data);
+      }
+      return all;
+    };
+
     const load = async () => {
       try {
-        const [dashboard, customers] = await Promise.all([
+        const [dashboard, customers, interactions] = await Promise.all([
           apiClient.getCrmDashboard(),
           apiClient.listCrmCustomers(1, 100),
+          fetchAllInteractions(),
         ]);
         setData(dashboard);
         const filtered = (customers.data ?? [])
@@ -43,6 +63,15 @@ export default function CrmDashboardPage() {
           .sort((a, b) => (b.daysSinceLastContact ?? 0) - (a.daysSinceLastContact ?? 0))
           .slice(0, 6);
         setStale(filtered);
+        const channelMap = new Map<string, number>();
+        for (const i of interactions) {
+          const ch = i.channel ?? "OTHER";
+          channelMap.set(ch, (channelMap.get(ch) ?? 0) + 1);
+        }
+        const channelRows = Array.from(channelMap.entries())
+          .map(([channel, count]) => ({ channel, label: CHANNEL_LABEL[channel] ?? channel, count }))
+          .sort((a, b) => b.count - a.count);
+        setByChannel(channelRows);
       } catch (e) {
         console.error(e);
       } finally {
@@ -126,6 +155,29 @@ export default function CrmDashboardPage() {
           })}
         </div>
       </div>
+
+      {/* Interacciones por canal */}
+      {byChannel.length > 0 && (
+        <div style={{ padding: "18px 20px", borderRadius: 12, background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)", marginBottom: 20 }}>
+          <h2 style={{ margin: "0 0 18px", fontSize: 15, fontWeight: 700, color: "var(--ha-text)" }}>Interacciones por canal</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {byChannel.map(({ channel, label, count }) => {
+              const totalInteractions = byChannel.reduce((s, r) => s + r.count, 0);
+              const pct = totalInteractions > 0 ? (count / totalInteractions) * 100 : 0;
+              return (
+                <div key={channel} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ width: 88, flexShrink: 0, fontSize: 14, color: "var(--ha-text-2)" }}>{label}</span>
+                  <div style={{ flex: 1, height: 6, borderRadius: 3, background: "var(--ha-bg-raised)", overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", borderRadius: 3, background: "var(--ha-amber)", opacity: 0.7 }} />
+                  </div>
+                  <span style={{ width: 56, flexShrink: 0, textAlign: "right", fontSize: 14, color: "var(--ha-text)", fontWeight: 700 }}>{count}</span>
+                  <span style={{ fontSize: 13, color: "var(--ha-text-3)", width: 40, flexShrink: 0 }}>· {Math.round(pct)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Sin interacciones recientes */}
       {stale.length > 0 && (
