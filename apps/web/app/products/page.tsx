@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
@@ -45,11 +44,7 @@ type PriceMap = Record<string, {
 }>;
 
 export default function ProductsPage() {
-  return (
-    <AppLayout>
-      <ProductsContent />
-    </AppLayout>
-  );
+  return <ProductsContent />;
 }
 
 function ProductsContent() {

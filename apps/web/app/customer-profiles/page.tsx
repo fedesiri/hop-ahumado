@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import type {
@@ -14,11 +13,7 @@ import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function CustomerProfilesPage() {
-  return (
-    <AppLayout>
-      <CustomerProfilesContent />
-    </AppLayout>
-  );
+  return <CustomerProfilesContent />;
 }
 
 interface FormState {

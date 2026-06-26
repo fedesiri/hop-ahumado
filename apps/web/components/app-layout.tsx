@@ -3,8 +3,9 @@
 import {
   ArrowLeftRight,
   BarChart2,
-  ChevronLeft,
   ClipboardList,
+  PanelLeftClose,
+  PanelLeftOpen,
   DollarSign,
   FilePlus,
   FlaskConical,
@@ -105,19 +106,31 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { selectedLine } = useLineContext();
   const brandLogo = selectedLine === BusinessLine.MEAT ? "/logo-alumo.png" : "/logo-hop.png";
   const brandName = selectedLine === BusinessLine.MEAT ? "Alumo" : "Hop";
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("ha-sidebar-collapsed") === "true";
+    return false;
+  });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("light");
-
-  useEffect(() => {
-    const saved = localStorage.getItem("ha-theme") as "dark" | "light" | null;
-    if (saved) setTheme(saved);
-  }, []);
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("ha-theme") as "dark" | "light" | null;
+      if (saved === "dark" || saved === "light") return saved;
+    }
+    return "light";
+  });
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
     localStorage.setItem("ha-theme", next);
+  };
+
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem("ha-sidebar-collapsed", String(next));
+      return next;
+    });
   };
 
   const closeMobileNav = () => setMobileNavOpen(false);
@@ -152,13 +165,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
         {/* Desktop collapse toggle */}
         <button
           className="ha-sidetoggle"
-          onClick={() => setCollapsed((c) => !c)}
+          onClick={toggleCollapsed}
           aria-label={collapsed ? "Expandir menú" : "Contraer menú"}
         >
-          <ChevronLeft
-            size={18}
-            style={{ transform: collapsed ? "rotate(180deg)" : "none", transition: "transform .2s" }}
-          />
+          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
         </button>
 
         <div className="ha-header__spacer" />

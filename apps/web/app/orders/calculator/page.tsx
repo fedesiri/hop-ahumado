@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { OrderCalculator } from "@/components/order-calculator/order-calculator";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -17,11 +16,7 @@ import type { CreateOrderRequest, Customer, Price, Product, StockLocation } from
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function OrderCalculatorPage() {
-  return (
-    <AppLayout>
-      <OrderCalculatorPageContent />
-    </AppLayout>
-  );
+  return <OrderCalculatorPageContent />;
 }
 
 function OrderCalculatorPageContent() {

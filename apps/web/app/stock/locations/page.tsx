@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { LocationStockModal } from "@/components/stock/location-stock-modal";
 import { apiClient } from "@/lib/api-client";
@@ -11,11 +10,7 @@ import { ArrowLeftRight, Eye, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 export default function StockLocationsPage() {
-  return (
-    <AppLayout>
-      <StockLocationsContent />
-    </AppLayout>
-  );
+  return <StockLocationsContent />;
 }
 
 function StockLocationsContent() {

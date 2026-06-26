@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
@@ -20,11 +19,7 @@ function formatPriceListLabel(text: string | null | undefined): string {
 }
 
 export default function PricesPage() {
-  return (
-    <AppLayout>
-      <PricesContent />
-    </AppLayout>
-  );
+  return <PricesContent />;
 }
 
 function PricesContent() {

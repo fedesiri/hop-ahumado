@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { OrderDetailView } from "@/components/orders/order-detail-view";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
@@ -25,11 +24,7 @@ const PAYMENT_STATUS_OPTIONS = [
 ];
 
 export default function OrdersPage() {
-  return (
-    <AppLayout>
-      <OrdersContent />
-    </AppLayout>
-  );
+  return <OrdersContent />;
 }
 
 function OrdersContent() {

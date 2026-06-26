@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
@@ -16,11 +15,7 @@ function roundMoney(value: number): number {
 }
 
 export default function StockPage() {
-  return (
-    <AppLayout>
-      <StockContent />
-    </AppLayout>
-  );
+  return <StockContent />;
 }
 
 function StockContent() {

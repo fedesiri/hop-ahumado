@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { OrderCalculator } from "@/components/order-calculator/order-calculator";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -24,11 +23,7 @@ interface OrderEditPageProps {
 
 export default function OrderEditPage({ params }: OrderEditPageProps) {
   const { id } = use(params);
-  return (
-    <AppLayout>
-      <OrderEditPageContent id={id} />
-    </AppLayout>
-  );
+  return <OrderEditPageContent id={id} />;
 }
 
 function OrderEditPageContent({ id }: { id: string }) {

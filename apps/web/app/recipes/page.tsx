@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
@@ -50,11 +49,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export default function RecipesPage() {
-  return (
-    <AppLayout>
-      <RecipesContent />
-    </AppLayout>
-  );
+  return <RecipesContent />;
 }
 
 function RecipesContent() {

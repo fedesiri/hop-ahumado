@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import type { Dayjs } from "@/lib/dayjs";
 import dayjs from "@/lib/dayjs";
@@ -55,11 +54,7 @@ function ordersInPreset(orders: Order[], preset: PeriodPreset, customRange: [Day
 }
 
 export default function OrdersMetricsPage() {
-  return (
-    <AppLayout>
-      <OrdersMetricsContent />
-    </AppLayout>
-  );
+  return <OrdersMetricsContent />;
 }
 
 function OrdersMetricsContent() {

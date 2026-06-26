@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
@@ -11,11 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function CostsPage() {
-  return (
-    <AppLayout>
-      <CostsContent />
-    </AppLayout>
-  );
+  return <CostsContent />;
 }
 
 function CostsContent() {

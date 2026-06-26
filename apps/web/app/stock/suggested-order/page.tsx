@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
@@ -18,11 +17,7 @@ function formatCostDate(iso: string | null) {
 }
 
 export default function SuggestedOrderPage() {
-  return (
-    <AppLayout>
-      <SuggestedOrderContent />
-    </AppLayout>
-  );
+  return <SuggestedOrderContent />;
 }
 
 function SuggestedOrderContent() {

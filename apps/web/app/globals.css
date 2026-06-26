@@ -420,6 +420,7 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .oc-promo{font-size:12px;color:var(--ha-text-3);margin:4px 0;line-height:1.4}
 .oc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 @container (max-width:767px){.oc-actions .oc-grow{flex:1}}
+@container (max-width:767px){.oc-actions .oc-btn--fmob{flex:1 1 100%;height:auto;min-height:40px;padding:10px 16px;justify-content:center}}
 @container (min-width:768px){.oc-actions{justify-content:flex-end}}
 .oc-iconbtn{width:36px;height:36px;flex:none;border-radius:8px;background:transparent;border:1px solid var(--ha-border-2);color:var(--ha-text-2);cursor:pointer;display:grid;place-items:center}
 .oc-iconbtn:hover:not(:disabled){background:var(--ha-bg-hover);color:var(--ha-text)}

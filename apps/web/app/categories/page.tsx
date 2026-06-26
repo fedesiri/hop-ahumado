@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
 import type { Category, CreateCategoryRequest, UpdateCategoryRequest } from "@/lib/types";
@@ -9,11 +8,7 @@ import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export default function CategoriesPage() {
-  return (
-    <AppLayout>
-      <CategoriesContent />
-    </AppLayout>
-  );
+  return <CategoriesContent />;
 }
 
 function CategoriesContent() {

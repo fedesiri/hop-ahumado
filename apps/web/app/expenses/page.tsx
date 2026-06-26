@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
@@ -18,11 +17,7 @@ type ExpenseGroup = {
 };
 
 export default function ExpensesPage() {
-  return (
-    <AppLayout>
-      <ExpensesContent />
-    </AppLayout>
-  );
+  return <ExpensesContent />;
 }
 
 function ExpensesContent() {

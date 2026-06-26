@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import type { CreateUserRequest, HealthResponse, UpdateUserRequest, User } from "@/lib/types";
@@ -8,11 +7,7 @@ import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 export default function UsersPage() {
-  return (
-    <AppLayout>
-      <UsersContent />
-    </AppLayout>
-  );
+  return <UsersContent />;
 }
 
 function UsersContent() {

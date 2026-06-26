@@ -51,7 +51,7 @@ export function StickyFooter({
           </button>
           {onConfirmOrder && (
             <button
-              className="oc-btn oc-btn--success oc-grow"
+              className="oc-btn oc-btn--success oc-grow oc-btn--fmob"
               onClick={onConfirmOrder}
               disabled={!hasItems}
             >

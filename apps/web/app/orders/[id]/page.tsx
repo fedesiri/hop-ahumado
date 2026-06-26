@@ -1,6 +1,5 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { OrderDetailView } from "@/components/orders/order-detail-view";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
@@ -15,11 +14,7 @@ interface OrderDetailPageProps {
 
 export default function OrderDetailPage({ params }: OrderDetailPageProps) {
   const { id } = use(params);
-  return (
-    <AppLayout>
-      <OrderDetailContent id={id} />
-    </AppLayout>
-  );
+  return <OrderDetailContent id={id} />;
 }
 
 function OrderDetailContent({ id }: { id: string }) {
