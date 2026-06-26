@@ -290,7 +290,7 @@ function PricesContent() {
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <button className="pc-btn pc-btn--primary pc-btn--sm" onClick={handleCreate}>
+        <button className="pc-btn pc-btn--primary" onClick={handleCreate}>
           + Nuevo precio
         </button>
         <span className="pc-count">

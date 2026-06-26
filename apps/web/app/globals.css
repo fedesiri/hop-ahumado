@@ -906,7 +906,7 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .pc-money input{height:36px;width:130px;background:var(--ha-bg-raised);border:1px solid var(--ha-border-2);border-radius:7px;color:var(--ha-text);font-family:ui-monospace,monospace;font-size:14px;padding:0 11px 0 22px;outline:none}
 @container (max-width:767px){.pc-money,.pc-money input{width:100%}}
 .pc-money input:focus{border-color:var(--ha-amber);box-shadow:0 0 0 3px var(--ha-amber-soft)}
-.pc-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:36px;padding:0 14px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.pc-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:40px;padding:0 16px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;white-space:nowrap}
 .pc-btn--primary{background:var(--ha-amber);color:#0f1117;border:none}
 .pc-btn--primary:hover{background:var(--ha-amber-bright)}
 .pc-btn--primary:disabled{opacity:.5;cursor:not-allowed}
