@@ -33,7 +33,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  if (loading || !user) {
+  if (!user) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--ha-bg)" }}>
         <div className="ha-spin-el" />

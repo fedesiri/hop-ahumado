@@ -2,7 +2,7 @@
 
 import { authFetch } from "@/lib/auth-fetch";
 import { getFirebaseAuth, waitForFirebaseAuthReady } from "@/lib/firebase";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
@@ -26,7 +26,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -65,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refresh();
-  }, [refresh, pathname]);
+  }, [refresh]);
 
   const logout = useCallback(async () => {
     await signOut(getFirebaseAuth()).catch(() => undefined);
