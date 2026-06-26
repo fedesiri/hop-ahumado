@@ -565,29 +565,34 @@ function ProductsContent() {
 
           {/* Pagination */}
           {meta && meta.totalPages > 1 && (
-            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 20, flexWrap: "wrap" }}>
-              <button
-                className="ha-btn ha-btn--secondary"
-                disabled={pagination.page <= 1}
-                onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
-              >
-                ← Anterior
-              </button>
-              <span style={{
-                display: "inline-flex", alignItems: "center", justifyContent: "center",
-                width: 36, height: 36, borderRadius: "50%",
-                background: "var(--ha-amber)", color: "#0f1117",
-                fontWeight: 700, fontSize: 14,
-              }}>
-                {pagination.page}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  className="ha-btn ha-btn--secondary"
+                  disabled={pagination.page <= 1}
+                  onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
+                >
+                  ← Anterior
+                </button>
+                <span style={{
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  width: 36, height: 36, borderRadius: "50%",
+                  background: "var(--ha-amber)", color: "#0f1117",
+                  fontWeight: 700, fontSize: 14,
+                }}>
+                  {pagination.page}
+                </span>
+                <button
+                  className="ha-btn ha-btn--secondary"
+                  disabled={pagination.page >= meta.totalPages}
+                  onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
+                >
+                  Siguiente →
+                </button>
+              </div>
+              <span style={{ fontSize: 13, color: "var(--ha-text-3)" }}>
+                {meta.total} productos · página {pagination.page} de {meta.totalPages}
               </span>
-              <button
-                className="ha-btn ha-btn--secondary"
-                disabled={pagination.page >= meta.totalPages}
-                onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
-              >
-                Siguiente →
-              </button>
             </div>
           )}
         </>

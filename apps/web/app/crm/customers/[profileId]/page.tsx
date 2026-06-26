@@ -30,7 +30,7 @@ import type {
 import { InteractionChannel as ChannelEnum } from "@/lib/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { formatStatusLabel } from "@/lib/utils";
-import { ArrowLeft, Edit, Eye, Plus } from "lucide-react";
+import { ArrowLeft, Edit, Eye, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -55,19 +55,34 @@ const CHANNEL_OPTIONS = [
   { value: ChannelEnum.OTHER, label: "Otro" },
 ];
 
+const STATUS_COLOR: Record<string, string> = {
+  lead: "#60a5fa",
+  prospecto: "#818cf8",
+  cliente: "#4ade80",
+  pausado: "#fbbf24",
+  perdido: "#f87171",
+};
+
 function Spinner() {
   return (
     <span style={{ display: "inline-block", width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite", verticalAlign: "middle" }} />
   );
 }
 
-function DescRow({ label, children }: { label: string; children: React.ReactNode }) {
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <span style={{ color: "var(--ha-text-3)", fontSize: 12 }}>{label}</span>
-      <div style={{ color: "#f1f5f9", marginTop: 2 }}>{children}</div>
+      <div style={{ fontSize: 11, color: "var(--ha-text-3)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 3 }}>{label}</div>
+      <div style={{ color: "var(--ha-text)", fontSize: 14 }}>{children}</div>
     </div>
   );
+}
+
+function initials(name: string | null): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (parts[0]?.[0] ?? "?").toUpperCase();
 }
 
 export default function CrmCustomerDetailPage() {
@@ -172,7 +187,6 @@ export default function CrmCustomerDetailPage() {
     if (detail?.customer?.id) void fetchOrders(detail.customer.id);
   }, [detail?.customer?.id, fetchOrders]);
 
-  // Populate profile form when modal opens
   useEffect(() => {
     if (editProfileOpen && detail) {
       setPfContactName(detail.contactName ?? "");
@@ -187,7 +201,6 @@ export default function CrmCustomerDetailPage() {
     }
   }, [editProfileOpen]);
 
-  // Populate opportunity form when modal opens
   useEffect(() => {
     if (editOpportunityOpen && detail) {
       if (detail.opportunity) {
@@ -201,7 +214,6 @@ export default function CrmCustomerDetailPage() {
     }
   }, [editOpportunityOpen]);
 
-  // Set now when interaction modal opens
   useEffect(() => {
     if (addInteractionOpen) {
       setIfChannel(""); setIfDate(dayjs().format("YYYY-MM-DDTHH:mm")); setIfNotes(""); setIfNextStep("");
@@ -482,6 +494,9 @@ export default function CrmCustomerDetailPage() {
 
   if (!detail) return null;
 
+  const statusLabel = formatStatusLabel(detail.status);
+  const statusColor = STATUS_COLOR[statusLabel.toLowerCase()] ?? "var(--ha-text-3)";
+
   const TABS = [
     { key: "interactions", label: "Seguimiento comercial" },
     { key: "opportunity", label: "Oportunidad de venta" },
@@ -490,42 +505,96 @@ export default function CrmCustomerDetailPage() {
 
   return (
     <div>
+      {/* Back link */}
       <div style={{ marginBottom: 16 }}>
-        <Link href="/crm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#9ca3af", textDecoration: "none", fontSize: 14 }}>
+        <Link href="/crm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--ha-text-3)", textDecoration: "none", fontSize: 14 }}>
           <ArrowLeft size={16} /> Volver al listado
         </Link>
       </div>
 
       {/* Profile card */}
-      <div style={{ marginBottom: 16, padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-          <h2 style={{ margin: 0, color: "#fafafa", fontSize: 18 }}>
-            {detail.customer.name}{detail.contactName ? ` — ${detail.contactName}` : ""}
-          </h2>
-          <button className="ha-btn ha-btn--primary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => setEditProfileOpen(true)}>
+      <div className="ha-bg-card" style={{ marginBottom: 16, padding: "18px 20px", borderRadius: 12, border: "1px solid var(--ha-border)" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={{ margin: "0 0 4px", color: "var(--ha-text)", fontSize: 20, fontWeight: 700 }}>
+              {detail.customer.name}
+            </h2>
+            {detail.contactName && (
+              <div style={{ color: "var(--ha-text-3)", fontSize: 14, marginBottom: 8 }}>{detail.contactName}</div>
+            )}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {statusLabel && (
+                <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 5, fontSize: 12, fontWeight: 500, background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}55` }}>
+                  {statusLabel}
+                </span>
+              )}
+              {detail.customerType && (
+                <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 5, fontSize: 12, fontWeight: 500, background: "var(--ha-bg-raised)", color: "var(--ha-text-2)", border: "1px solid var(--ha-border-2)" }}>
+                  {formatStatusLabel(detail.customerType)}
+                </span>
+              )}
+            </div>
+          </div>
+          <button className="ha-btn ha-btn--secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => setEditProfileOpen(true)}>
             <Edit size={14} /> Editar perfil
           </button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "12px 24px" }}>
-          <DescRow label="Nombre o razón social">{detail.customer.name}</DescRow>
-          <DescRow label="Tipo de cliente">{detail.customerType ?? "—"}</DescRow>
-          <DescRow label="Persona de contacto">{detail.contactName ?? "—"}</DescRow>
-          <DescRow label="Teléfono">{detail.phone ?? "—"}</DescRow>
-          <DescRow label="Email">{detail.email ?? "—"}</DescRow>
-          <DescRow label="Estado del contacto">{formatStatusLabel(detail.status) || "—"}</DescRow>
-          <DescRow label="¿De dónde nos conoció?">{detail.source ?? "—"}</DescRow>
-          <DescRow label="Socio responsable">{detail.responsible?.name ?? "—"}</DescRow>
-          <DescRow label="Último vínculo">{detail.lastContactAt ? new Date(detail.lastContactAt).toLocaleString("es-AR") : "—"}</DescRow>
-          <DescRow label="Última entrega">{detail.lastOrderDeliveryAt ? new Date(detail.lastOrderDeliveryAt).toLocaleString("es-AR") : "—"}</DescRow>
-          <DescRow label="Último seguimiento CRM">{detail.lastInteractionAt ? new Date(detail.lastInteractionAt).toLocaleString("es-AR") : "—"}</DescRow>
-          <DescRow label="Días sin vínculo">{detail.daysSinceLastContact != null ? detail.daysSinceLastContact : "—"}</DescRow>
-          <DescRow label="Próximo seguimiento">{detail.nextFollowUpAt ? dayjs(detail.nextFollowUpAt).format("DD/MM/YYYY") : "—"}</DescRow>
-          <DescRow label="Notas generales">{detail.generalNotes ?? "—"}</DescRow>
+
+        {/* Info grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "14px 24px" }}>
+          <InfoRow label="Teléfono">{detail.phone || "—"}</InfoRow>
+          <InfoRow label="Email">{detail.email || "—"}</InfoRow>
+          <InfoRow label="Persona de contacto">{detail.contactName || "—"}</InfoRow>
+          <InfoRow label="Origen">{detail.source || "—"}</InfoRow>
+          <InfoRow label="Socio responsable">
+            {detail.responsible?.name ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: "50%", background: "var(--ha-amber)", color: "#0f1117", fontSize: 10, fontWeight: 700 }}>
+                  {initials(detail.responsible.name)}
+                </span>
+                {detail.responsible.name}
+              </div>
+            ) : "—"}
+          </InfoRow>
+          {detail.generalNotes && (
+            <InfoRow label="Notas">{detail.generalNotes}</InfoRow>
+          )}
+        </div>
+
+        {/* KPI strip */}
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--ha-border)" }}>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--ha-text-3)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Último contacto</div>
+            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--ha-text)" }}>
+              {detail.lastContactAt ? new Date(detail.lastContactAt).toLocaleDateString("es-AR") : "—"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--ha-text-3)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Última entrega</div>
+            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--ha-text)" }}>
+              {detail.lastOrderDeliveryAt ? new Date(detail.lastOrderDeliveryAt).toLocaleDateString("es-AR") : "—"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--ha-text-3)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Días sin contacto</div>
+            <div style={{ fontWeight: 700, fontSize: 22, color: detail.daysSinceLastContact != null && detail.daysSinceLastContact > 30 ? "#f59e0b" : "var(--ha-text)" }}>
+              {detail.daysSinceLastContact != null ? `${detail.daysSinceLastContact} días` : "—"}
+            </div>
+          </div>
+          {detail.nextFollowUpAt && (
+            <div>
+              <div style={{ fontSize: 11, color: "var(--ha-text-3)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Próximo seguimiento</div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: "var(--ha-text)" }}>
+                {dayjs(detail.nextFollowUpAt).format("DD/MM/YYYY")}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid var(--ha-border-1)", marginBottom: 16, overflowX: "auto" }}>
+      <div style={{ display: "flex", borderBottom: "1px solid var(--ha-border)", marginBottom: 16, overflowX: "auto" }}>
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -544,26 +613,26 @@ export default function CrmCustomerDetailPage() {
 
       {/* Tab: Seguimiento comercial */}
       {activeTab === "interactions" && (
-        <div style={{ padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-            <p style={{ margin: 0, color: "#9ca3af", fontSize: 13 }}>
+        <div style={{ padding: 16, borderRadius: 12, background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+            <p style={{ margin: 0, color: "var(--ha-text-3)", fontSize: 13 }}>
               Llamadas, mails o WhatsApp que registrás vos; va al KPI &quot;días sin vínculo&quot; si no hay un pedido más reciente.
             </p>
-            <button className="ha-btn ha-btn--primary ha-btn--sm" style={{ display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => setAddInteractionOpen(true)}>
+            <button className="ha-btn ha-btn--primary ha-btn--sm" style={{ display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }} onClick={() => setAddInteractionOpen(true)}>
               <Plus size={13} /> Registrar seguimiento
             </button>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {detail.interactions.length === 0 ? (
-              <span style={{ color: "#9ca3af" }}>Aún no hay seguimientos registrados.</span>
+              <span style={{ color: "var(--ha-text-3)", fontSize: 14 }}>Aún no hay seguimientos registrados.</span>
             ) : (
               detail.interactions.map((i) => (
-                <div key={i.id} style={{ padding: "10px 14px", borderRadius: 8, background: "#0f172a", border: "1px solid #1e293b" }}>
-                  <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 4 }}>
-                    {new Date(i.date).toLocaleString("es-AR")} · {i.channel ?? "—"}
+                <div key={i.id} style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+                  <div style={{ color: "var(--ha-text-3)", fontSize: 12, marginBottom: 6 }}>
+                    {new Date(i.date).toLocaleDateString("es-AR")} · {i.channel ?? "—"}
                   </div>
-                  {i.notes && <p style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}>{i.notes}</p>}
-                  {i.nextStep && <p style={{ margin: "4px 0 0", color: "#22c55e", fontSize: 12 }}>Próximo paso: {i.nextStep}</p>}
+                  {i.notes && <p style={{ margin: "0 0 4px", color: "var(--ha-text)", fontSize: 14, whiteSpace: "pre-wrap" }}>{i.notes}</p>}
+                  {i.nextStep && <p style={{ margin: "4px 0 0", color: "var(--ha-amber)", fontSize: 12 }}>Próximo paso: {i.nextStep}</p>}
                 </div>
               ))
             )}
@@ -573,24 +642,24 @@ export default function CrmCustomerDetailPage() {
 
       {/* Tab: Oportunidad */}
       {activeTab === "opportunity" && (
-        <div style={{ padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-            <p style={{ margin: 0, color: "#9ca3af", fontSize: 13 }}>
+        <div style={{ padding: 16, borderRadius: 12, background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+            <p style={{ margin: 0, color: "var(--ha-text-3)", fontSize: 13 }}>
               Acuerdos o negocios en curso (etapa, monto esperado); no sustituye al historial de pedidos ni al seguimiento comercial.
             </p>
-            <button className="ha-btn ha-btn--primary ha-btn--sm" style={{ display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => setEditOpportunityOpen(true)}>
+            <button className="ha-btn ha-btn--primary ha-btn--sm" style={{ display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }} onClick={() => setEditOpportunityOpen(true)}>
               {detail.opportunity ? <><Edit size={13} /> Editar</> : <><Plus size={13} /> Registrar</>} oportunidad
             </button>
           </div>
           {detail.opportunity ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "10px 24px" }}>
-              <DescRow label="Etapa">{detail.opportunity.stage ?? "—"}</DescRow>
-              <DescRow label="Valor estimado">{detail.opportunity.estimatedValue != null ? String(detail.opportunity.estimatedValue) : "—"}</DescRow>
-              <DescRow label="Fecha cierre estimada">{detail.opportunity.expectedClosingDate ? dayjs(detail.opportunity.expectedClosingDate).format("DD/MM/YYYY") : "—"}</DescRow>
-              <DescRow label="Notas">{detail.opportunity.notes ?? "—"}</DescRow>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "14px 24px" }}>
+              <InfoRow label="Etapa">{detail.opportunity.stage ?? "—"}</InfoRow>
+              <InfoRow label="Valor estimado">{detail.opportunity.estimatedValue != null ? formatCurrency(Number(detail.opportunity.estimatedValue)) : "—"}</InfoRow>
+              <InfoRow label="Fecha cierre estimada">{detail.opportunity.expectedClosingDate ? dayjs(detail.opportunity.expectedClosingDate).format("DD/MM/YYYY") : "—"}</InfoRow>
+              <InfoRow label="Notas">{detail.opportunity.notes ?? "—"}</InfoRow>
             </div>
           ) : (
-            <span style={{ color: "#9ca3af" }}>Sin oportunidad cargada</span>
+            <span style={{ color: "var(--ha-text-3)", fontSize: 14 }}>Sin oportunidad cargada</span>
           )}
         </div>
       )}
@@ -599,7 +668,7 @@ export default function CrmCustomerDetailPage() {
       {activeTab === "orders" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* KPIs */}
-          <div style={{ padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
+          <div style={{ padding: 16, borderRadius: 12, background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)" }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14, alignItems: "center" }}>
               <select
                 className="ha-input"
@@ -620,18 +689,18 @@ export default function CrmCustomerDetailPage() {
                 </>
               )}
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 12 : 24 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 16 : 32 }}>
               <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Cantidad de pedidos</div>
-                <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>{scopedOrders.length}</div>
+                <div style={{ color: "var(--ha-text-3)", fontSize: 12, marginBottom: 2 }}>Cantidad de pedidos</div>
+                <div style={{ color: "var(--ha-text)", fontSize: 24, fontWeight: 700 }}>{scopedOrders.length}</div>
               </div>
               <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Total comprado</div>
-                <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>{formatCurrency(totalPurchased)}</div>
+                <div style={{ color: "var(--ha-text-3)", fontSize: 12, marginBottom: 2 }}>Total comprado</div>
+                <div style={{ color: "var(--ha-text)", fontSize: 24, fontWeight: 700 }}>{formatCurrency(totalPurchased)}</div>
               </div>
               <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Ítems diferentes pedidos</div>
-                <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>{scopedDistinctItemsCount}</div>
+                <div style={{ color: "var(--ha-text-3)", fontSize: 12, marginBottom: 2 }}>Ítems diferentes</div>
+                <div style={{ color: "var(--ha-text)", fontSize: 24, fontWeight: 700 }}>{scopedDistinctItemsCount}</div>
               </div>
             </div>
             {crmKpiAnalysis && (
@@ -644,8 +713,8 @@ export default function CrmCustomerDetailPage() {
           </div>
 
           {/* Items chart */}
-          <div style={{ padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
-            <h3 style={{ margin: "0 0 12px", color: "#fafafa", fontSize: 14, fontWeight: 600 }}>Ítems más pedidos (unidades acumuladas)</h3>
+          <div style={{ padding: 16, borderRadius: 12, background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--ha-text)", fontSize: 14, fontWeight: 600 }}>Ítems más pedidos (unidades acumuladas)</h3>
             <div style={{ overflowX: isMobile ? "auto" : undefined, WebkitOverflowScrolling: "touch", width: "100%" }}>
               <div style={{ height: isMobile ? 280 : 260, minWidth: crmItemsBarMinWidthPx ?? "100%" }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -668,8 +737,8 @@ export default function CrmCustomerDetailPage() {
           </div>
 
           {/* Monthly chart */}
-          <div style={{ padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
-            <h3 style={{ margin: "0 0 12px", color: "#fafafa", fontSize: 14, fontWeight: 600 }}>Pedidos por mes (últimos 12 meses con pedidos)</h3>
+          <div style={{ padding: 16, borderRadius: 12, background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--ha-text)", fontSize: 14, fontWeight: 600 }}>Pedidos por mes (últimos 12 meses)</h3>
             <div style={{ overflowX: isMobile ? "auto" : undefined, WebkitOverflowScrolling: "touch", width: "100%" }}>
               <div style={{ height: isMobile ? 220 : 260, minWidth: monthlyBarMinWidthPx ?? "100%" }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -692,8 +761,8 @@ export default function CrmCustomerDetailPage() {
           </div>
 
           {/* Comparison chart */}
-          <div style={{ padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
-            <h3 style={{ margin: "0 0 12px", color: "#fafafa", fontSize: 14, fontWeight: 600 }}>Comparación de meses (ítems pedidos)</h3>
+          <div style={{ padding: 16, borderRadius: 12, background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--ha-text)", fontSize: 14, fontWeight: 600 }}>Comparación de meses (ítems pedidos)</h3>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
               <select className="ha-input" style={{ width: isMobile ? "100%" : 180 }} value={compareMonthA ?? ""} onChange={(e) => setCompareMonthA(e.target.value || undefined)}>
                 <option value="">Mes A</option>
@@ -706,8 +775,8 @@ export default function CrmCustomerDetailPage() {
             </div>
             {monthlyComparisonKpis && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 24, marginBottom: 12 }}>
-                <span style={{ color: "#9ca3af" }}>{dayjs(`${compareMonthA}-01`).format("MM/YYYY")}: <strong style={{ color: "#fafafa" }}>{monthlyComparisonKpis.monthACount}</strong> pedidos</span>
-                <span style={{ color: "#9ca3af" }}>{dayjs(`${compareMonthB}-01`).format("MM/YYYY")}: <strong style={{ color: "#fafafa" }}>{monthlyComparisonKpis.monthBCount}</strong> pedidos</span>
+                <span style={{ color: "var(--ha-text-3)" }}>{dayjs(`${compareMonthA}-01`).format("MM/YYYY")}: <strong style={{ color: "var(--ha-text)" }}>{monthlyComparisonKpis.monthACount}</strong> pedidos</span>
+                <span style={{ color: "var(--ha-text-3)" }}>{dayjs(`${compareMonthB}-01`).format("MM/YYYY")}: <strong style={{ color: "var(--ha-text)" }}>{monthlyComparisonKpis.monthBCount}</strong> pedidos</span>
                 <span style={{ color: monthlyComparisonKpis.delta >= 0 ? "#22c55e" : "#f43f5e" }}>Delta: {monthlyComparisonKpis.delta >= 0 ? "+" : ""}{monthlyComparisonKpis.delta}</span>
               </div>
             )}
@@ -742,10 +811,12 @@ export default function CrmCustomerDetailPage() {
           </div>
 
           {/* Order history table */}
-          <div style={{ padding: 16, borderRadius: 10, background: "#1f2937", border: "1px solid var(--ha-border-1)" }}>
-            <h3 style={{ margin: "0 0 12px", color: "#fafafa", fontSize: 14, fontWeight: 600 }}>Historial de pedidos</h3>
+          <div style={{ padding: 16, borderRadius: 12, background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)" }}>
+            <h3 style={{ margin: "0 0 12px", color: "var(--ha-text)", fontSize: 14, fontWeight: 600 }}>Historial de pedidos</h3>
             {ordersLoading ? (
-              <div style={{ display: "flex", justifyContent: "center", padding: 24 }}><div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} /></div>
+              <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+                <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
+              </div>
             ) : (
               <div className="ha-table-wrap">
                 <table className="ha-table">
@@ -794,8 +865,13 @@ export default function CrmCustomerDetailPage() {
                             <td style={{ color: "var(--ha-text-3)" }}>{order.fulfillmentLocation?.name ?? "—"}</td>
                           </>}
                           <td>
-                            <button className="ha-btn ha-btn--secondary ha-btn--sm" style={{ display: "inline-flex", alignItems: "center" }} aria-label="Ver detalle" title="Ver detalle" onClick={() => void openOrderDetail(order.id)}>
-                              <Eye size={12} />
+                            <button
+                              style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}
+                              aria-label="Ver detalle"
+                              title="Ver detalle"
+                              onClick={() => void openOrderDetail(order.id)}
+                            >
+                              <Eye size={14} />
                             </button>
                           </td>
                         </tr>
@@ -809,148 +885,157 @@ export default function CrmCustomerDetailPage() {
         </div>
       )}
 
-      {/* Modal: Editar perfil */}
+      {/* Drawer: Editar perfil */}
       {editProfileOpen && (
-        <div className="ha-modal-backdrop" onClick={() => setEditProfileOpen(false)}>
-          <div className="ha-modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-            <div className="ha-modal__head">
-              <span className="ha-modal__title">Editar perfil</span>
-              <button className="ha-iconbtn" onClick={() => setEditProfileOpen(false)} aria-label="Cerrar">✕</button>
+        <>
+          <div className="ha-overlay" onClick={() => setEditProfileOpen(false)} />
+          <div className="ha-drawer">
+            <div className="ha-drawer__head">
+              <span className="ha-drawer__title">Editar perfil</span>
+              <button className="ha-iconbtn" onClick={() => setEditProfileOpen(false)} aria-label="Cerrar"><X size={18} /></button>
             </div>
-            <div className="ha-modal__body app-panel-scroll" style={{ maxHeight: "calc(85vh - 110px)", overflowY: "auto" }}>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Persona de contacto (opcional)</label>
-                <input className="ha-input" placeholder="En empresas: quién atiende" value={pfContactName} onChange={(e) => setPfContactName(e.target.value)} />
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Teléfono</label>
-                <input className="ha-input" placeholder="Teléfono de contacto" value={pfPhone} onChange={(e) => setPfPhone(e.target.value)} />
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Email</label>
-                <input type="email" className="ha-input" placeholder="Email de contacto" value={pfEmail} onChange={(e) => setPfEmail(e.target.value)} />
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Tipo de cliente</label>
-                <select className="ha-input" value={pfCustomerType} onChange={(e) => setPfCustomerType(e.target.value)}>
-                  <option value="">Empresa o particular</option>
-                  {profileCustomerTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Estado del contacto</label>
-                <select className="ha-input" value={pfStatus} onChange={(e) => setPfStatus(e.target.value)}>
-                  <option value="">Seleccioná un estado</option>
-                  {profileStatusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">¿De dónde nos conoció?</label>
-                <select className="ha-input" value={pfSource} onChange={(e) => setPfSource(e.target.value)}>
-                  <option value="">Elegí un origen</option>
-                  {profileSourceOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Socio responsable (opcional)</label>
-                <p style={{ margin: "0 0 4px", fontSize: 12, color: "var(--ha-text-3)" }}>Quién lleva o consiguió este cliente. Puede quedar sin asignar.</p>
-                <select className="ha-input" value={pfResponsibleId} onChange={(e) => setPfResponsibleId(e.target.value)}>
-                  <option value="">Ninguno</option>
-                  {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Notas generales</label>
-                <textarea className="ha-input" rows={2} placeholder="Anotaciones sobre el cliente" value={pfGeneralNotes} onChange={(e) => setPfGeneralNotes(e.target.value)} style={{ resize: "vertical" }} />
-              </div>
-              <div className="ha-field">
-                <label className="ha-label">Fecha del próximo seguimiento</label>
-                <input type="date" className="ha-input" value={pfNextFollowUpAt} onChange={(e) => setPfNextFollowUpAt(e.target.value)} />
+            <div className="ha-drawer__body">
+              <div className="ha-formgrid">
+                <div className="ha-field">
+                  <label className="ha-label">Persona de contacto (opcional)</label>
+                  <input className="ha-input" placeholder="En empresas: quién atiende" value={pfContactName} onChange={(e) => setPfContactName(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Teléfono</label>
+                  <input className="ha-input" placeholder="Teléfono de contacto" value={pfPhone} onChange={(e) => setPfPhone(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Email</label>
+                  <input type="email" className="ha-input" placeholder="Email de contacto" value={pfEmail} onChange={(e) => setPfEmail(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Tipo de cliente</label>
+                  <select className="ha-input" value={pfCustomerType} onChange={(e) => setPfCustomerType(e.target.value)}>
+                    <option value="">Empresa o particular</option>
+                    {profileCustomerTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Estado del contacto</label>
+                  <select className="ha-input" value={pfStatus} onChange={(e) => setPfStatus(e.target.value)}>
+                    <option value="">Seleccioná un estado</option>
+                    {profileStatusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">¿De dónde nos conoció?</label>
+                  <select className="ha-input" value={pfSource} onChange={(e) => setPfSource(e.target.value)}>
+                    <option value="">Elegí un origen</option>
+                    {profileSourceOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Socio responsable (opcional)</label>
+                  <p style={{ margin: "0 0 4px", fontSize: 12, color: "var(--ha-text-3)" }}>Quién lleva o consiguió este cliente.</p>
+                  <select className="ha-input" value={pfResponsibleId} onChange={(e) => setPfResponsibleId(e.target.value)}>
+                    <option value="">Ninguno</option>
+                    {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Notas generales</label>
+                  <textarea className="ha-input" rows={2} placeholder="Anotaciones sobre el cliente" value={pfGeneralNotes} onChange={(e) => setPfGeneralNotes(e.target.value)} style={{ resize: "vertical" }} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Fecha del próximo seguimiento</label>
+                  <input type="date" className="ha-input" value={pfNextFollowUpAt} onChange={(e) => setPfNextFollowUpAt(e.target.value)} />
+                </div>
               </div>
             </div>
-            <div className="ha-modal__foot">
+            <div className="ha-drawer__foot">
               <button className="ha-btn ha-btn--secondary" onClick={() => setEditProfileOpen(false)}>Cancelar</button>
               <button className="ha-btn ha-btn--primary" disabled={submittingProfile} onClick={() => void handleUpdateProfile()}>
                 {submittingProfile ? <><Spinner /> Guardando…</> : "Guardar"}
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
-      {/* Modal: Oportunidad */}
+      {/* Drawer: Oportunidad */}
       {editOpportunityOpen && (
-        <div className="ha-modal-backdrop" onClick={() => setEditOpportunityOpen(false)}>
-          <div className="ha-modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-            <div className="ha-modal__head">
-              <span className="ha-modal__title">{detail.opportunity ? "Editar oportunidad" : "Crear oportunidad"}</span>
-              <button className="ha-iconbtn" onClick={() => setEditOpportunityOpen(false)} aria-label="Cerrar">✕</button>
+        <>
+          <div className="ha-overlay" onClick={() => setEditOpportunityOpen(false)} />
+          <div className="ha-drawer">
+            <div className="ha-drawer__head">
+              <span className="ha-drawer__title">{detail.opportunity ? "Editar oportunidad" : "Crear oportunidad"}</span>
+              <button className="ha-iconbtn" onClick={() => setEditOpportunityOpen(false)} aria-label="Cerrar"><X size={18} /></button>
             </div>
-            <div className="ha-modal__body" style={{ maxHeight: "calc(85vh - 110px)", overflowY: "auto" }}>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Etapa</label>
-                <input className="ha-input" value={ofStage} onChange={(e) => setOfStage(e.target.value)} />
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Valor estimado</label>
-                <input type="number" className="ha-input" value={ofEstimatedValue} onChange={(e) => setOfEstimatedValue(e.target.value)} />
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Fecha cierre estimada</label>
-                <input type="date" className="ha-input" value={ofExpectedClosingDate} onChange={(e) => setOfExpectedClosingDate(e.target.value)} />
-              </div>
-              <div className="ha-field">
-                <label className="ha-label">Notas</label>
-                <textarea className="ha-input" rows={2} value={ofNotes} onChange={(e) => setOfNotes(e.target.value)} style={{ resize: "vertical" }} />
+            <div className="ha-drawer__body">
+              <div className="ha-formgrid">
+                <div className="ha-field">
+                  <label className="ha-label">Etapa</label>
+                  <input className="ha-input" value={ofStage} onChange={(e) => setOfStage(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Valor estimado</label>
+                  <input type="number" className="ha-input" value={ofEstimatedValue} onChange={(e) => setOfEstimatedValue(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Fecha cierre estimada</label>
+                  <input type="date" className="ha-input" value={ofExpectedClosingDate} onChange={(e) => setOfExpectedClosingDate(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Notas</label>
+                  <textarea className="ha-input" rows={2} value={ofNotes} onChange={(e) => setOfNotes(e.target.value)} style={{ resize: "vertical" }} />
+                </div>
               </div>
             </div>
-            <div className="ha-modal__foot">
+            <div className="ha-drawer__foot">
               <button className="ha-btn ha-btn--secondary" onClick={() => setEditOpportunityOpen(false)}>Cancelar</button>
               <button className="ha-btn ha-btn--primary" disabled={submittingOpportunity} onClick={() => void handleUpsertOpportunity()}>
                 {submittingOpportunity ? <><Spinner /> Guardando…</> : "Guardar"}
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
-      {/* Modal: Seguimiento */}
+      {/* Drawer: Registrar seguimiento */}
       {addInteractionOpen && (
-        <div className="ha-modal-backdrop" onClick={() => setAddInteractionOpen(false)}>
-          <div className="ha-modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-            <div className="ha-modal__head">
-              <span className="ha-modal__title">Registrar seguimiento</span>
-              <button className="ha-iconbtn" onClick={() => setAddInteractionOpen(false)} aria-label="Cerrar">✕</button>
+        <>
+          <div className="ha-overlay" onClick={() => setAddInteractionOpen(false)} />
+          <div className="ha-drawer">
+            <div className="ha-drawer__head">
+              <span className="ha-drawer__title">Registrar seguimiento</span>
+              <button className="ha-iconbtn" onClick={() => setAddInteractionOpen(false)} aria-label="Cerrar"><X size={18} /></button>
             </div>
-            <div className="ha-modal__body">
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Medio de contacto</label>
-                <select className="ha-input" value={ifChannel} onChange={(e) => setIfChannel(e.target.value as InteractionChannel | "")}>
-                  <option value="">Seleccioná un medio</option>
-                  {CHANNEL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Fecha y hora</label>
-                <input type="datetime-local" className="ha-input" value={ifDate} onChange={(e) => setIfDate(e.target.value)} />
-              </div>
-              <div className="ha-field" style={{ marginBottom: 12 }}>
-                <label className="ha-label">Resumen / Notas</label>
-                <textarea className="ha-input" rows={3} value={ifNotes} onChange={(e) => setIfNotes(e.target.value)} style={{ resize: "vertical" }} />
-              </div>
-              <div className="ha-field">
-                <label className="ha-label">Próximo paso</label>
-                <input className="ha-input" value={ifNextStep} onChange={(e) => setIfNextStep(e.target.value)} />
+            <div className="ha-drawer__body">
+              <div className="ha-formgrid">
+                <div className="ha-field">
+                  <label className="ha-label">Medio de contacto</label>
+                  <select className="ha-input" value={ifChannel} onChange={(e) => setIfChannel(e.target.value as InteractionChannel | "")}>
+                    <option value="">Seleccioná un medio</option>
+                    {CHANNEL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Fecha y hora</label>
+                  <input type="datetime-local" className="ha-input" value={ifDate} onChange={(e) => setIfDate(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Resumen / Notas</label>
+                  <textarea className="ha-input" rows={3} value={ifNotes} onChange={(e) => setIfNotes(e.target.value)} style={{ resize: "vertical" }} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Próximo paso</label>
+                  <input className="ha-input" value={ifNextStep} onChange={(e) => setIfNextStep(e.target.value)} />
+                </div>
               </div>
             </div>
-            <div className="ha-modal__foot">
+            <div className="ha-drawer__foot">
               <button className="ha-btn ha-btn--secondary" onClick={() => setAddInteractionOpen(false)}>Cancelar</button>
               <button className="ha-btn ha-btn--primary" disabled={submittingInteraction} onClick={() => void handleAddInteraction()}>
                 {submittingInteraction ? <><Spinner /> Agregando…</> : "Agregar"}
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Modal: Detalle del pedido */}
@@ -990,7 +1075,7 @@ export default function CrmCustomerDetailPage() {
 
 function CrmAnalysisBlock({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, padding: "10px 14px", color: "#94a3b8", fontSize: 13, marginTop: 12, lineHeight: 1.7 }}>
+    <div style={{ background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)", borderRadius: 8, padding: "10px 14px", color: "var(--ha-text-3)", fontSize: 13, marginTop: 12, lineHeight: 1.7 }}>
       {children}
     </div>
   );
