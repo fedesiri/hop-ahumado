@@ -69,7 +69,21 @@ function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate?: (
       {navRows.map((row) => {
         if (row.type === "divider") return <div key={row.key} className="ha-nav__divider" />;
         if (row.type === "group") return <div key={row.key} className="ha-nav__group">{row.label}</div>;
-        const active = row.path === "/" ? pathname === "/" : pathname.startsWith(row.path);
+        const active = (() => {
+          if (row.path === "/") return pathname === "/";
+          if (pathname === row.path) return true;
+          if (pathname.startsWith(row.path + "/")) {
+            const moreSpecific = navRows.some(
+              (r) =>
+                r.type === "item" &&
+                r.path !== row.path &&
+                r.path.length > row.path.length &&
+                (pathname === r.path || pathname.startsWith(r.path + "/")),
+            );
+            return !moreSpecific;
+          }
+          return false;
+        })();
         return (
           <Link
             key={row.path}

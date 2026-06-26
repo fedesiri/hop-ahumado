@@ -514,10 +514,17 @@ function OrdersContent() {
 
           {/* Pagination */}
           {meta && meta.total > pagination.limit && (
-            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
-              <button className="ha-btn ha-btn--secondary ha-btn--sm" disabled={pagination.page <= 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>Anterior</button>
-              <span style={{ fontSize: 13, color: "var(--ha-text-3)" }}>Pág. {pagination.page} / {Math.ceil(meta.total / pagination.limit)}</span>
-              <button className="ha-btn ha-btn--secondary ha-btn--sm" disabled={pagination.page * pagination.limit >= meta.total} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>Siguiente</button>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button className="ha-btn ha-btn--secondary" disabled={pagination.page <= 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>← Anterior</button>
+                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, borderRadius: "50%", background: "var(--ha-amber)", color: "#0f1117", fontWeight: 700, fontSize: 14 }}>
+                  {pagination.page}
+                </span>
+                <button className="ha-btn ha-btn--secondary" disabled={pagination.page * pagination.limit >= meta.total} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>Siguiente →</button>
+              </div>
+              <span style={{ fontSize: 13, color: "var(--ha-text-3)" }}>
+                {meta.total} órdenes · página {pagination.page} de {Math.ceil(meta.total / pagination.limit)}
+              </span>
             </div>
           )}
         </>
