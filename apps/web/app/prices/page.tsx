@@ -1,21 +1,40 @@
 "use client";
 
-import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
-import { PRICE_TYPE_LABELS, PRICE_TYPES, type PriceType } from "@/lib/order-calculator/price-types";
+import {
+  normalizePriceListKey,
+  PRICE_TYPES,
+  type PriceType,
+} from "@/lib/order-calculator/price-types";
 import { toast } from "@/lib/toast";
 import type { CreatePriceRequest, Price, Product, UpdatePriceRequest } from "@/lib/types";
-import { Edit, RefreshCw, Trash2 } from "lucide-react";
+import { Check, Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-function formatPriceListLabel(text: string | null | undefined): string {
-  if (!text?.trim()) return "—";
-  const t = text.trim().toLowerCase();
-  if (PRICE_TYPES.includes(t as PriceType)) return PRICE_TYPE_LABELS[t as PriceType];
-  return text.trim();
+const LIST_OPTIONS = [
+  { value: "", label: "Todas las listas" },
+  { value: "mayorista", label: "Mayorista" },
+  { value: "minorista", label: "Minorista" },
+  { value: "fabrica", label: "Fábrica" },
+];
+
+function pillInfo(description: string | null | undefined) {
+  const key = normalizePriceListKey(description);
+  if (key === "mayorista") return { cls: "pc-pill pc-pill--may", label: "May", full: "Lista Mayorista" };
+  if (key === "minorista") return { cls: "pc-pill pc-pill--min", label: "Min", full: "Lista Minorista" };
+  if (key === "fabrica") return { cls: "pc-pill pc-pill--fab", label: "Fab", full: "Lista Fábrica" };
+  return { cls: "pc-pill", label: description?.substring(0, 3) ?? "—", full: description ?? "—" };
+}
+
+function formatPriceListLabel(description: string | null | undefined): string {
+  const key = normalizePriceListKey(description);
+  if (key === "mayorista") return "Mayorista";
+  if (key === "minorista") return "Minorista";
+  if (key === "fabrica") return "Fábrica";
+  return description?.trim() || "—";
 }
 
 export default function PricesPage() {
@@ -26,34 +45,38 @@ function PricesContent() {
   const { selectedLineId } = useLineContext();
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const [prices, setPrices] = useState<Price[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [replaceModalOpen, setReplaceModalOpen] = useState(false);
-  const [replaceTarget, setReplaceTarget] = useState<Price | null>(null);
-  const [bulkReplaceModalOpen, setBulkReplaceModalOpen] = useState(false);
-  const [bulkPreviewRows, setBulkPreviewRows] = useState<Price[] | null>(null);
-  const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
-  const [selectedPriceIds, setSelectedPriceIds] = useState<string[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
-  const showActive = true;
+
   const [searchText, setSearchText] = useState(() => searchParams.get("search") ?? "");
   const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get("search") ?? "");
   const [listTypeFilter, setListTypeFilter] = useState<"" | PriceType>(
     () => (searchParams.get("listType") as PriceType) ?? "",
   );
-  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  // Form state
+  const [selectedPriceIds, setSelectedPriceIds] = useState<string[]>([]);
+  const [bulkValue, setBulkValue] = useState("");
+
+  // Inline replace popover
+  const [popOpenId, setPopOpenId] = useState<string | null>(null);
+  const [popValue, setPopValue] = useState("");
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Create/Edit modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [fProductId, setFProductId] = useState("");
   const [fValue, setFValue] = useState("");
   const [fDescription, setFDescription] = useState("");
-  const [replaceValue, setReplaceValue] = useState("");
-  const [bulkValue, setBulkValue] = useState("");
+
+  // Delete dialog
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -78,11 +101,7 @@ function PricesContent() {
 
   useEffect(() => {
     setPagination((p) => (p.page === 1 ? p : { ...p, page: 1 }));
-  }, [debouncedSearch]);
-
-  useEffect(() => {
-    setPagination((p) => (p.page === 1 ? p : { ...p, page: 1 }));
-  }, [listTypeFilter]);
+  }, [debouncedSearch, listTypeFilter]);
 
   const fetchPrices = useCallback(async () => {
     try {
@@ -107,7 +126,9 @@ function PricesContent() {
 
   const fetchProducts = useCallback(async () => {
     try {
-      const response = await apiClient.getProducts(1, 100, false, undefined, undefined, selectedLineId ?? undefined);
+      const response = await apiClient.getProducts(
+        1, 100, false, undefined, undefined, selectedLineId ?? undefined,
+      );
       setProducts(response.data);
     } catch {
       // silent
@@ -119,12 +140,71 @@ function PricesContent() {
     void fetchProducts();
   }, [fetchPrices, fetchProducts]);
 
-  const bulkSelectionSummary = useMemo(() => {
-    const selectedOnPage = prices.filter((p) => selectedPriceIds.includes(p.id));
-    const rowCount = selectedPriceIds.length;
-    const someSelectionOffPage = rowCount > 0 && selectedOnPage.length < rowCount;
-    return { rowCount, someSelectionOffPage };
-  }, [prices, selectedPriceIds]);
+  const totalPages = meta ? Math.ceil(meta.total / pagination.limit) : 1;
+  const allPageSelected = prices.length > 0 && prices.every((p) => selectedPriceIds.includes(p.id));
+  const somePageSelected = prices.some((p) => selectedPriceIds.includes(p.id)) && !allPageSelected;
+
+  const toggleAllPage = () => {
+    if (allPageSelected) {
+      setSelectedPriceIds((prev) => prev.filter((id) => !prices.find((p) => p.id === id)));
+    } else {
+      const pageIds = prices.filter((p) => !p.deactivatedAt).map((p) => p.id);
+      setSelectedPriceIds((prev) => [...new Set([...prev, ...pageIds])]);
+    }
+  };
+
+  const toggleRow = (id: string) => {
+    setSelectedPriceIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const openPop = (id: string) => {
+    setPopOpenId(id);
+    setPopValue("");
+  };
+
+  const closePop = () => {
+    setPopOpenId(null);
+    setPopValue("");
+  };
+
+  const savePop = async (price: Price) => {
+    const value = Number(popValue);
+    if (!Number.isFinite(value) || value < 0) { toast.error("Ingresá un precio válido"); return; }
+    setSubmitting(true);
+    try {
+      await apiClient.replacePrice(price.id, { value });
+      toast.success("Precio actualizado");
+      closePop();
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      setFlashId(price.id);
+      flashTimer.current = setTimeout(() => setFlashId(null), 1100);
+      void fetchPrices();
+    } catch {
+      toast.error("Error al actualizar precio");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const applyBulk = async () => {
+    const value = Number(bulkValue);
+    if (!Number.isFinite(value) || value < 0) { toast.error("Ingresá un precio válido"); return; }
+    if (selectedPriceIds.length === 0) return;
+    setSubmitting(true);
+    try {
+      const res = await apiClient.bulkReplacePrices({ priceIds: selectedPriceIds, value });
+      toast.success(`${res.count} precio(s) actualizado(s)`);
+      setSelectedPriceIds([]);
+      setBulkValue("");
+      void fetchPrices();
+    } catch {
+      toast.error("Error al actualizar precios");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleCreate = () => {
     setEditingId(null);
@@ -142,63 +222,28 @@ function PricesContent() {
     setModalOpen(true);
   };
 
-  const openReplacePrice = (record: Price) => {
-    setReplaceTarget(record);
-    setReplaceValue("");
-    setReplaceModalOpen(true);
-  };
-
-  const handleReplaceSubmit = async () => {
-    if (!replaceTarget) return;
-    const value = Number(replaceValue);
-    if (!Number.isFinite(value) || value < 0) { toast.error("Ingresá un precio válido"); return; }
+  const handleSubmit = async () => {
+    if (!fProductId) { toast.error("El producto es requerido"); return; }
+    const value = Number(fValue);
+    if (!Number.isFinite(value) || value < 0) { toast.error("El valor es requerido"); return; }
     setSubmitting(true);
     try {
-      await apiClient.replacePrice(replaceTarget.id, { value });
-      toast.success("Precio actualizado: el anterior quedó archivado.");
-      setReplaceModalOpen(false);
-      setReplaceTarget(null);
+      const data: CreatePriceRequest = {
+        productId: fProductId,
+        value,
+        description: fDescription || undefined,
+      };
+      if (editingId) {
+        await apiClient.updatePrice(editingId, data as UpdatePriceRequest);
+        toast.success("Precio actualizado");
+      } else {
+        await apiClient.createPrice(data);
+        toast.success("Precio creado");
+      }
+      setModalOpen(false);
       void fetchPrices();
     } catch {
-      toast.error("Error al actualizar precio");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const openBulkReplace = async () => {
-    if (selectedPriceIds.length === 0) return;
-    setBulkValue("");
-    setBulkPreviewRows(null);
-    setBulkReplaceModalOpen(true);
-    setBulkPreviewLoading(true);
-    const orderedUniqueIds = [...new Set(selectedPriceIds)];
-    try {
-      const rows = await Promise.all(orderedUniqueIds.map((id) => apiClient.getPrice(id)));
-      setBulkPreviewRows(rows);
-    } catch {
-      toast.error("No se pudo cargar el detalle de los precios");
-      setBulkReplaceModalOpen(false);
-      setBulkPreviewRows(null);
-    } finally {
-      setBulkPreviewLoading(false);
-    }
-  };
-
-  const handleBulkReplaceSubmit = async () => {
-    const value = Number(bulkValue);
-    if (!Number.isFinite(value) || value < 0) { toast.error("Ingresá un precio válido"); return; }
-    if (selectedPriceIds.length === 0) return;
-    setSubmitting(true);
-    try {
-      const res = await apiClient.bulkReplacePrices({ priceIds: selectedPriceIds, value });
-      toast.success(`Listo: ${res.count} producto(s)/lista(s) con nuevo precio; los anteriores quedaron archivados.`);
-      setBulkReplaceModalOpen(false);
-      setBulkPreviewRows(null);
-      setSelectedPriceIds([]);
-      void fetchPrices();
-    } catch {
-      toast.error("Error al actualizar precios");
+      toast.error("Error al guardar precio");
     } finally {
       setSubmitting(false);
     }
@@ -216,188 +261,284 @@ function PricesContent() {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!fProductId) { toast.error("El producto es requerido"); return; }
-    const value = Number(fValue);
-    if (!Number.isFinite(value) || value < 0) { toast.error("El valor es requerido"); return; }
-    setSubmitting(true);
-    try {
-      const data: CreatePriceRequest = { productId: fProductId, value, description: fDescription || undefined };
-      if (editingId) {
-        await apiClient.updatePrice(editingId, data as UpdatePriceRequest);
-        toast.success("Precio actualizado");
-      } else {
-        await apiClient.createPrice(data);
-        toast.success("Precio creado");
-      }
-      setModalOpen(false);
-      void fetchPrices();
-    } catch {
-      toast.error("Error al guardar precio");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const totalPages = meta ? Math.ceil(meta.total / pagination.limit) : 1;
-  const allPageSelected = prices.length > 0 && prices.every((p) => selectedPriceIds.includes(p.id));
-  const somePageSelected = prices.some((p) => selectedPriceIds.includes(p.id)) && !allPageSelected;
-
-  const toggleAllPage = () => {
-    if (allPageSelected) {
-      setSelectedPriceIds((prev) => prev.filter((id) => !prices.find((p) => p.id === id)));
-    } else {
-      const pageIds = prices.filter((p) => !p.deactivatedAt).map((p) => p.id);
-      setSelectedPriceIds((prev) => [...new Set([...prev, ...pageIds])]);
-    }
-  };
-
-  const toggleRow = (id: string, disabled: boolean) => {
-    if (disabled) return;
-    setSelectedPriceIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  };
+  const sheetPrice = popOpenId ? prices.find((p) => p.id === popOpenId) : null;
 
   return (
     <div>
-      <div className="ha-page-header">
-        <h1 className="ha-pagetitle">Precios</h1>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+      <h1 className="pc-pagetitle">Precios</h1>
+
+      {/* Filter bar */}
+      <div className="pc-filter">
+        <div className="pc-search">
+          <Search size={17} />
           <input
-            type="search"
-            className="ha-input"
-            placeholder="Buscar por nombre, SKU o código de barras"
+            placeholder="Buscar producto…"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            style={{ maxWidth: 280, width: "100%", minWidth: 160 }}
           />
-          <select
-            className="ha-input"
-            style={{ minWidth: 180, width: "auto" }}
-            value={listTypeFilter}
-            onChange={(e) => {
-              const val = e.target.value as "" | PriceType;
-              setListTypeFilter(val);
-              updateParams({ listType: val || null });
-            }}
-          >
-            <option value="">Lista de precio</option>
-            {PRICE_TYPES.map((t) => <option key={t} value={t}>{PRICE_TYPE_LABELS[t]}</option>)}
-          </select>
-          <button className="ha-btn ha-btn--primary" onClick={handleCreate}>
-            + Nuevo precio
-          </button>
         </div>
+        <select
+          className="pc-select"
+          value={listTypeFilter}
+          onChange={(e) => {
+            const val = e.target.value as "" | PriceType;
+            setListTypeFilter(val);
+            updateParams({ listType: val || null });
+          }}
+        >
+          {LIST_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <button className="pc-btn pc-btn--primary pc-btn--sm" onClick={handleCreate}>
+          + Nuevo precio
+        </button>
+        <span className="pc-count">
+          {meta?.total ?? prices.length} precios activos
+        </span>
       </div>
 
-      <ScreenInfoPanel title="Tres listas para todos los productos">
-        <>
-          Podés cargar <strong>mayorista</strong>, <strong>minorista</strong> y <strong>fábrica</strong> para{" "}
-          <strong>cualquier</strong> producto. En <strong>Nueva orden</strong> el selector usa esas etiquetas.
-          Podés <strong>seleccionar varias filas</strong> y aplicar un <strong>mismo valor nuevo</strong>: cada fila conserva su lista.
-        </>
-      </ScreenInfoPanel>
-
-      {showActive && bulkSelectionSummary.rowCount > 0 && (
-        <div style={{ marginBottom: 16, marginTop: 16, padding: "10px 14px", borderRadius: 8, background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.35)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
-          <span style={{ color: "var(--ha-text)" }}>
-            <strong>{bulkSelectionSummary.rowCount}</strong> precio(s) seleccionado(s)
-            {bulkSelectionSummary.someSelectionOffPage && <span style={{ color: "var(--ha-text-3)" }}> (incluye otras páginas)</span>}.
+      {/* Bulk action bar */}
+      {selectedPriceIds.length > 0 && (
+        <div className="pc-bulk">
+          <span className="pc-bulk__t">
+            <b>{selectedPriceIds.length} precios seleccionados</b> · Nuevo precio:
           </span>
-          <button className="ha-btn ha-btn--primary ha-btn--sm" onClick={() => void openBulkReplace()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <RefreshCw size={13} /> Mismo nuevo precio para todos
+          <span className="pc-money">
+            <input
+              value={bulkValue}
+              onChange={(e) => setBulkValue(e.target.value)}
+              placeholder="0"
+              type="number"
+              min={0}
+            />
+          </span>
+          <button className="pc-btn pc-btn--primary" onClick={() => void applyBulk()} disabled={submitting}>
+            Aplicar a todos
+          </button>
+          <button className="pc-btn pc-btn--ghost" onClick={() => { setSelectedPriceIds([]); setBulkValue(""); }}>
+            Cancelar selección
           </button>
         </div>
       )}
 
+      {/* Main card */}
       {loading ? (
         <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
+          <div style={{
+            width: 24, height: 24, borderRadius: "50%",
+            border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)",
+            animation: "ha-spin .7s linear infinite",
+          }} />
         </div>
       ) : prices.length === 0 ? (
         <div className="ha-empty">
           <p className="ha-empty__t">No hay precios cargados todavía</p>
         </div>
       ) : (
-        <div className="ha-table-wrap">
-          <table className="ha-table">
-            <thead>
-              <tr>
-                <th style={{ width: 40 }}>
-                  <input
-                    type="checkbox"
-                    checked={allPageSelected}
-                    ref={(el) => { if (el) el.indeterminate = somePageSelected; }}
-                    onChange={toggleAllPage}
-                    style={{ accentColor: "var(--ha-amber)", cursor: "pointer" }}
-                  />
-                </th>
-                <th>Producto</th>
-                <th>Valor</th>
-                <th>Lista / descripción</th>
-                <th>Fecha de Creación</th>
-                <th style={{ width: 188 }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {prices.map((price) => {
-                const isDisabled = !!price.deactivatedAt;
-                const isSelected = selectedPriceIds.includes(price.id);
-                return (
-                  <tr key={price.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        disabled={isDisabled}
-                        onChange={() => toggleRow(price.id, isDisabled)}
-                        style={{ accentColor: "var(--ha-amber)", cursor: isDisabled ? "not-allowed" : "pointer" }}
-                      />
-                    </td>
-                    <td>{price.product?.name || "—"}</td>
-                    <td className="ha-mono">{formatCurrency(price.value)}</td>
-                    <td>{formatPriceListLabel(price.description)}</td>
-                    <td className="ha-mono" style={{ color: "var(--ha-text-3)" }}>{new Date(price.createdAt).toLocaleDateString("es-AR")}</td>
-                    <td>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {showActive && !price.deactivatedAt && (
-                          <button
-                            className="ha-btn ha-btn--secondary ha-btn--sm"
-                            title="Archiva este precio y crea uno nuevo"
-                            onClick={() => openReplacePrice(price)}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-                          >
-                            <RefreshCw size={12} />
-                          </button>
-                        )}
-                        <button className="ha-btn ha-btn--secondary ha-btn--sm" onClick={() => handleEdit(price)} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          <Edit size={12} />
-                        </button>
-                        <button
-                          onClick={() => setDeleteId(price.id)}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", border: "1px solid var(--ha-red)", background: "transparent", borderRadius: 6, color: "var(--ha-red)", cursor: "pointer", fontSize: 12 }}
+        <div className="pc-card">
+          {/* Desktop table */}
+          <div className="pc-tablewrap">
+            {/* Invisible backdrop to close popover when clicking outside */}
+            {popOpenId && (
+              <div
+                style={{ position: "fixed", inset: 0, zIndex: 15 }}
+                onClick={closePop}
+              />
+            )}
+            <table className="pc-table">
+              <thead>
+                <tr>
+                  <th>
+                    <div
+                      className={`pc-check${allPageSelected ? " on" : ""}`}
+                      style={somePageSelected ? { opacity: 0.6 } : {}}
+                      onClick={toggleAllPage}
+                    >
+                      {allPageSelected && <Check size={12} />}
+                    </div>
+                  </th>
+                  <th>Producto</th>
+                  <th>Categoría</th>
+                  <th>Lista</th>
+                  <th>Precio actual</th>
+                  <th>Vigente desde</th>
+                  <th style={{ textAlign: "right" }}>Reemplazar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prices.map((price) => {
+                  const isSelected = selectedPriceIds.includes(price.id);
+                  const pill = pillInfo(price.description);
+                  return (
+                    <tr key={price.id} className={isSelected ? "is-sel" : ""}>
+                      <td>
+                        <div
+                          className={`pc-check${isSelected ? " on" : ""}`}
+                          onClick={() => toggleRow(price.id)}
                         >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          {isSelected && <Check size={12} />}
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: 500 }}>{price.product?.name ?? "—"}</td>
+                      <td className="pc-cat">{price.product?.category?.name ?? "—"}</td>
+                      <td><span className={pill.cls}>{pill.label}</span></td>
+                      <td>
+                        <span className={`pc-price${flashId === price.id ? " flash" : ""}`}>
+                          {formatCurrency(price.value)}
+                        </span>
+                      </td>
+                      <td className="pc-vig">
+                        {new Date(price.createdAt).toLocaleDateString("es-AR")}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className="pc-pop-wrap" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="pc-btn pc-btn--ghost pc-btn--sm"
+                            onClick={() => popOpenId === price.id ? closePop() : openPop(price.id)}
+                          >
+                            Reemplazar
+                          </button>
+                          {popOpenId === price.id && (
+                            <div className="pc-pop">
+                              <div className="pc-pop__l">Nuevo precio ({pill.full})</div>
+                              <div className="pc-pop__money">
+                                <input
+                                  value={popValue}
+                                  onChange={(e) => setPopValue(e.target.value)}
+                                  placeholder="0"
+                                  type="number"
+                                  min={0}
+                                  // eslint-disable-next-line jsx-a11y/no-autofocus
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") void savePop(price);
+                                    if (e.key === "Escape") closePop();
+                                  }}
+                                />
+                              </div>
+                              <div className="pc-pop__acts">
+                                <button className="pc-btn pc-btn--ghost pc-btn--sm" onClick={closePop}>
+                                  Cancelar
+                                </button>
+                                <button
+                                  className="pc-btn pc-btn--primary pc-btn--sm"
+                                  onClick={() => void savePop(price)}
+                                  disabled={submitting}
+                                >
+                                  Guardar
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="pc-cardlist">
+            {prices.map((price) => {
+              const isSelected = selectedPriceIds.includes(price.id);
+              const pill = pillInfo(price.description);
+              return (
+                <div key={price.id} className={`pc-pcard${isSelected ? " is-sel" : ""}`}>
+                  <div className="pc-pcard__top">
+                    <div>
+                      <div className="pc-pcard__name">{price.product?.name ?? "—"}</div>
+                      <span className={pill.cls} style={{ marginTop: 6, display: "inline-flex" }}>
+                        {pill.label}
+                      </span>
+                    </div>
+                    <div
+                      className={`pc-check${isSelected ? " on" : ""}`}
+                      onClick={() => toggleRow(price.id)}
+                    >
+                      {isSelected && <Check size={12} />}
+                    </div>
+                  </div>
+                  <div className="pc-pcard__mid">
+                    <span className={`pc-price pc-pcard__price${flashId === price.id ? " flash" : ""}`}>
+                      {formatCurrency(price.value)}
+                    </span>
+                    <span className="pc-pcard__cat">{price.product?.category?.name ?? "—"}</span>
+                  </div>
+                  <div className="pc-pcard__bot">
+                    <span className="pc-vig">
+                      Vigente desde {new Date(price.createdAt).toLocaleDateString("es-AR")}
+                    </span>
+                    <button
+                      className="pc-btn pc-btn--ghost pc-btn--sm"
+                      onClick={() => openPop(price.id)}
+                    >
+                      Reemplazar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
+      {/* Pagination */}
       {meta && meta.total > 0 && (
-        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
+        <div style={{
+          display: "flex", justifyContent: "flex-end", alignItems: "center",
+          gap: 12, marginTop: 16, flexWrap: "wrap",
+        }}>
           <span style={{ color: "var(--ha-text-3)", fontSize: 13 }}>
             {meta.total} total · página {pagination.page} de {totalPages}
           </span>
           <div style={{ display: "flex", gap: 6 }}>
-            <button className="ha-btn ha-btn--secondary ha-btn--sm" disabled={pagination.page <= 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>‹</button>
-            <button className="ha-btn ha-btn--secondary ha-btn--sm" disabled={pagination.page >= totalPages} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>›</button>
+            <button
+              className="pc-btn pc-btn--ghost pc-btn--sm"
+              disabled={pagination.page <= 1}
+              onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
+            >‹</button>
+            <button
+              className="pc-btn pc-btn--ghost pc-btn--sm"
+              disabled={pagination.page >= totalPages}
+              onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
+            >›</button>
           </div>
         </div>
+      )}
+
+      {/* Mobile bottom sheet for replace */}
+      {sheetPrice && (
+        <>
+          <div className="pc-sheet-back" onClick={closePop} />
+          <div className="pc-sheet">
+            <div className="pc-sheet__title">Reemplazar precio</div>
+            <div className="pc-pop__l">
+              Nuevo precio ({pillInfo(sheetPrice.description).full})
+            </div>
+            <div className="pc-pop__money">
+              <input
+                value={popValue}
+                onChange={(e) => setPopValue(e.target.value)}
+                placeholder="0"
+                type="number"
+                min={0}
+              />
+            </div>
+            <div className="pc-pop__acts">
+              <button className="pc-btn pc-btn--ghost" onClick={closePop}>Cancelar</button>
+              <button
+                className="pc-btn pc-btn--primary"
+                onClick={() => void savePop(sheetPrice)}
+                disabled={submitting}
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Create/Edit Modal */}
@@ -418,117 +559,38 @@ function PricesContent() {
               </div>
               <div className="ha-field" style={{ marginBottom: 16 }}>
                 <label className="ha-label">Valor <span style={{ color: "var(--ha-red)" }}>*</span></label>
-                <input type="number" className="ha-input" min={0} step={0.01} placeholder="Valor del producto" value={fValue} onChange={(e) => setFValue(e.target.value)} />
+                <input
+                  type="number"
+                  className="ha-input"
+                  min={0}
+                  step={0.01}
+                  placeholder="Valor del producto"
+                  value={fValue}
+                  onChange={(e) => setFValue(e.target.value)}
+                />
               </div>
               <div className="ha-field">
                 <label className="ha-label">Lista de precio</label>
-                <input
-                  list="price-type-list"
+                <select
                   className="ha-input"
-                  placeholder="Elegí o escribí: mayorista, minorista, fabrica"
                   value={fDescription}
                   onChange={(e) => setFDescription(e.target.value)}
-                />
-                <datalist id="price-type-list">
-                  {PRICE_TYPES.map((t) => <option key={t} value={t}>{PRICE_TYPE_LABELS[t]} ({t})</option>)}
-                </datalist>
-                <p style={{ marginTop: 4, fontSize: 12, color: "var(--ha-text-3)" }}>
-                  Usá mayorista, minorista o fabrica para que coincida con el selector de Nueva orden.
-                </p>
+                >
+                  <option value="">Sin lista</option>
+                  {PRICE_TYPES.map((t) => (
+                    <option key={t} value={t}>{formatPriceListLabel(t)}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="ha-modal__foot">
               <button className="ha-btn ha-btn--secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
-              <button className="ha-btn ha-btn--primary" onClick={() => void handleSubmit()} disabled={submitting}>{submitting ? "Guardando…" : "Guardar"}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Replace Modal */}
-      {replaceModalOpen && replaceTarget && (
-        <div className="ha-modal-backdrop" onClick={() => { setReplaceModalOpen(false); setReplaceTarget(null); }}>
-          <div className="ha-modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-            <div className="ha-modal__head">
-              <span className="ha-modal__title">Nuevo precio (archivar el actual)</span>
-              <button className="ha-iconbtn" onClick={() => { setReplaceModalOpen(false); setReplaceTarget(null); }} aria-label="Cerrar">✕</button>
-            </div>
-            <div className="ha-modal__body">
-              <p style={{ marginBottom: 12, color: "var(--ha-text-2)", fontSize: 14 }}>
-                <strong>{replaceTarget.product?.name ?? "Producto"}</strong> — {formatPriceListLabel(replaceTarget.description)} — precio vigente {formatCurrency(replaceTarget.value)} (referencia).
-              </p>
-              <p style={{ fontSize: 13, color: "var(--ha-text-3)", marginBottom: 16 }}>
-                Se crea un registro nuevo con la <strong>misma lista</strong> ({formatPriceListLabel(replaceTarget.description)}).
-              </p>
-              <div className="ha-field">
-                <label className="ha-label">Nuevo valor <span style={{ color: "var(--ha-red)" }}>*</span></label>
-                <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej. 2500" value={replaceValue} onChange={(e) => setReplaceValue(e.target.value)} />
-              </div>
-            </div>
-            <div className="ha-modal__foot">
-              <button className="ha-btn ha-btn--secondary" onClick={() => { setReplaceModalOpen(false); setReplaceTarget(null); }}>Cancelar</button>
-              <button className="ha-btn ha-btn--primary" onClick={() => void handleReplaceSubmit()} disabled={submitting}>{submitting ? "Guardando…" : "Guardar"}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Replace Modal */}
-      {bulkReplaceModalOpen && (
-        <div className="ha-modal-backdrop" onClick={() => { setBulkReplaceModalOpen(false); setBulkPreviewRows(null); }}>
-          <div className="ha-modal" style={{ maxWidth: 780 }} onClick={(e) => e.stopPropagation()}>
-            <div className="ha-modal__head">
-              <span className="ha-modal__title">Mismo nuevo precio para varias filas</span>
-              <button className="ha-iconbtn" onClick={() => { setBulkReplaceModalOpen(false); setBulkPreviewRows(null); }} aria-label="Cerrar">✕</button>
-            </div>
-            <div className="ha-modal__body">
-              <p style={{ marginBottom: 8, color: "var(--ha-text-2)", fontSize: 14 }}>
-                Cada fila tiene su <strong>lista</strong>. Se archivan los precios vigentes mostrados y se crea <strong>un precio nuevo por cada combinación producto + lista</strong>, todos con el <strong>mismo valor</strong>.
-              </p>
-              <p style={{ fontSize: 13, color: "var(--ha-text-3)", marginBottom: 14 }}>
-                Ejemplo: si marcás &quot;Golden mayorista&quot; y &quot;Red ale mayorista&quot;, ambas pasan al mismo precio nuevo en <strong>mayorista</strong>.
-              </p>
-              <div style={{ marginBottom: 16 }}>
-                {bulkPreviewLoading ? (
-                  <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
-                    <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
-                  </div>
-                ) : bulkPreviewRows && bulkPreviewRows.length > 0 ? (
-                  <div style={{ maxHeight: 280, overflowY: "auto", border: "1px solid var(--ha-border)", borderRadius: 8 }}>
-                    <table className="ha-table" style={{ marginBottom: 0 }}>
-                      <thead>
-                        <tr>
-                          <th>Producto</th>
-                          <th>Lista</th>
-                          <th style={{ textAlign: "right" }}>Precio actual</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bulkPreviewRows.map((r) => (
-                          <tr key={r.id}>
-                            <td>{r.product?.name ?? "—"}</td>
-                            <td>{formatPriceListLabel(r.description)}</td>
-                            <td className="ha-mono" style={{ textAlign: "right" }}>{formatCurrency(r.value)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
-              </div>
-              <div className="ha-field">
-                <label className="ha-label">Nuevo valor (aplica a todas las filas) <span style={{ color: "var(--ha-red)" }}>*</span></label>
-                <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej. 2500" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} />
-              </div>
-            </div>
-            <div className="ha-modal__foot">
-              <button className="ha-btn ha-btn--secondary" onClick={() => { setBulkReplaceModalOpen(false); setBulkPreviewRows(null); }}>Cancelar</button>
               <button
                 className="ha-btn ha-btn--primary"
-                onClick={() => void handleBulkReplaceSubmit()}
-                disabled={submitting || bulkPreviewLoading || !bulkPreviewRows?.length}
+                onClick={() => void handleSubmit()}
+                disabled={submitting}
               >
-                {submitting ? "Guardando…" : "Confirmar"}
+                {submitting ? "Guardando…" : "Guardar"}
               </button>
             </div>
           </div>
@@ -545,7 +607,12 @@ function PricesContent() {
             </div>
             <div className="ha-dialog__foot">
               <button className="ha-btn ha-btn--secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
-              <button className="ha-btn ha-btn--destructive" onClick={() => void handleDelete(deleteId)}>Eliminar</button>
+              <button
+                className="ha-btn ha-btn--destructive"
+                onClick={() => void handleDelete(deleteId)}
+              >
+                Eliminar
+              </button>
             </div>
           </div>
         </div>
