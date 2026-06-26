@@ -962,3 +962,13 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 @container (min-width:768px){.pc-sheet-back,.pc-sheet{display:none}}
 @keyframes pc-fade{from{opacity:0}to{opacity:1}}
 @keyframes pc-slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+
+/* expenses ex-* */
+.ex-date{height:40px;background:var(--ha-bg-raised);border:1px solid var(--ha-border-2);border-radius:8px;color:var(--ha-text);font-family:inherit;font-size:13px;padding:0 12px;outline:none;cursor:pointer;min-width:0}
+.ex-date:focus{border-color:var(--ha-amber);box-shadow:0 0 0 3px var(--ha-amber-soft)}
+.ex-date::-webkit-calendar-picker-indicator{filter:invert(0.6)}
+.ex-cash{font-family:ui-monospace,monospace;font-size:14px;font-weight:500;color:var(--ha-green)}
+.ex-card{font-family:ui-monospace,monospace;font-size:14px;font-weight:500;color:var(--ha-blue)}
+.ex-muted{font-family:ui-monospace,monospace;font-size:14px;color:var(--ha-text-3)}
+.ex-total{font-family:ui-monospace,monospace;font-size:14px;font-weight:600;color:var(--ha-text)}
+.ex-foot td{padding:12px 14px;border-top:2px solid var(--ha-border);font-weight:600;font-family:ui-monospace,monospace;font-size:14px}
