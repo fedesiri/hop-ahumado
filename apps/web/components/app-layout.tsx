@@ -102,6 +102,11 @@ function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate?: (
 }
 
 export function AppLayout({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    console.log("[AppLayout] mounted");
+    return () => console.log("[AppLayout] unmounted");
+  }, []);
+
   const pathname = usePathname();
   const { selectedLine } = useLineContext();
   const brandLogo = selectedLine === BusinessLine.MEAT ? "/logo-alumo.png" : "/logo-hop.png";
