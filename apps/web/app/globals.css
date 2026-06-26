@@ -361,11 +361,11 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
    ============================================================ */
 .oc-screen{display:flex;flex-direction:column;height:100%;background:var(--ha-bg);color:var(--ha-text);position:relative}
 .oc-scroll{flex:1;overflow-y:auto}
-.oc-header{position:sticky;top:0;background:rgba(15,17,23,0.97);backdrop-filter:blur(12px);border-bottom:1px solid var(--ha-border-2);padding:12px 16px;z-index:40}
+.oc-header{position:sticky;top:0;background:var(--ha-bg-card);border-bottom:1px solid var(--ha-border);padding:12px 16px;z-index:40}
 .oc-htop{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .oc-title{font-size:18px;font-weight:700;margin:0}
 .oc-controls{display:grid;grid-template-columns:1fr;gap:10px}
-@container (min-width:768px){.oc-controls{grid-template-columns:25% 35% 1fr}}
+@container (min-width:768px){.oc-controls{grid-template-columns:1fr auto 1fr}}
 .oc-input{height:42px;background:var(--ha-bg-raised);border:1px solid var(--ha-border-2);border-radius:8px;color:var(--ha-text);font-family:inherit;font-size:14px;padding:0 12px;width:100%;outline:none;display:flex;align-items:center;gap:9px}
 .oc-input:focus-within,.oc-input.is-open{border-color:var(--ha-amber);box-shadow:0 0 0 3px var(--ha-amber-soft)}
 .oc-input__ic{color:var(--ha-text-3);flex:none;display:grid;place-items:center}
@@ -389,14 +389,15 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 @container (min-width:768px){.oc-grid{grid-template-columns:1fr 1fr}}
 @container (min-width:1024px){.oc-grid{grid-template-columns:1fr 1fr 1fr}}
 .oc-pcard{background:var(--ha-bg-card);border:1px solid var(--ha-border-2);border-radius:10px;padding:14px 14px 12px}
-.oc-pcard.has{border-color:rgba(52,211,153,0.40)}
+.oc-pcard.has{border-color:rgba(245,158,11,0.50);background:color-mix(in srgb,var(--ha-bg-card) 96%,#f59e0b)}
 .oc-pcard__hd{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .oc-pcard__name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
 .oc-badge{flex:none;display:inline-flex;align-items:center;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:600;background:var(--ha-green-soft);color:var(--ha-green)}
 .oc-pcard__sub{display:flex;align-items:baseline;gap:6px;margin-bottom:10px}
 .oc-pcard__unit{font-size:13px;font-weight:500;color:var(--ha-text-2)}
 .oc-pcard__price{font-size:12px;color:var(--ha-text-3);font-family:ui-monospace,ui-monospace,monospace}
-.oc-stepper{display:flex;align-items:center;gap:6px;justify-content:space-between}
+.oc-stepper{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.oc-nf{display:flex;align-items:center;gap:4px;flex-wrap:nowrap}
 .oc-sbtn{height:32px;border-radius:7px;background:var(--ha-bg-raised);border:1px solid var(--ha-border-2);color:var(--ha-text);cursor:pointer;display:grid;place-items:center;font-family:inherit}
 .oc-sbtn--bulk{min-width:40px;padding:0 8px;font-size:11px;font-weight:600;font-family:ui-monospace,ui-monospace,monospace}
 .oc-sbtn--pm{width:32px;flex:none}
@@ -404,18 +405,18 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .oc-sbtn--plus:hover{background:var(--ha-amber-bright)}
 .oc-sbtn:disabled{opacity:.35;cursor:not-allowed}
 .oc-sbtn:not(:disabled):not(.oc-sbtn--plus):hover{background:var(--ha-bg-hover)}
-.oc-qty{flex:1;min-width:40px;text-align:center;font-family:ui-monospace,ui-monospace,monospace;font-size:20px;font-weight:700;color:var(--ha-text-3)}
+.oc-qty{width:38px;flex:none;text-align:center;font-family:ui-monospace,ui-monospace,monospace;font-size:18px;font-weight:700;color:var(--ha-text-3)}
 .oc-qty.pos{color:var(--ha-amber);text-shadow:0 0 12px var(--ha-amber-soft)}
 .oc-empty{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;text-align:center;padding:50px 24px;color:var(--ha-text-2)}
 .oc-empty__t{font-size:14px;margin-top:14px}
 .oc-skel{background:var(--ha-bg-card);border:1px solid var(--ha-border-2);border-radius:10px;padding:14px}
 .oc-skb{border-radius:6px;background:linear-gradient(90deg,var(--ha-bg-raised) 25%,var(--ha-bg-hover) 50%,var(--ha-bg-raised) 75%);background-size:200% 100%;animation:oc-shimmer 1.3s ease-in-out infinite}
-.oc-footer{position:absolute;bottom:0;left:0;right:0;z-index:50;background:rgba(22,27,37,0.97);backdrop-filter:blur(12px);border-top:1px solid var(--ha-border-2);padding:12px 16px}
+.oc-footer{position:absolute;bottom:0;left:0;right:0;z-index:50;background:var(--ha-bg-card);border-top:1px solid var(--ha-border);padding:12px 16px}
 .oc-finner{max-width:1200px;margin:0 auto}
 .oc-totrow{display:flex;align-items:baseline;justify-content:space-between}
 .oc-totlbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ha-text-3);font-weight:500}
-.oc-totamt{font-family:ui-monospace,ui-monospace,monospace;font-size:26px;font-weight:700;color:var(--ha-text-3)}
-.oc-totamt.pos{color:var(--ha-green)}
+.oc-totamt{font-family:ui-monospace,ui-monospace,monospace;font-size:26px;font-weight:700;color:var(--ha-text-2)}
+.oc-totamt.pos{color:var(--ha-amber)}
 .oc-promo{font-size:12px;color:var(--ha-text-3);margin:4px 0;line-height:1.4}
 .oc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 @container (max-width:767px){.oc-actions .oc-grow{flex:1}}
