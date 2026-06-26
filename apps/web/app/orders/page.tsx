@@ -10,7 +10,7 @@ import { buildOrderClipboardText } from "@/lib/order-clipboard";
 import { formatPaymentMethodsOnly, orderPaymentStatusLabel } from "@/lib/order-labels";
 import { toast } from "@/lib/toast";
 import { OrderPaymentStatus, type Order, type OrderItem, type User } from "@/lib/types";
-import { Copy, Edit2, Eye, Trash2 } from "lucide-react";
+import { Copy, Edit2, ExternalLink, Eye, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -533,8 +533,8 @@ function OrdersContent() {
               <span className="ha-modal__title">Detalle de la orden</span>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 {modalOrder && (
-                  <Link href={`/orders/${modalOrder.id}`} style={{ fontSize: 13, color: "var(--ha-amber)", textDecoration: "none" }}>
-                    Abrir en página completa
+                  <Link href={`/orders/${modalOrder.id}`} className="ha-iconbtn" title="Abrir en página completa" aria-label="Abrir en página completa">
+                    <ExternalLink size={17} />
                   </Link>
                 )}
                 <button className="ha-iconbtn" onClick={() => { setViewModalOpen(false); setModalOrder(null); }} aria-label="Cerrar">✕</button>

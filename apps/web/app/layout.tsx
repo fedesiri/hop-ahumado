@@ -1,3 +1,4 @@
+import { ConditionalAppLayout } from "@/components/conditional-app-layout";
 import { RequireAuth } from "@/components/require-auth";
 import { ToastContainer } from "@/components/toast-container";
 import { AuthProvider } from "@/lib/auth-context";
@@ -39,7 +40,7 @@ export default function RootLayout({
         <AuthProvider>
           <RequireAuth>
             <LineProvider>
-              {children}
+              <ConditionalAppLayout>{children}</ConditionalAppLayout>
             </LineProvider>
           </RequireAuth>
           <ToastContainer />

@@ -10,6 +10,7 @@ import {
   PaymentMethod,
   type Order,
 } from "@/lib/types";
+import { ChevronDown } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 
 type Props = {
@@ -78,6 +79,8 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [addingPayment, setAddingPayment] = useState(false);
   const [updatingPaymentId, setUpdatingPaymentId] = useState<string | null>(null);
+
+  const [itemsExpanded, setItemsExpanded] = useState(true);
 
   const [cobrarModalOpen, setCobrarModalOpen] = useState(false);
   const [cobrarItems, setCobrarItems] = useState<CobrarItem[]>([]);
@@ -318,31 +321,76 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
         </div>
       </div>
 
-      <SectionDivider label="Ítems" />
-      <div className="ha-table-wrap" style={{ marginBottom: 4 }}>
-        <table className="ha-table">
-          <thead>
-            <tr>
-              <th>Producto</th>
-              {order.isConsignment && <th>Consignado</th>}
-              <th>Cantidad</th>
-              <th>Precio</th>
-              <th>Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(order.orderItems ?? []).map((item) => (
-              <tr key={item.id}>
-                <td>{item.product?.name ?? "—"}</td>
-                {order.isConsignment && <td>{item.originalQuantity != null ? formatQuantity(item.originalQuantity) : "—"}</td>}
-                <td>{formatQuantity(item.quantity)}</td>
-                <td>{item.price === null || item.price === undefined ? "—" : formatCurrency(item.price)}</td>
-                <td>{item.price === null || item.price === undefined ? "—" : formatCurrency(Number(item.price) * Number(item.quantity))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Items section with toggle */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 0 12px" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--ha-text-3)", whiteSpace: "nowrap" }}>
+          Ítems ({(order.orderItems ?? []).length})
+        </span>
+        <div style={{ flex: 1, height: 1, background: "var(--ha-border)" }} />
+        <button
+          className="ha-iconbtn"
+          style={{ width: 28, height: 28, flexShrink: 0 }}
+          onClick={() => setItemsExpanded((v) => !v)}
+          aria-label={itemsExpanded ? "Ocultar ítems" : "Mostrar ítems"}
+        >
+          <ChevronDown size={15} style={{ transform: itemsExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s" }} />
+        </button>
       </div>
+      {itemsExpanded && (
+        <>
+          {/* Desktop table */}
+          <div className="ha-table-wrap" style={{ marginBottom: 4 }}>
+            <table className="ha-table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  {order.isConsignment && <th>Consignado</th>}
+                  <th>Cantidad</th>
+                  <th>Precio</th>
+                  <th>Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(order.orderItems ?? []).map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.product?.name ?? "—"}</td>
+                    {order.isConsignment && <td>{item.originalQuantity != null ? formatQuantity(item.originalQuantity) : "—"}</td>}
+                    <td>{formatQuantity(item.quantity)}</td>
+                    <td>{item.price === null || item.price === undefined ? "—" : formatCurrency(item.price)}</td>
+                    <td>{item.price === null || item.price === undefined ? "—" : formatCurrency(Number(item.price) * Number(item.quantity))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* Mobile cards */}
+          <div className="ha-mobile-only" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 4 }}>
+            {(order.orderItems ?? []).length === 0 ? (
+              <div style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)", color: "var(--ha-text-3)", fontSize: 14 }}>
+                Sin ítems
+              </div>
+            ) : (order.orderItems ?? []).map((item) => (
+              <div key={item.id} style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+                <div style={{ fontWeight: 600, color: "var(--ha-text)", fontSize: 14, marginBottom: 8 }}>{item.product?.name ?? "—"}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 16px", fontSize: 13 }}>
+                  {order.isConsignment && (
+                    <>
+                      <span style={{ color: "var(--ha-text-3)" }}>Consignado</span>
+                      <span style={{ color: "var(--ha-text)" }}>{item.originalQuantity != null ? formatQuantity(item.originalQuantity) : "—"}</span>
+                    </>
+                  )}
+                  <span style={{ color: "var(--ha-text-3)" }}>Cantidad</span>
+                  <span style={{ color: "var(--ha-text)" }}>{formatQuantity(item.quantity)}</span>
+                  <span style={{ color: "var(--ha-text-3)" }}>Precio</span>
+                  <span style={{ color: "var(--ha-text)" }}>{item.price == null ? "—" : formatCurrency(item.price)}</span>
+                  <span style={{ color: "var(--ha-text-3)" }}>Subtotal</span>
+                  <span style={{ color: "var(--ha-text)", fontWeight: 600 }}>{item.price == null ? "—" : formatCurrency(Number(item.price) * Number(item.quantity))}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <SectionDivider label="Pagos" />
 
@@ -393,6 +441,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
         </div>
       )}
 
+      {/* Desktop payments table */}
       <div className="ha-table-wrap" style={{ marginBottom: 24 }}>
         <table className="ha-table">
           <thead>
@@ -425,6 +474,30 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
             ))}
           </tbody>
         </table>
+      </div>
+      {/* Mobile payments cards */}
+      <div className="ha-mobile-only" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+        {(order.payments ?? []).length === 0 ? (
+          <div style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)", color: "var(--ha-text-3)", fontSize: 14 }}>
+            Sin pagos registrados
+          </div>
+        ) : (order.payments ?? []).map((payment) => (
+          <div key={payment.id} style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <select
+              className="ha-input"
+              style={{ flex: "1 1 140px" }}
+              value={payment.method}
+              disabled={updatingPaymentId !== null}
+              onChange={(e) => void handleUpdatePaymentMethod(payment.id, e.target.value as PaymentMethod)}
+              aria-label="Medio de pago"
+            >
+              <option value={PaymentMethod.CASH}>Efectivo</option>
+              <option value={PaymentMethod.CARD}>Transferencia</option>
+            </select>
+            {updatingPaymentId === payment.id && <Spinner />}
+            <span style={{ fontWeight: 700, color: "var(--ha-text)", fontSize: 15, fontFamily: "ui-monospace,monospace" }}>{formatCurrency(payment.amount)}</span>
+          </div>
+        ))}
       </div>
 
       {/* Modal Cobrar consignación */}
