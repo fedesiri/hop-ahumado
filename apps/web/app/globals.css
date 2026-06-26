@@ -915,7 +915,7 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .pc-btn--sm{height:30px;padding:0 11px;font-size:12.5px}
 .pc-card{background:var(--ha-bg-card);border:1px solid var(--ha-border);border-radius:12px;overflow:visible}
 .pc-tablewrap{display:none}
-@container (min-width:768px){.pc-tablewrap{display:block}}
+@container (min-width:768px){.pc-tablewrap{display:block;overflow-x:auto}}
 .pc-table{width:100%;border-collapse:collapse;font-size:14px}
 .pc-table thead th{background:var(--ha-bg-raised);text-align:left;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--ha-text-3);padding:0 14px;height:42px;white-space:nowrap}
 .pc-table thead th:first-child{width:44px;padding-left:18px}
