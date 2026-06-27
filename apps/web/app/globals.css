@@ -972,3 +972,17 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .ex-muted{font-family:ui-monospace,monospace;font-size:14px;color:var(--ha-text-3)}
 .ex-total{font-family:ui-monospace,monospace;font-size:14px;font-weight:600;color:var(--ha-text)}
 .ex-foot td{padding:12px 14px;border-top:2px solid var(--ha-border);font-weight:600;font-family:ui-monospace,monospace;font-size:14px}
+
+/* stock movements sm-* */
+.sm-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap}
+.sm-badge--in{background:var(--ha-green-soft);color:var(--ha-green)}
+.sm-badge--out{background:var(--ha-red-soft);color:var(--ha-red)}
+.sm-badge--adj{background:var(--ha-amber-soft);color:var(--ha-amber)}
+.sm-badge--xfr{background:var(--ha-blue-soft);color:var(--ha-blue)}
+.sm-qty{font-family:ui-monospace,monospace;font-size:14px;font-weight:600}
+.sm-qty--pos{color:var(--ha-green)}
+.sm-qty--neg{color:var(--ha-red)}
+.sm-unit{font-size:12px;color:var(--ha-text-3);font-weight:500;font-family:ui-monospace,monospace}
+.sm-reason{font-style:italic;color:var(--ha-text-2);font-size:13px}
+.sm-pager{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:20px;flex-wrap:wrap}
+.sm-pager__info{font-size:13px;color:var(--ha-text-2);padding:0 10px;white-space:nowrap}

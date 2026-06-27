@@ -1,14 +1,40 @@
 "use client";
 
-import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import type { Cost, PaginationMeta, Product, StockLocation, StockMovement, StockMovementType } from "@/lib/types";
-import { useMediaQuery } from "@/lib/use-media-query";
-import { Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+
+const UNIT_LABELS: Record<string, string> = {
+  UNIT: "UN", KG: "KG", G: "G", L: "L", ML: "ML",
+};
+
+const TYPE_OPTIONS = [
+  { value: "", label: "Todos los tipos" },
+  { value: "IN", label: "Entrada" },
+  { value: "OUT", label: "Salida" },
+  { value: "ADJUSTMENT", label: "Ajuste" },
+  { value: "TRANSFER", label: "Traslado" },
+];
+
+function typeBadge(type: string) {
+  switch (type) {
+    case "IN": return { cls: "sm-badge sm-badge--in", icon: "↑", label: "Entrada" };
+    case "OUT": return { cls: "sm-badge sm-badge--out", icon: "↓", label: "Salida" };
+    case "ADJUSTMENT": return { cls: "sm-badge sm-badge--adj", icon: "≡", label: "Ajuste" };
+    case "TRANSFER": return { cls: "sm-badge sm-badge--xfr", icon: "⇌", label: "Traslado" };
+    default: return { cls: "sm-badge", icon: "", label: type };
+  }
+}
+
+function qtyDisplay(qty: number, type: string) {
+  if (type === "TRANSFER") return { cls: "sm-qty", text: formatQuantity(qty) };
+  if (qty > 0) return { cls: "sm-qty sm-qty--pos", text: `+${formatQuantity(qty)}` };
+  return { cls: "sm-qty sm-qty--neg", text: formatQuantity(qty) };
+}
 
 function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -20,7 +46,6 @@ export default function StockPage() {
 
 function StockContent() {
   const { selectedLineId } = useLineContext();
-  const isMobile = useMediaQuery("(max-width: 768px)");
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
@@ -31,7 +56,14 @@ function StockContent() {
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
 
-  // Form state (replaces antd Form)
+  // Filters (client-side on current page)
+  const [searchText, setSearchText] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  // Form state
   const [fType, setFType] = useState<StockMovementType | "">("");
   const [fLocationId, setFLocationId] = useState("");
   const [fFromLocationId, setFFromLocationId] = useState("");
@@ -97,18 +129,36 @@ function StockContent() {
     }
   };
 
+  const filtered = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    const from = dateFrom ? new Date(dateFrom + "T00:00:00") : null;
+    const to = dateTo ? new Date(dateTo + "T23:59:59") : null;
+    return movements.filter((m) => {
+      if (q && !(m.product?.name ?? "").toLowerCase().includes(q)) return false;
+      if (typeFilter && m.type !== typeFilter) return false;
+      if (locationFilter) {
+        const locId = m.location?.id ?? m.fromLocation?.id ?? m.toLocation?.id ?? "";
+        if (locId !== locationFilter) return false;
+      }
+      const d = new Date(m.createdAt);
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+  }, [movements, searchText, typeFilter, locationFilter, dateFrom, dateTo]);
+
   const validRows = rows.filter((r) => r.productId && r.quantity && r.quantity !== "0" && r.quantity !== "");
   const computedProductsCostTotal = roundMoney(
     validRows.reduce((sum, r) => {
       const cost = costsByProductId[r.productId];
-      const unitCost = cost ? Number(cost.value ?? 0) : 0;
-      return sum + Number(r.quantity) * unitCost;
+      return sum + Number(r.quantity) * (cost ? Number(cost.value ?? 0) : 0);
     }, 0)
   );
   const hasMissingCostForSelectedProducts = validRows.some((r) => !costsByProductId[r.productId]);
-  const missingCostProductNames = validRows.filter((r) => !costsByProductId[r.productId]).map((r) => products.find((p) => p.id === r.productId)?.name || r.productId);
-
+  const missingCostProductNames = validRows.filter((r) => !costsByProductId[r.productId]).map((r) => products.find((p) => p.id === r.productId)?.name ?? r.productId);
   const defaultLocationId = locations.find((l) => l.isDefault)?.id ?? locations[0]?.id ?? "";
+
+  const totalPages = meta ? Math.ceil(meta.total / pagination.limit) : 1;
 
   const handleCreate = () => {
     setFType("");
@@ -126,7 +176,6 @@ function StockContent() {
   const handleSubmit = async () => {
     const type = fType as StockMovementType;
     if (!type) { toast.error("Seleccioná el tipo de movimiento"); return; }
-
     const submitRows = rows.filter((r) => r.productId && r.quantity && r.quantity !== "0");
     if (submitRows.length === 0) { toast.error("Debes cargar al menos un producto con cantidad"); return; }
 
@@ -146,11 +195,10 @@ function StockContent() {
         toast.error("Para una entrada de stock, informá el pago de los productos (efectivo y/o transferencia).");
         return;
       }
-      const computedTotal = computedProductsCostTotal;
-      if (computedTotal > 0 && !hasMissingCostForSelectedProducts) {
-        const diff = Math.abs(productsTotalPaid - computedTotal);
+      if (computedProductsCostTotal > 0 && !hasMissingCostForSelectedProducts) {
+        const diff = Math.abs(productsTotalPaid - computedProductsCostTotal);
         if (diff > 0.01) {
-          toast.error(`El pago informado para productos no coincide con el costo calculado (${computedTotal.toFixed(2)}).`);
+          toast.error(`El pago informado para productos no coincide con el costo calculado (${computedProductsCostTotal.toFixed(2)}).`);
           return;
         }
       }
@@ -209,107 +257,128 @@ function StockContent() {
     }
   };
 
-  const getMovementTypeBadgeStyle = (type: string) => {
-    switch (type) {
-      case "IN": return { background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.3)" };
-      case "OUT": return { background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" };
-      case "ADJUSTMENT": return { background: "rgba(245,158,11,0.15)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.3)" };
-      case "TRANSFER": return { background: "rgba(59,130,246,0.15)", color: "#93c5fd", border: "1px solid rgba(59,130,246,0.3)" };
-      default: return { background: "var(--ha-bg-3)", color: "var(--ha-text-3)", border: "1px solid var(--ha-border)" };
-    }
-  };
-
-  const getMovementTypeLabel = (type: string) => {
-    switch (type) { case "IN": return "Entrada"; case "OUT": return "Salida"; case "ADJUSTMENT": return "Ajuste"; case "TRANSFER": return "Traslado"; default: return type; }
-  };
-
-  const totalPages = meta ? Math.ceil(meta.total / pagination.limit) : 1;
-
   return (
-    <div style={{ width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box" }}>
-      <div className="ha-page-header">
-        <h1 className="ha-pagetitle">Movimientos de Stock</h1>
-        <button className="ha-btn ha-btn--primary" onClick={handleCreate} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Plus size={15} /> Registrar Movimiento
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <h1 className="pc-pagetitle" style={{ margin: 0 }}>Stock · Movimientos</h1>
+        <button className="pc-btn pc-btn--primary" onClick={handleCreate}>
+          + Nuevo movimiento
         </button>
       </div>
 
-      <ScreenInfoPanel title="Unidades y decimales en movimientos">
-        Usá decimales si el producto se mide en kg, litros, etc. (ej. entrada 2,5 kg de tomate). Mantené la misma unidad
-        que en el producto y en recetas.
-      </ScreenInfoPanel>
+      {/* Filter bar */}
+      <div className="pc-filter" style={{ flexWrap: "wrap", gap: 8 }}>
+        <div className="pc-search">
+          <Search size={17} />
+          <input
+            placeholder="Buscar producto…"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+        </div>
+        <select className="pc-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        {locations.length > 0 && (
+          <select className="pc-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+            <option value="">Todas las ubicaciones</option>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        )}
+        <input type="date" className="ex-date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title="Fecha desde" />
+        <input type="date" className="ex-date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="Fecha hasta" />
+        <span className="pc-count">{filtered.length} movimientos</span>
+      </div>
 
+      {/* Table */}
       {loading ? (
         <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
+          <div style={{
+            width: 24, height: 24, borderRadius: "50%",
+            border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)",
+            animation: "ha-spin .7s linear infinite",
+          }} />
         </div>
-      ) : movements.length === 0 ? (
-        <div className="ha-empty"><p className="ha-empty__t">No hay movimientos de stock</p></div>
+      ) : filtered.length === 0 ? (
+        <div className="ha-empty">
+          <p className="ha-empty__t">{movements.length === 0 ? "No hay movimientos de stock" : "Sin resultados para los filtros aplicados"}</p>
+        </div>
       ) : (
-        <div style={{ width: "100%", maxWidth: "100%", minWidth: 0, overflowX: "auto", WebkitOverflowScrolling: "touch" as const }}>
-          <table className="ha-table" style={{ minWidth: isMobile ? 680 : undefined }}>
-            <thead>
-              <tr>
-                <th style={{ minWidth: 140 }}>Producto</th>
-                <th style={{ minWidth: isMobile ? 112 : 160 }}>{isMobile ? "Ubicación" : "Ubicación / traslado"}</th>
-                <th style={{ width: isMobile ? 86 : 108, textAlign: "center" }}>Tipo</th>
-                <th style={{ width: isMobile ? 72 : 88, textAlign: "right" }}>Cant.</th>
-                <th style={{ minWidth: 100 }}>Razón</th>
-                <th style={{ width: isMobile ? 76 : 96 }}>Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {movements.map((row) => (
-                <tr key={row.id}>
-                  <td style={{ fontWeight: 500 }}>{row.product?.name || "—"}</td>
-                  <td>
-                    {row.type === "TRANSFER" ? (
-                      isMobile ? (
-                        <div style={{ fontSize: 12, lineHeight: 1.35, color: "var(--ha-text)" }}>
-                          <div>{row.fromLocation?.name ?? "—"}</div>
-                          <div style={{ color: "var(--ha-text-3)", margin: "2px 0" }}>→</div>
-                          <div>{row.toLocation?.name ?? "—"}</div>
-                        </div>
-                      ) : `${row.fromLocation?.name ?? "—"} → ${row.toLocation?.name ?? "—"}`
-                    ) : (row.location?.name ?? "—")}
-                  </td>
-                  <td style={{ textAlign: "center" }}>
-                    <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 5, fontSize: isMobile ? 11 : 12, fontWeight: 500, ...getMovementTypeBadgeStyle(row.type) }}>
-                      {getMovementTypeLabel(row.type)}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{formatQuantity(row.quantity)}</td>
-                  <td style={{ color: "var(--ha-text-3)" }}>{row.reason || "—"}</td>
-                  <td style={{ fontSize: isMobile ? 12 : undefined, whiteSpace: "nowrap", color: "var(--ha-text-3)" }}>
-                    {new Date(row.createdAt).toLocaleDateString("es-AR", isMobile ? { day: "2-digit", month: "2-digit" } : undefined)}
-                  </td>
+        <div className="pc-card">
+          <div style={{ overflowX: "auto" }}>
+            <table className="pc-table" style={{ minWidth: 680 }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 120 }}>Tipo</th>
+                  <th>Producto</th>
+                  <th style={{ textAlign: "right", width: 90 }}>Cantidad</th>
+                  <th style={{ width: 70 }}>Unidad</th>
+                  <th>Ubicación</th>
+                  <th>Motivo</th>
+                  <th style={{ width: 140, whiteSpace: "nowrap" }}>Fecha</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {meta && meta.total > 0 && (
-        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16 }}>
-          <span style={{ color: "var(--ha-text-3)", fontSize: 13 }}>{meta.total} total · página {pagination.page} de {totalPages}</span>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button className="ha-btn ha-btn--secondary ha-btn--sm" disabled={pagination.page <= 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>‹</button>
-            <button className="ha-btn ha-btn--secondary ha-btn--sm" disabled={pagination.page >= totalPages} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>›</button>
+              </thead>
+              <tbody>
+                {filtered.map((row) => {
+                  const badge = typeBadge(row.type);
+                  const qty = qtyDisplay(row.quantity, row.type);
+                  const unit = row.product?.unit ? (UNIT_LABELS[row.product.unit] ?? row.product.unit) : "—";
+                  const locationStr = row.type === "TRANSFER"
+                    ? `${row.fromLocation?.name ?? "—"} → ${row.toLocation?.name ?? "—"}`
+                    : (row.location?.name ?? "—");
+                  const dt = new Date(row.createdAt);
+                  const dateStr = dt.toLocaleDateString("es-AR");
+                  const timeStr = dt.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+                  return (
+                    <tr key={row.id}>
+                      <td><span className={badge.cls}>{badge.icon} {badge.label}</span></td>
+                      <td style={{ fontWeight: 500 }}>{row.product?.name ?? "—"}</td>
+                      <td style={{ textAlign: "right" }}><span className={qty.cls}>{qty.text}</span></td>
+                      <td><span className="sm-unit">{unit}</span></td>
+                      <td className="pc-cat">{locationStr}</td>
+                      <td><span className="sm-reason">{row.reason ?? "—"}</span></td>
+                      <td className="pc-vig" style={{ whiteSpace: "nowrap" }}>{dateStr} {timeStr}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
+      {/* Pagination */}
+      {meta && meta.total > 0 && (
+        <div className="sm-pager">
+          <button
+            className="pc-btn pc-btn--ghost pc-btn--sm"
+            disabled={pagination.page <= 1}
+            onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
+          >
+            ← Anterior
+          </button>
+          <span className="sm-pager__info">Página {pagination.page} de {totalPages}</span>
+          <button
+            className="pc-btn pc-btn--ghost pc-btn--sm"
+            disabled={pagination.page >= totalPages}
+            onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
+          >
+            Siguiente →
+          </button>
+        </div>
+      )}
+
+      {/* Create Modal */}
       {modalOpen && (
         <div className="ha-modal-backdrop" onClick={() => setModalOpen(false)}>
-          <div className="ha-modal" style={{ maxWidth: isMobile ? "calc(100vw - 24px)" : 520 }} onClick={(e) => e.stopPropagation()}>
+          <div className="ha-modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
             <div className="ha-modal__head">
-              <span className="ha-modal__title">Registrar Movimiento de Stock</span>
+              <span className="ha-modal__title">Nuevo movimiento de stock</span>
               <button className="ha-iconbtn" onClick={() => setModalOpen(false)} aria-label="Cerrar">✕</button>
             </div>
-            <div className="ha-modal__body" style={{ maxHeight: isMobile ? "75vh" : undefined, overflowY: "auto" }}>
+            <div className="ha-modal__body" style={{ maxHeight: "75vh", overflowY: "auto" }}>
               <div className="ha-field" style={{ marginBottom: 16 }}>
-                <label className="ha-label">Tipo de Movimiento <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <label className="ha-label">Tipo de movimiento <span style={{ color: "var(--ha-red)" }}>*</span></label>
                 <select className="ha-input" value={fType} onChange={(e) => setFType(e.target.value as StockMovementType | "")}>
                   <option value="">Seleccioná tipo</option>
                   <option value="IN">Entrada</option>
@@ -347,7 +416,7 @@ function StockContent() {
               )}
 
               <p style={{ margin: "0 0 12px 0", color: "var(--ha-text-3)", fontSize: 13 }}>
-                Producto y cantidad: misma unidad que definiste al cargar el producto (enteros o decimales, ej. 0,5 kg).
+                Usá decimales si el producto se mide en kg, litros, etc. (ej. 0,5 kg).
               </p>
 
               <div style={{ marginBottom: 16 }}>
@@ -355,7 +424,7 @@ function StockContent() {
                   <div key={index} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <select
                       className="ha-input"
-                      style={{ minWidth: 220, flex: 1 }}
+                      style={{ minWidth: 200, flex: 1 }}
                       value={row.productId}
                       onChange={(v) => { const next = [...rows]; next[index].productId = v.target.value; setRows(next); }}
                     >
@@ -383,27 +452,27 @@ function StockContent() {
                   </div>
                 ))}
                 <button className="ha-btn ha-btn--secondary ha-btn--sm" onClick={() => setRows([...rows, { productId: "", quantity: "" }])}>
-                  Agregar producto
+                  + Agregar producto
                 </button>
               </div>
 
               {fType === "IN" && (
                 <>
                   <div style={{ marginBottom: 16, paddingTop: 12, borderTop: "1px solid var(--ha-border)" }}>
-                    <p style={{ margin: "0 0 8px 0", color: "var(--ha-text)", fontWeight: 600 }}>Pago de productos (solo para Entrada)</p>
+                    <p style={{ margin: "0 0 8px 0", color: "var(--ha-text)", fontWeight: 600 }}>Pago de productos</p>
                     <p style={{ margin: "0 0 12px 0", color: "var(--ha-text-3)", fontSize: 13 }}>
-                      Costo total calculado: <span style={{ color: "#22c55e" }}>{formatCurrency(computedProductsCostTotal)}</span>
+                      Costo total calculado: <span style={{ color: "var(--ha-green)" }}>{formatCurrency(computedProductsCostTotal)}</span>
                     </p>
                     <div className="ha-field" style={{ marginBottom: 12 }}>
-                      <label className="ha-label">Productos - Efectivo</label>
-                      <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ingresá monto en efectivo" value={fProductsCashAmount} onChange={(e) => setFProductsCashAmount(e.target.value)} />
+                      <label className="ha-label">Efectivo</label>
+                      <input type="number" className="ha-input" min={0} step={0.01} placeholder="Monto en efectivo" value={fProductsCashAmount} onChange={(e) => setFProductsCashAmount(e.target.value)} />
                     </div>
                     <div className="ha-field">
-                      <label className="ha-label">Productos - Transferencia</label>
-                      <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ingresá monto por transferencia" value={fProductsCardAmount} onChange={(e) => setFProductsCardAmount(e.target.value)} />
+                      <label className="ha-label">Transferencia</label>
+                      <input type="number" className="ha-input" min={0} step={0.01} placeholder="Monto por transferencia" value={fProductsCardAmount} onChange={(e) => setFProductsCardAmount(e.target.value)} />
                     </div>
                     <p style={{ margin: "8px 0 0 0", color: "var(--ha-text-3)", fontSize: 13 }}>
-                      El total de efectivo + transferencia debe coincidir con el costo calculado.
+                      Efectivo + transferencia debe coincidir con el costo calculado.
                     </p>
                   </div>
 
@@ -427,20 +496,22 @@ function StockContent() {
                       </div>
                     ))}
                     <button className="ha-btn ha-btn--secondary ha-btn--sm" onClick={() => setExtraExpenseRows([...extraExpenseRows, { description: "", cash: "", card: "" }])}>
-                      Agregar egreso variable
+                      + Agregar egreso variable
                     </button>
                   </div>
                 </>
               )}
 
               <div className="ha-field">
-                <label className="ha-label">Razón (Opcional)</label>
+                <label className="ha-label">Motivo (opcional)</label>
                 <input className="ha-input" placeholder="Razón del movimiento" value={fReason} onChange={(e) => setFReason(e.target.value)} />
               </div>
             </div>
             <div className="ha-modal__foot">
               <button className="ha-btn ha-btn--secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
-              <button className="ha-btn ha-btn--primary" onClick={() => void handleSubmit()} disabled={submitting}>{submitting ? "Guardando…" : "Registrar"}</button>
+              <button className="ha-btn ha-btn--primary" onClick={() => void handleSubmit()} disabled={submitting}>
+                {submitting ? "Guardando…" : "Registrar"}
+              </button>
             </div>
           </div>
         </div>
