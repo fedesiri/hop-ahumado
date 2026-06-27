@@ -23,7 +23,7 @@ export class AuthController {
     const idToken = getBearerToken(req.headers?.authorization as string | undefined);
     if (!idToken) throw new UnauthorizedException("Missing bearer token");
 
-    const decoded = await firebaseAdmin.auth().verifyIdToken(idToken, true);
+    const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
     const user = await upsertAppUserFromFirebase(this.prisma, decoded);
 
     return {
