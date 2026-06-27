@@ -14,6 +14,7 @@ import {
 import { toast } from "@/lib/toast";
 import { Spinner } from "@/components/spinner";
 import type { CreateOrderRequest, Customer, Price, Product, StockLocation } from "@/lib/types";
+import { fetchAllPages } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function OrderCalculatorPage() {
@@ -73,15 +74,7 @@ function OrderCalculatorPageContent() {
   const limit = 100;
 
   const fetchProducts = useCallback(async () => {
-    const allProducts: Product[] = [];
-    let page = 1;
-    let res = await apiClient.getProducts(page, limit);
-    allProducts.push(...res.data);
-    while (res.meta.totalPages > page) {
-      page += 1;
-      res = await apiClient.getProducts(page, limit);
-      allProducts.push(...res.data);
-    }
+    const allProducts = await fetchAllPages((page) => apiClient.getProducts(page, limit));
     setProducts(allProducts);
     return allProducts;
   }, []);
@@ -90,40 +83,18 @@ function OrderCalculatorPageContent() {
     const load = async () => {
       try {
         setLoading(true);
-        await fetchProducts();
-
-        const allPrices: Price[] = [];
-        let page = 1;
-        let pricesRes = await apiClient.getPrices(page, limit, undefined, true);
-        allPrices.push(...pricesRes.data);
-        while (pricesRes.meta.totalPages > page) {
-          page += 1;
-          pricesRes = await apiClient.getPrices(page, limit, undefined, true);
-          allPrices.push(...pricesRes.data);
-        }
-
-        const allCustomers: Customer[] = [];
-        page = 1;
-        let customersRes = await apiClient.getCustomers(page, limit);
-        allCustomers.push(...customersRes.data);
-        while (customersRes.meta.totalPages > page) {
-          page += 1;
-          customersRes = await apiClient.getCustomers(page, limit);
-          allCustomers.push(...customersRes.data);
-        }
-
+        const [allProducts, allPrices, allCustomers, locs] = await Promise.all([
+          fetchAllPages((page) => apiClient.getProducts(page, limit)),
+          fetchAllPages((page) => apiClient.getPrices(page, limit, undefined, true)),
+          fetchAllPages((page) => apiClient.getCustomers(page, limit)),
+          apiClient.getStockLocations().catch(() => [] as StockLocation[]),
+        ]);
+        setProducts(allProducts);
         setPrices(allPrices);
         setCustomers(allCustomers);
-
-        try {
-          const locs = await apiClient.getStockLocations();
-          setStockLocations(locs);
-          const def = locs.find((l) => l.isDefault)?.id ?? locs[0]?.id ?? null;
-          setFulfillmentLocationId(def);
-        } catch {
-          setStockLocations([]);
-          setFulfillmentLocationId(null);
-        }
+        setStockLocations(locs);
+        const def = locs.find((l) => l.isDefault)?.id ?? locs[0]?.id ?? null;
+        setFulfillmentLocationId(def);
       } catch (e) {
         console.error(e);
         toast.error("Error al cargar productos y precios");
@@ -132,7 +103,7 @@ function OrderCalculatorPageContent() {
       }
     };
     void load();
-  }, [fetchProducts]);
+  }, []);
 
   useEffect(() => {
     if (!confirmModalOpen) {

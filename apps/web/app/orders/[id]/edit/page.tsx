@@ -13,6 +13,7 @@ import {
 } from "@/lib/order-calculator/stock-preview";
 import { toast } from "@/lib/toast";
 import type { Customer, Order, Price, Product, StockLocation } from "@/lib/types";
+import { fetchAllPages } from "@/lib/utils";
 import { Spinner } from "@/components/spinner";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -102,15 +103,7 @@ function OrderEditPageContent({ id }: { id: string }) {
   const limit = 100;
 
   const fetchProducts = useCallback(async () => {
-    const allProducts: Product[] = [];
-    let page = 1;
-    let res = await apiClient.getProducts(page, limit);
-    allProducts.push(...res.data);
-    while (res.meta.totalPages > page) {
-      page += 1;
-      res = await apiClient.getProducts(page, limit);
-      allProducts.push(...res.data);
-    }
+    const allProducts = await fetchAllPages((page) => apiClient.getProducts(page, limit));
     setProducts(allProducts);
     return allProducts;
   }, []);
@@ -119,46 +112,24 @@ function OrderEditPageContent({ id }: { id: string }) {
     const load = async () => {
       try {
         setLoading(true);
-        const orderData = await apiClient.getOrder(id);
+        const [orderData, allProducts, allPrices, allCustomers, locs] = await Promise.all([
+          apiClient.getOrder(id),
+          fetchAllPages((page) => apiClient.getProducts(page, limit)),
+          fetchAllPages((page) => apiClient.getPrices(page, limit, undefined, true)),
+          fetchAllPages((page) => apiClient.getCustomers(page, limit)),
+          apiClient.getStockLocations().catch(() => [] as StockLocation[]),
+        ]);
         setOrder(orderData);
         setDeliveryDate(orderData.deliveryDate ? orderData.deliveryDate.slice(0, 10) : "");
         setDeliveredAt(orderData.deliveredAt ? new Date(orderData.deliveredAt).toISOString().slice(0, 16) : "");
         setOrderComment(orderData.comment ?? "");
-
-        await fetchProducts();
-
-        const allPrices: Price[] = [];
-        let page = 1;
-        let pricesRes = await apiClient.getPrices(page, limit, undefined, true);
-        allPrices.push(...pricesRes.data);
-        while (pricesRes.meta.totalPages > page) {
-          page += 1;
-          pricesRes = await apiClient.getPrices(page, limit, undefined, true);
-          allPrices.push(...pricesRes.data);
-        }
+        setProducts(allProducts);
         setPrices(allPrices);
-
-        const allCustomers: Customer[] = [];
-        page = 1;
-        let customersRes = await apiClient.getCustomers(page, limit);
-        allCustomers.push(...customersRes.data);
-        while (customersRes.meta.totalPages > page) {
-          page += 1;
-          customersRes = await apiClient.getCustomers(page, limit);
-          allCustomers.push(...customersRes.data);
-        }
         setCustomers(allCustomers);
-
-        try {
-          const locs = await apiClient.getStockLocations();
-          setStockLocations(locs);
-          const fromOrder = orderData.fulfillmentLocationId;
-          const def = fromOrder ?? locs.find((l) => l.isDefault)?.id ?? locs[0]?.id ?? null;
-          setFulfillmentLocationId(def);
-        } catch {
-          setStockLocations([]);
-          setFulfillmentLocationId(orderData.fulfillmentLocationId ?? null);
-        }
+        setStockLocations(locs);
+        const fromOrder = orderData.fulfillmentLocationId;
+        const def = fromOrder ?? locs.find((l) => l.isDefault)?.id ?? locs[0]?.id ?? null;
+        setFulfillmentLocationId(def);
       } catch (e) {
         console.error(e);
         toast.error("Error al cargar la orden o los datos");
