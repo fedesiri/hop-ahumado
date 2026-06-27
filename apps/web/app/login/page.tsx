@@ -83,10 +83,6 @@ export default function LoginPage() {
       <div className="lg-brandtop">
         <div className="lg-logo">Hop · Alumo</div>
         <div className="lg-tag">Sistema de gestión interna</div>
-        <div className="lg-pills">
-          <span className="lg-pill">🍺 Hop</span>
-          <span className="lg-pill">🥩 Alumo</span>
-        </div>
       </div>
 
       {/* Form area */}
