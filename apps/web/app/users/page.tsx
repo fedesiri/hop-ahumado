@@ -2,9 +2,14 @@
 
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
-import type { CreateUserRequest, HealthResponse, UpdateUserRequest, User } from "@/lib/types";
-import { Edit2, Plus, Trash2, X } from "lucide-react";
+import type { CreateUserRequest, UpdateUserRequest, User } from "@/lib/types";
+import { CheckCircle2, Edit2, Eye, EyeOff, Plus, Trash2, XCircle, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "")).toUpperCase() + ((parts[1]?.[0] ?? "")).toUpperCase();
+}
 
 export default function UsersPage() {
   return <UsersContent />;
@@ -18,33 +23,26 @@ function UsersContent() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState("");
-  const [pagination, setPagination] = useState({ page: 1, limit: 10 });
-  const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
-  const [healthStatus, setHealthStatus] = useState<HealthResponse | null>(null);
-  const [apiHealthOk, setApiHealthOk] = useState(false);
+  const [page, setPage] = useState(1);
+  const limit = 10;
+  const [total, setTotal] = useState(0);
+  const [apiOk, setApiOk] = useState<boolean | null>(null);
+  const [healthStatus, setHealthStatus] = useState("");
 
-  // form fields
+  // Form
   const [fname, setFname] = useState("");
   const [femail, setFemail] = useState("");
   const [fpassword, setFpassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const nameRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetchUsers();
-    checkApiHealth();
-  }, [pagination.page, pagination.limit]);
-
-  useEffect(() => {
-    if (drawerOpen) setTimeout(() => nameRef.current?.focus(), 80);
-  }, [drawerOpen]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = async (p = page) => {
     try {
       setLoading(true);
-      const response = await apiClient.getUsers(pagination.page, pagination.limit);
-      setUsers(response.data);
-      setMeta(response.meta);
+      const res = await apiClient.getUsers(p, limit);
+      setUsers(res.data);
+      setTotal(res.meta.total);
     } catch {
       toast.error("Error al cargar usuarios");
     } finally {
@@ -52,40 +50,39 @@ function UsersContent() {
     }
   };
 
-  const checkApiHealth = async () => {
+  const checkHealth = async () => {
     try {
-      const health = await apiClient.checkHealth();
-      setHealthStatus(health);
-      setApiHealthOk(true);
+      const h = await apiClient.checkHealth();
+      setApiOk(true);
+      setHealthStatus(h.status ?? "ok");
     } catch {
-      setApiHealthOk(false);
+      setApiOk(false);
+      setHealthStatus("offline");
     }
   };
 
-  const resetForm = () => {
-    setFname(""); setFemail(""); setFpassword(""); setErrors({});
-  };
+  useEffect(() => {
+    void fetchUsers(page);
+    void checkHealth();
+  }, [page]);
+
+  useEffect(() => {
+    if (drawerOpen) setTimeout(() => nameRef.current?.focus(), 80);
+  }, [drawerOpen]);
 
   const openCreate = () => {
     setEditingId(null);
-    resetForm();
+    setFname(""); setFemail(""); setFpassword(""); setShowPass(false); setErrors({});
     setDrawerOpen(true);
   };
 
-  const openEdit = (record: User) => {
-    setEditingId(record.id);
-    setFname(record.name ?? "");
-    setFemail(record.email ?? "");
-    setFpassword("");
-    setErrors({});
+  const openEdit = (u: User) => {
+    setEditingId(u.id);
+    setFname(u.name ?? ""); setFemail(u.email ?? ""); setFpassword(""); setShowPass(false); setErrors({});
     setDrawerOpen(true);
   };
 
-  const closeDrawer = () => {
-    setDrawerOpen(false);
-    setEditingId(null);
-    resetForm();
-  };
+  const closeDrawer = () => { setDrawerOpen(false); setEditingId(null); };
 
   const validate = () => {
     const errs: Record<string, string> = {};
@@ -108,12 +105,11 @@ function UsersContent() {
         await apiClient.updateUser(editingId, { name: fname.trim(), email: femail.trim() } as UpdateUserRequest);
         toast.success("Usuario actualizado");
       } else {
-        const data: CreateUserRequest = { name: fname.trim(), email: femail.trim(), password: fpassword };
-        await apiClient.createUser(data);
+        await apiClient.createUser({ name: fname.trim(), email: femail.trim(), password: fpassword } as CreateUserRequest);
         toast.success("Usuario creado");
       }
       closeDrawer();
-      fetchUsers();
+      void fetchUsers(page);
     } catch {
       toast.error("Error al guardar usuario");
     } finally {
@@ -121,36 +117,62 @@ function UsersContent() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await apiClient.deleteUser(deleteId);
+      toast.success("Usuario eliminado");
+      setDeleteId(null);
+      void fetchUsers(page);
+    } catch {
+      toast.error("Error al eliminar usuario");
+      setDeleteId(null);
+    }
+  };
+
+  const totalPages = Math.ceil(total / limit);
+
   return (
     <div>
-      <div className="ha-page-header">
-        <h1 className="ha-pagetitle">Usuarios</h1>
-        <button className="ha-btn ha-btn--primary" onClick={openCreate}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20 }}>
+        <h1 className="pc-pagetitle" style={{ margin: 0 }}>Usuarios</h1>
+        <button className="pc-btn pc-btn--primary us-newbtn" onClick={openCreate}>
           <Plus size={15} /> Nuevo usuario
         </button>
       </div>
 
-      {/* API health card */}
-      <div style={{
-        background: "var(--ha-bg-card)",
-        border: `1px solid ${apiHealthOk ? "var(--ha-green)" : "var(--ha-red)"}`,
-        borderLeft: `4px solid ${apiHealthOk ? "var(--ha-green)" : "var(--ha-red)"}`,
-        borderRadius: 10, padding: "14px 18px", marginBottom: 20,
-        display: "flex", gap: 32, flexWrap: "wrap",
-      }}>
-        <div>
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--ha-text-3)", marginBottom: 4 }}>Estado de la API</div>
-          <div style={{ fontWeight: 700, fontSize: 18, color: apiHealthOk ? "var(--ha-green)" : "var(--ha-red)" }}>
-            {apiHealthOk ? "En línea" : "Fuera de línea"}
+      {/* Health card */}
+      <div className={"us-health" + (apiOk === false ? " off" : "")}>
+        <div className="us-health__row">
+          <div className="us-stat">
+            <div className={"us-stat__ic" + (apiOk === false ? " r" : " g")}>
+              {apiOk === false
+                ? <XCircle size={18} />
+                : <CheckCircle2 size={18} />}
+            </div>
+            <div>
+              <div className={"us-stat__v" + (apiOk === false ? " r" : " g")}>
+                {apiOk === null ? "Verificando…" : apiOk ? "En línea" : "Fuera de línea"}
+              </div>
+              <div className="us-stat__l">Estado del servidor</div>
+            </div>
           </div>
-          {healthStatus && <div style={{ fontSize: 11, color: "var(--ha-text-3)", marginTop: 2 }}>Status: {healthStatus.status}</div>}
+          <div className="us-stat">
+            <div>
+              <div className="us-stat__v">{total}</div>
+              <div className="us-stat__l">Usuarios registrados</div>
+            </div>
+          </div>
         </div>
-        <div>
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--ha-text-3)", marginBottom: 4 }}>Total usuarios</div>
-          <div className="ha-mono" style={{ fontWeight: 700, fontSize: 18, color: "var(--ha-text)" }}>{meta?.total ?? users.length}</div>
-        </div>
+        {healthStatus && (
+          <div className="us-health__foot">
+            <span className="us-health__status">Status: {healthStatus}</span>
+          </div>
+        )}
       </div>
 
+      {/* Content */}
       {loading ? (
         <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
           <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
@@ -158,40 +180,41 @@ function UsersContent() {
       ) : users.length === 0 ? (
         <div className="ha-empty">
           <p className="ha-empty__t">Sin usuarios</p>
-          <p className="ha-empty__s">Creá el primer usuario.</p>
+          <p className="ha-empty__s">Creá el primer usuario con el botón de arriba.</p>
         </div>
       ) : (
-        <>
+        <div className="us-card">
           {/* Desktop table */}
-          <div className="ha-table-wrap">
-            <table className="ha-table">
+          <div className="us-tablewrap">
+            <table className="us-table">
               <thead>
                 <tr>
                   <th>Nombre</th>
                   <th>Email</th>
-                  <th>Creado</th>
-                  <th style={{ textAlign: "right", width: 100 }}>Acciones</th>
+                  <th>Fecha de creación</th>
+                  <th className="r">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((u) => (
                   <tr key={u.id}>
-                    <td style={{ fontWeight: 500 }}>{u.name}</td>
-                    <td style={{ color: "var(--ha-text-2)" }}>{u.email}</td>
-                    <td className="ha-mono" style={{ color: "var(--ha-text-2)" }}>
-                      {new Date(u.createdAt).toLocaleDateString("es-AR")}
+                    <td>
+                      <div className="us-uname">
+                        <div className="us-uav">{initials(u.name ?? u.email ?? "?")}</div>
+                        <span style={{ fontWeight: 500 }}>{u.name}</span>
+                      </div>
                     </td>
-                    <td style={{ textAlign: "right" }}>
-                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-                        <button
-                          onClick={() => openEdit(u)}
-                          style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}
-                        >
+                    <td><span className="us-uemail">{u.email}</span></td>
+                    <td><span className="us-udate">{new Date(u.createdAt).toLocaleDateString("es-AR")}</span></td>
+                    <td>
+                      <div className="us-acts">
+                        <button className="us-actbtn" onClick={() => openEdit(u)} aria-label="Editar">
                           <Edit2 size={14} />
                         </button>
                         <button
-                          onClick={() => { setDeleteId(u.id); setDeleteTarget(u.name ?? u.email); }}
-                          style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-red)", background: "transparent", borderRadius: 7, color: "var(--ha-red)", cursor: "pointer" }}
+                          className="us-actbtn us-actbtn--del"
+                          onClick={() => { setDeleteId(u.id); setDeleteTarget(u.name ?? u.email ?? ""); }}
+                          aria-label="Eliminar"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -203,77 +226,111 @@ function UsersContent() {
             </table>
           </div>
 
-          {/* Mobile card list */}
-          <div className="ha-cardlist">
+          {/* Mobile cards */}
+          <div className="us-cardlist" style={{ padding: 12 }}>
             {users.map((u) => (
-              <div key={u.id} className="ha-ordcard">
-                <div className="ha-ordcard__top">
-                  <span className="ha-ordcard__name">{u.name}</span>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={() => openEdit(u)} style={{ width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 8, color: "var(--ha-text-2)", cursor: "pointer" }}>
-                      <Edit2 size={15} />
-                    </button>
-                    <button onClick={() => { setDeleteId(u.id); setDeleteTarget(u.name ?? u.email); }} style={{ width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--ha-red)", background: "transparent", borderRadius: 8, color: "var(--ha-red)", cursor: "pointer" }}>
-                      <Trash2 size={15} />
+              <div key={u.id} className="us-ucard">
+                <div className="us-ucard__top">
+                  <div className="us-uav">{initials(u.name ?? u.email ?? "?")}</div>
+                  <span className="us-ucard__name">{u.name}</span>
+                  <div className="us-ucard__acts">
+                    <button className="us-actbtn" onClick={() => openEdit(u)} aria-label="Editar"><Edit2 size={14} /></button>
+                    <button
+                      className="us-actbtn us-actbtn--del"
+                      onClick={() => { setDeleteId(u.id); setDeleteTarget(u.name ?? u.email ?? ""); }}
+                      aria-label="Eliminar"
+                    >
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
-                <div style={{ fontSize: 12, color: "var(--ha-text-3)", marginTop: 4 }}>{u.email}</div>
+                <div className="us-ucard__email">{u.email}</div>
+                <div className="us-ucard__date">Creado: {new Date(u.createdAt).toLocaleDateString("es-AR")}</div>
               </div>
             ))}
           </div>
 
           {/* Pagination */}
-          {meta && meta.total > pagination.limit && (
-            <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
-              <button className="ha-btn ha-btn--secondary ha-btn--sm" disabled={pagination.page <= 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>
-                Anterior
-              </button>
-              <span style={{ display: "flex", alignItems: "center", fontSize: 13, color: "var(--ha-text-3)" }}>
-                {pagination.page} / {Math.ceil(meta.total / pagination.limit)}
-              </span>
-              <button className="ha-btn ha-btn--secondary ha-btn--sm" disabled={pagination.page * pagination.limit >= meta.total} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>
-                Siguiente
-              </button>
+          {totalPages > 1 && (
+            <div className="us-pag">
+              <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>← Anterior</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <button key={p} className={"pg" + (p === page ? " on" : "")} onClick={() => setPage(p)}>{p}</button>
+              ))}
+              <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Siguiente →</button>
             </div>
           )}
-        </>
+        </div>
       )}
+
+      {/* Mobile FAB */}
+      <button className="us-fab" onClick={openCreate} aria-label="Nuevo usuario">
+        <Plus size={22} />
+      </button>
 
       {/* Drawer */}
       {drawerOpen && (
         <>
           <div className="ha-overlay" onClick={closeDrawer} />
-          <div className="ha-drawer">
-            <div className="ha-drawer__head">
-              <span className="ha-drawer__title">{editingId ? "Editar usuario" : "Nuevo usuario"}</span>
+          <div className="us-drawer">
+            <div className="us-handle" />
+            <div className="us-drawer__head">
+              <span className="us-drawer__title">{editingId ? "Editar usuario" : "Nuevo usuario"}</span>
               <button className="ha-iconbtn" onClick={closeDrawer} aria-label="Cerrar"><X size={18} /></button>
             </div>
-            <div className="ha-drawer__body">
-              <div className="ha-formgrid">
-                <div className="ha-field">
-                  <label className="ha-label">Nombre <span style={{ color: "var(--ha-red)" }}>*</span></label>
-                  <input ref={nameRef} className={`ha-input${errors.name ? " ha-input--error" : ""}`} placeholder="Nombre del usuario" value={fname} onChange={(e) => { setFname(e.target.value); setErrors((p) => ({ ...p, name: "" })); }} />
-                  {errors.name && <span className="ha-error">{errors.name}</span>}
-                </div>
-                <div className="ha-field">
-                  <label className="ha-label">Email <span style={{ color: "var(--ha-red)" }}>*</span></label>
-                  <input className={`ha-input${errors.email ? " ha-input--error" : ""}`} type="email" placeholder="correo@ejemplo.com" value={femail} onChange={(e) => { setFemail(e.target.value); setErrors((p) => ({ ...p, email: "" })); }} />
-                  {errors.email && <span className="ha-error">{errors.email}</span>}
-                </div>
-                {!editingId && (
-                  <div className="ha-field">
-                    <label className="ha-label">Contraseña <span style={{ color: "var(--ha-red)" }}>*</span></label>
-                    <input className={`ha-input${errors.password ? " ha-input--error" : ""}`} type="password" placeholder="Mínimo 6 caracteres" autoComplete="new-password" value={fpassword} onChange={(e) => { setFpassword(e.target.value); setErrors((p) => ({ ...p, password: "" })); }} />
-                    {errors.password && <span className="ha-error">{errors.password}</span>}
-                  </div>
-                )}
+            <div className="us-drawer__body">
+              <div className="us-field">
+                <label className="us-label">Nombre <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <input
+                  ref={nameRef}
+                  className={"us-input" + (errors.name ? " has-err" : "")}
+                  placeholder="Nombre del usuario"
+                  value={fname}
+                  onChange={(e) => { setFname(e.target.value); setErrors((p) => ({ ...p, name: "" })); }}
+                />
+                {errors.name && <span className="us-err">{errors.name}</span>}
               </div>
+              <div className="us-field">
+                <label className="us-label">Email <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <input
+                  className={"us-input" + (errors.email ? " has-err" : "")}
+                  type="email"
+                  placeholder="correo@ejemplo.com"
+                  value={femail}
+                  onChange={(e) => { setFemail(e.target.value); setErrors((p) => ({ ...p, email: "" })); }}
+                />
+                {errors.email && <span className="us-err">{errors.email}</span>}
+              </div>
+              {!editingId ? (
+                <div className="us-field">
+                  <label className="us-label">Contraseña <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                  <div className="us-inputwrap">
+                    <input
+                      className={"us-input us-input--pass" + (errors.password ? " has-err" : "")}
+                      type={showPass ? "text" : "password"}
+                      placeholder="Mínimo 6 caracteres"
+                      autoComplete="new-password"
+                      value={fpassword}
+                      onChange={(e) => { setFpassword(e.target.value); setErrors((p) => ({ ...p, password: "" })); }}
+                    />
+                    <button className="us-eye" type="button" onClick={() => setShowPass((v) => !v)} aria-label="Mostrar contraseña">
+                      {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {errors.password
+                    ? <span className="us-err">{errors.password}</span>
+                    : <span className="us-hint">Mínimo 6 caracteres. Usada para acceder con Firebase Auth.</span>}
+                </div>
+              ) : (
+                <div className="us-hint" style={{ marginBottom: 12 }}>
+                  Para cambiar la contraseña, el usuario debe hacerlo desde Firebase directamente.
+                </div>
+              )}
             </div>
-            <div className="ha-drawer__foot">
+            <div className="us-drawer__foot">
               <button className="ha-btn ha-btn--secondary" onClick={closeDrawer}>Cancelar</button>
-              <button className="ha-btn ha-btn--primary" onClick={handleSubmit} disabled={submitting}>
-                {submitting ? "Guardando…" : "Guardar"}
+              <button className="ha-btn ha-btn--primary" onClick={() => void handleSubmit()} disabled={submitting}>
+                {submitting ? "Guardando…" : editingId ? "Guardar cambios" : "Crear usuario"}
               </button>
             </div>
           </div>
@@ -286,26 +343,13 @@ function UsersContent() {
           <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="ha-dialog__head">
               <h3 className="ha-dialog__title">¿Eliminar usuario?</h3>
-              <p className="ha-dialog__sub">Esta acción no puede deshacerse.</p>
-            </div>
-            <div className="ha-dialog__body">
-              <p style={{ color: "var(--ha-text-2)", margin: 0, fontSize: 14 }}>
-                Se eliminará <strong style={{ color: "var(--ha-text)" }}>{deleteTarget}</strong>.
+              <p className="ha-dialog__sub">
+                Se eliminará la cuenta de <strong>{deleteTarget}</strong>. Esta acción no puede deshacerse.
               </p>
             </div>
             <div className="ha-dialog__foot">
               <button className="ha-btn ha-btn--secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
-              <button className="ha-btn ha-btn--destructive" onClick={async () => {
-                try {
-                  await apiClient.deleteUser(deleteId!);
-                  toast.success("Usuario eliminado");
-                  setDeleteId(null);
-                  fetchUsers();
-                } catch {
-                  toast.error("Error al eliminar usuario");
-                  setDeleteId(null);
-                }
-              }}>Eliminar</button>
+              <button className="ha-btn ha-btn--destructive" onClick={() => void handleDelete()}>Eliminar</button>
             </div>
           </div>
         </div>
