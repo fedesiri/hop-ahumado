@@ -1,15 +1,11 @@
 "use client";
 
-import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/format-currency";
 import { toast } from "@/lib/toast";
-import type { DistributorSuggestedOrderItem, DistributorSuggestedOrderResponse } from "@/lib/types";
-import { Copy, ShoppingCart } from "lucide-react";
+import type { DistributorSuggestedOrderResponse } from "@/lib/types";
+import { ChevronDown, Copy } from "lucide-react";
 import { useState } from "react";
-
-function formatMoneyApprox(n: number) {
-  return `~$${n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-}
 
 function formatCostDate(iso: string | null) {
   if (!iso) return null;
@@ -22,216 +18,262 @@ export default function SuggestedOrderPage() {
 
 function SuggestedOrderContent() {
   const [loading, setLoading] = useState(false);
-  const [distributorOrder, setDistributorOrder] = useState<DistributorSuggestedOrderResponse | null>(null);
-  const [params, setParams] = useState({
-    literTargetBoxes: 5,
-    halfLiterTargetBoxes: 6,
-    unitsPerBox: 12,
-  });
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [order, setOrder] = useState<DistributorSuggestedOrderResponse | null>(null);
+  const [params, setParams] = useState({ literTargetBoxes: 5, halfLiterTargetBoxes: 6, unitsPerBox: 12 });
+  const [infoOpen, setInfoOpen] = useState(true);
 
-  const load = async () => {
+  const calcular = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.getDistributorSuggestedOrder({
-        literTargetBoxes: params.literTargetBoxes,
-        halfLiterTargetBoxes: params.halfLiterTargetBoxes,
-        unitsPerBox: params.unitsPerBox,
-      });
-      setDistributorOrder(res);
-    } catch (err) {
+      const res = await apiClient.getDistributorSuggestedOrder(params);
+      setOrder(res);
+    } catch {
       toast.error("No se pudo generar el pedido sugerido");
-      console.error(err);
-      setDistributorOrder(null);
+      setOrder(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const copyText = async () => {
-    if (!distributorOrder?.copyText) return;
+  const copyWA = async () => {
+    if (!order?.copyText) return;
     try {
-      await navigator.clipboard.writeText(distributorOrder.copyText);
+      await navigator.clipboard.writeText(order.copyText);
       toast.success("Copiado al portapapeles");
     } catch {
       toast.error("No se pudo copiar");
     }
   };
 
-  const paramField = (
-    label: string,
-    value: number,
-    onChange: (v: number) => void,
-  ) => (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 130, flex: 1 }}>
-      <label style={{ color: "var(--ha-text-3)", fontSize: 13 }}>{label}</label>
-      <input
-        type="number"
-        className="ha-input"
-        min={1}
-        max={1000}
-        value={value}
-        onChange={(e) => onChange(Math.max(1, Number(e.target.value) || 1))}
-      />
-    </div>
-  );
-
   return (
-    <div style={{ width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box" }}>
-      <div className="ha-page-header">
-        <h1 className="ha-pagetitle">Pedido sugerido</h1>
-        <button className="ha-btn ha-btn--primary" onClick={load} disabled={loading}>
-          {loading ? (
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", animation: "ha-spin .7s linear infinite" }} />
-              Generando…
-            </span>
-          ) : (
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}><ShoppingCart size={15} /> Generar pedido</span>
-          )}
-        </button>
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h1 className="pc-pagetitle" style={{ margin: 0 }}>
+          Pedido Sugerido
+          <span style={{ color: "var(--ha-text-3)", fontWeight: 400, fontSize: "0.72em", marginLeft: 10 }}>
+            · Distribuidora
+          </span>
+        </h1>
       </div>
 
-      <ScreenInfoPanel title="Distribuidor — cerveza">
-        Solo categoría Cerveza. Litro: objetivo en cajas (12 u/caja) para 1L; medio litro: otro objetivo en cajas para
-        ½L. El pedido se redondea a cajas completas. Incluye productos dados de baja. Ajustá los valores y volvé a
-        generar.
-      </ScreenInfoPanel>
-
-      <div style={{ marginTop: 20, marginBottom: 20, background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--ha-border)", display: "flex", alignItems: "center", gap: 8 }}>
-          <ShoppingCart size={14} style={{ color: "var(--ha-text-3)" }} />
-          <span style={{ color: "var(--ha-text)", fontWeight: 500, fontSize: 14 }}>Parámetros</span>
+      {/* Params card */}
+      <div className="ps-card ps-card--pad">
+        <div className="ps-card__h">Parámetros del pedido</div>
+        <div className="ps-card__sub">Ingresá la cantidad de cajas objetivo por formato</div>
+        <div className="ps-params">
+          <div className="ps-field">
+            <label className="ps-label">Cajas objetivo (1 litro)</label>
+            <input
+              type="number" className="ps-input" min={1} max={1000}
+              value={params.literTargetBoxes}
+              onChange={(e) => setParams((p) => ({ ...p, literTargetBoxes: Math.max(1, Number(e.target.value) || 1) }))}
+            />
+          </div>
+          <div className="ps-field">
+            <label className="ps-label">Cajas objetivo (½ litro)</label>
+            <input
+              type="number" className="ps-input" min={1} max={1000}
+              value={params.halfLiterTargetBoxes}
+              onChange={(e) => setParams((p) => ({ ...p, halfLiterTargetBoxes: Math.max(1, Number(e.target.value) || 1) }))}
+            />
+          </div>
+          <div className="ps-field">
+            <label className="ps-label">Unidades por caja</label>
+            <input
+              type="number" className="ps-input" min={1} max={1000}
+              value={params.unitsPerBox}
+              onChange={(e) => setParams((p) => ({ ...p, unitsPerBox: Math.max(1, Number(e.target.value) || 1) }))}
+            />
+          </div>
+          <button
+            className="pc-btn pc-btn--primary ps-calcbtn"
+            style={{ height: 44, alignSelf: "flex-end", flexShrink: 0 }}
+            onClick={() => void calcular()}
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <span style={{
+                  display: "inline-block", width: 14, height: 14, borderRadius: "50%",
+                  border: "2px solid rgba(0,0,0,0.25)", borderTopColor: "#000",
+                  animation: "ha-spin .7s linear infinite",
+                }} />
+                Calculando…
+              </>
+            ) : "Calcular"}
+          </button>
         </div>
-        <div style={{ padding: 16 }}>
-          <div style={{ display: "flex", gap: 16, marginBottom: 12, flexWrap: "wrap" }}>
-            {paramField("Cajas obj. 1L", params.literTargetBoxes, (v) => setParams((p) => ({ ...p, literTargetBoxes: v })))}
-            {paramField("Cajas obj. ½L", params.halfLiterTargetBoxes, (v) => setParams((p) => ({ ...p, halfLiterTargetBoxes: v })))}
-            {paramField("U. por caja", params.unitsPerBox, (v) => setParams((p) => ({ ...p, unitsPerBox: v })))}
+      </div>
+
+      {/* Info collapsible */}
+      <div className={"ps-collapse" + (infoOpen ? " open" : "")}>
+        <div className="ps-collapse__h" onClick={() => setInfoOpen((v) => !v)} role="button" aria-expanded={infoOpen}>
+          <span>ℹ️</span>
+          <span>Cómo funciona</span>
+          <ChevronDown size={16} className="ps-collapse__chev" />
+        </div>
+        {infoOpen && (
+          <div className="ps-collapse__b">
+            Las <b>Unidades sugeridas</b> son el resultado de: (objetivo en unidades) − stock actual. Solo se muestran valores positivos. El total aproximado usa los últimos costos registrados para cada producto.
+          </div>
+        )}
+      </div>
+
+      {/* Results */}
+      {order && (
+        <>
+          {/* Table + mobile cards */}
+          <div className="pc-card" style={{ marginBottom: 16 }}>
+            {/* Desktop table */}
+            <div className="ps-tablewrap">
+              <table className="ps-table">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Formato</th>
+                    <th className="r">Stock actual</th>
+                    <th className="r">Objetivo</th>
+                    <th className="r">Unid. sugeridas</th>
+                    <th className="r">Cajas</th>
+                    <th className="r">Costo unit.</th>
+                    <th className="r">Total aprox.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.items.map((item) => {
+                    const hasSug = item.suggestedUnits > 0;
+                    const d = formatCostDate(item.costRecordedAt);
+                    return (
+                      <tr key={item.productId}>
+                        <td style={{ minWidth: 180 }}>{item.name}</td>
+                        <td>
+                          <span className={"ps-fmt " + (item.format === "LITER" ? "ps-fmt--1" : "ps-fmt--h")}>
+                            {item.format === "LITER" ? "1 L" : "½ L"}
+                          </span>
+                        </td>
+                        <td className="r">{item.currentStock}</td>
+                        <td className="r">{item.targetUnits}</td>
+                        <td className={"r" + (hasSug ? " ps-sugcell" : "")}>
+                          {hasSug
+                            ? <span className="ps-sug">{item.suggestedUnits}</span>
+                            : <span style={{ color: "var(--ha-text-3)" }}>—</span>}
+                        </td>
+                        <td className="r">
+                          {hasSug
+                            ? <span style={{ fontVariantNumeric: "tabular-nums" }}>{item.suggestedBoxes}</span>
+                            : <span style={{ color: "var(--ha-text-3)" }}>—</span>}
+                        </td>
+                        <td className="r">
+                          {item.unitCost == null ? (
+                            <span style={{ color: "var(--ha-text-3)" }}>—</span>
+                          ) : (
+                            <div style={{ lineHeight: 1.25 }}>
+                              <div style={{ fontVariantNumeric: "tabular-nums" }}>{formatCurrency(item.unitCost)}</div>
+                              {d && <div style={{ fontSize: 10, color: "var(--ha-text-3)" }}>{d}</div>}
+                            </div>
+                          )}
+                        </td>
+                        <td className={"r" + (hasSug ? " ps-sugcell" : "")}>
+                          {hasSug && item.lineApproximateTotal != null
+                            ? <span className="ps-sug">{formatCurrency(item.lineApproximateTotal)}</span>
+                            : <span style={{ color: "var(--ha-text-3)" }}>—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="ps-tfoot">
+                  <tr>
+                    <td colSpan={7}>Total aproximado</td>
+                    <td className="amt">{formatCurrency(order.costSummary.approximateTotal)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="ps-cardlist">
+              {order.items.map((item) => {
+                const hasSug = item.suggestedUnits > 0;
+                return (
+                  <div key={item.productId} className={"ps-pcard" + (hasSug ? " has" : "")}>
+                    <div className="ps-pcard__top">
+                      <span className="ps-pcard__n">{item.name}</span>
+                      <span className={"ps-fmt " + (item.format === "LITER" ? "ps-fmt--1" : "ps-fmt--h")}>
+                        {item.format === "LITER" ? "1 L" : "½ L"}
+                      </span>
+                    </div>
+                    <div className="ps-pcard__mid">
+                      <span>Stock: <strong style={{ color: "var(--ha-text)" }}>{item.currentStock}</strong></span>
+                      <span>Objetivo: <strong style={{ color: "var(--ha-text)" }}>{item.targetUnits}</strong></span>
+                    </div>
+                    <div className="ps-pcard__bot">
+                      <div>
+                        <span className={"ps-pcard__sug" + (hasSug ? "" : " zero")}>
+                          {hasSug ? item.suggestedUnits : "—"}
+                        </span>
+                        {hasSug && (
+                          <span className="ps-pcard__cajas">
+                            {" "}~{item.suggestedBoxes} {item.suggestedBoxes === 1 ? "caja" : "cajas"}
+                          </span>
+                        )}
+                      </div>
+                      {hasSug && item.lineApproximateTotal != null && (
+                        <span className="ps-pcard__total">{formatCurrency(item.lineApproximateTotal)}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          {distributorOrder && (
-            <>
-              {distributorOrder.unknownFormat.length > 0 && (
-                <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, background: "rgba(245, 158, 11, 0.12)", border: "1px solid rgba(245, 158, 11, 0.4)", display: "flex", gap: 10 }}>
-                  <span style={{ color: "#f59e0b", fontSize: 16, flexShrink: 0 }}>⚠</span>
-                  <div>
-                    <div style={{ color: "#fbbf24", fontWeight: 500, fontSize: 13 }}>Productos de cerveza sin clasificar 1L / ½L</div>
-                    <div style={{ color: "var(--ha-text-3)", fontSize: 12, marginTop: 2 }}>
-                      No entran al cálculo de pedido. Renombrá o usá unidad L (litro) o ML (medio) en el producto, o
-                      incluí "litro", "medio litro" o "500" en el nombre.
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ color: "var(--ha-text-3)", fontSize: 12, marginBottom: 8 }}>
-                Parámetros: {distributorOrder.parameters.categoryName} — 1L:{" "}
-                {distributorOrder.parameters.literTargetBoxes} cajas, ½L:{" "}
-                {distributorOrder.parameters.halfLiterTargetBoxes} cajas, {distributorOrder.parameters.unitsPerBox}{" "}
-                u/caja.
+          {/* Summary + WhatsApp */}
+          <div className="ps-card">
+            <div className="ps-summary">
+              <div>
+                <p className="ps-sumtot">
+                  Total aproximado: {formatCurrency(order.costSummary.approximateTotal)}
+                </p>
+                <p className="ps-sumstat">
+                  Líneas con pedido:{" "}
+                  <strong>{order.costSummary.orderLinesWithSuggestedUnits} de {order.items.length}</strong>
+                </p>
+                <p className={"ps-sumstat" + (order.costSummary.orderLinesWithCost > 0 ? " g" : "")}>
+                  Con costo registrado: <strong>{order.costSummary.orderLinesWithCost}</strong>
+                </p>
+                <p className="ps-sumstat">
+                  Sin costo registrado: <strong>{order.costSummary.orderLinesMissingCost}</strong>
+                </p>
               </div>
-
-              {distributorOrder.costSummary.orderLinesWithSuggestedUnits > 0 && (
-                <div style={{ marginBottom: 12, padding: 12, borderRadius: 8, background: "linear-gradient(135deg, #0c4a6e 0%, #0f172a 100%)", border: "1px solid #0369a1" }}>
-                  <div style={{ color: "#e0f2fe", fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
-                    Costo aprox. del pedido: {formatMoneyApprox(distributorOrder.costSummary.approximateTotal)}
-                  </div>
-                  <p style={{ margin: 0, color: "#94a3b8", fontSize: 12, lineHeight: 1.45 }}>
-                    {distributorOrder.costSummary.basis}
-                  </p>
-                  {distributorOrder.costSummary.orderLinesMissingCost > 0 && (
-                    <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 6, background: "rgba(245, 158, 11, 0.12)", border: "1px solid rgba(245, 158, 11, 0.4)" }}>
-                      <div style={{ color: "#fbbf24", fontWeight: 500, fontSize: 12 }}>Productos del pedido sin costo activo en el sistema</div>
-                      <div style={{ color: "var(--ha-text-3)", fontSize: 12 }}>{distributorOrder.costSummary.missingCostProductNames.join(", ")}</div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                <button className="ha-btn ha-btn--secondary" onClick={copyText} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <Copy size={14} /> Copiar texto (WhatsApp)
+              <div>
+                <button
+                  className="pc-btn pc-btn--primary"
+                  style={{ width: "100%", height: 44, justifyContent: "center", gap: 8 }}
+                  onClick={() => void copyWA()}
+                >
+                  <Copy size={15} /> Copiar para WhatsApp
                 </button>
+                <textarea className="ps-wa" readOnly value={order.copyText} rows={5} />
               </div>
+            </div>
+          </div>
 
-              <details style={{ marginBottom: 12 }} open={previewOpen} onToggle={(e) => setPreviewOpen((e.currentTarget as HTMLDetailsElement).open)}>
-                <summary style={{ cursor: "pointer", color: "var(--ha-text-3)", fontSize: 13, padding: "4px 0", userSelect: "none" }}>
-                  {previewOpen ? "▾" : "▸"} Ver vista previa del texto
-                </summary>
-                <div style={{ maxHeight: 220, overflow: "auto", padding: 10, background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e5e7eb", fontSize: 13, whiteSpace: "pre-wrap", fontFamily: "ui-monospace, monospace", marginTop: 6 }}>
-                  {distributorOrder.copyText}
-                </div>
-              </details>
-
-              <div style={{ width: "100%", maxWidth: "100%", minWidth: 0, overflowX: "auto", WebkitOverflowScrolling: "touch" as const, borderRadius: 6 }}>
-                <table className="ha-table" style={{ minWidth: 860 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ minWidth: 200 }}>Producto</th>
-                      <th style={{ width: 72, textAlign: "center", whiteSpace: "nowrap" }}>Formato</th>
-                      <th style={{ width: 72, textAlign: "right", whiteSpace: "nowrap" }}>Stock</th>
-                      <th style={{ width: 80, textAlign: "right", whiteSpace: "nowrap" }}>Obj. (u)</th>
-                      <th style={{ width: 88, textAlign: "right", whiteSpace: "nowrap" }}>Pedido (u)</th>
-                      <th style={{ width: 64, textAlign: "right", whiteSpace: "nowrap" }}>Cajas</th>
-                      <th style={{ width: 100, textAlign: "right", whiteSpace: "nowrap" }}>Costo u.</th>
-                      <th style={{ width: 100, textAlign: "right", whiteSpace: "nowrap" }}>Aprox. línea</th>
-                      <th style={{ width: 72, textAlign: "center", whiteSpace: "nowrap" }}>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {distributorOrder.items.map((item: DistributorSuggestedOrderItem) => {
-                      const d = formatCostDate(item.costRecordedAt);
-                      return (
-                        <tr key={item.productId} style={item.suggestedUnits > 0 ? { background: "rgba(251, 191, 36, 0.06)" } : undefined}>
-                          <td style={{ minWidth: 200 }}>{item.name}</td>
-                          <td style={{ textAlign: "center" }}>
-                            <span style={{ display: "inline-block", padding: "2px 6px", borderRadius: 4, fontSize: 12, fontWeight: 600, background: item.format === "LITER" ? "rgba(37,99,235,0.2)" : "rgba(8,145,178,0.2)", color: item.format === "LITER" ? "#93c5fd" : "#67e8f9", border: `1px solid ${item.format === "LITER" ? "rgba(59,130,246,0.4)" : "rgba(14,165,233,0.4)"}` }}>
-                              {item.format === "LITER" ? "1L" : "½L"}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.currentStock}</td>
-                          <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.targetUnits}</td>
-                          <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                            <span style={item.suggestedUnits > 0 ? { color: "var(--ha-amber)" } : undefined}>{item.suggestedUnits}</span>
-                          </td>
-                          <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.suggestedBoxes}</td>
-                          <td style={{ textAlign: "right" }}>
-                            {item.unitCost == null ? (
-                              <span style={{ color: "var(--ha-text-4)" }}>—</span>
-                            ) : (
-                              <div style={{ fontVariantNumeric: "tabular-nums", lineHeight: 1.25 }}>
-                                <div style={{ fontSize: 13 }}>{formatMoneyApprox(item.unitCost)}</div>
-                                {d && <div style={{ fontSize: 10, color: "var(--ha-text-4)" }} title="Fecha del registro de costo usado">{d}</div>}
-                              </div>
-                            )}
-                          </td>
-                          <td style={{ textAlign: "right" }}>
-                            {item.suggestedUnits === 0 ? (
-                              <span style={{ color: "var(--ha-text-4)" }}>—</span>
-                            ) : item.lineApproximateTotal == null ? (
-                              <span style={{ color: "var(--ha-text-4)" }}>—</span>
-                            ) : (
-                              <span style={{ color: "#34d399", fontVariantNumeric: "tabular-nums" }}>{formatMoneyApprox(item.lineApproximateTotal)}</span>
-                            )}
-                          </td>
-                          <td style={{ textAlign: "center" }}>
-                            {item.isDeactivated ? (
-                              <span style={{ display: "inline-block", padding: "2px 6px", borderRadius: 4, fontSize: 11, background: "var(--ha-bg-3)", color: "var(--ha-text-3)", border: "1px solid var(--ha-border)" }}>baja</span>
-                            ) : (
-                              <span style={{ color: "var(--ha-text-4)" }}>—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+          {/* Unknown format warning */}
+          {order.unknownFormat.length > 0 && (
+            <div className="ps-warn">
+              <b>
+                ⚠ {order.unknownFormat.length}{" "}
+                {order.unknownFormat.length === 1 ? "producto sin formato reconocido" : "productos sin formato reconocido"}
+                {" "}· No se incluyó en el cálculo:
+              </b>
+              <div className="ps-warn__row">
+                {order.unknownFormat.map((u) => `${u.name} · ${u.currentStock} UN en stock`).join(" · ")}
               </div>
-            </>
+            </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
