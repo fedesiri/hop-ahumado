@@ -105,23 +105,19 @@ export function Dashboard() {
       setApiConnected(true);
       if (baselineRes) setBaseline(baselineRes);
 
-      let page = 1;
-      let ordersRes = await apiClient.getOrders(page, limit, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, bId);
-      let allOrders = [...ordersRes.data];
-      while (ordersRes.meta.totalPages > page) {
-        page += 1;
-        ordersRes = await apiClient.getOrders(page, limit, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, bId);
-        allOrders = [...allOrders, ...ordersRes.data];
-      }
+      const firstOrdersRes = await apiClient.getOrders(1, limit, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, bId);
+      const remainingOrderPages = Array.from({ length: firstOrdersRes.meta.totalPages - 1 }, (_, i) =>
+        apiClient.getOrders(i + 2, limit, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, bId),
+      );
+      const restOrders = await Promise.all(remainingOrderPages);
+      const allOrders = [firstOrdersRes, ...restOrders].flatMap((r) => r.data);
 
-      page = 1;
-      let expensesRes = await apiClient.getExpenses(page, limit, bId);
-      let allExpenses = [...expensesRes.data];
-      while (expensesRes.meta.totalPages > page) {
-        page += 1;
-        expensesRes = await apiClient.getExpenses(page, limit, bId);
-        allExpenses = [...allExpenses, ...expensesRes.data];
-      }
+      const firstExpensesRes = await apiClient.getExpenses(1, limit, bId);
+      const remainingExpensePages = Array.from({ length: firstExpensesRes.meta.totalPages - 1 }, (_, i) =>
+        apiClient.getExpenses(i + 2, limit, bId),
+      );
+      const restExpenses = await Promise.all(remainingExpensePages);
+      const allExpenses = [firstExpensesRes, ...restExpenses].flatMap((r) => r.data);
 
       setRawOrders(allOrders);
       setRawExpenses(allExpenses);
@@ -138,7 +134,7 @@ export function Dashboard() {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 5);
 
-      setStats({ totalOrders: ordersRes.meta.total, lowStockProducts: lowStock, recentOrders, totalCustomers: customersRes.meta.total });
+      setStats({ totalOrders: firstOrdersRes.meta.total, lowStockProducts: lowStock, recentOrders, totalCustomers: customersRes.meta.total });
     } catch {
       setApiConnected(false);
     } finally {
