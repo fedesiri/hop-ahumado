@@ -72,6 +72,9 @@ jobs:
             --allow-unauthenticated \
             --set-secrets "DATABASE_URL=DATABASE_URL:latest" \
             --set-env-vars "NODE_ENV=production,CORS_ORIGIN=${{ env.CORS_ORIGIN }}" \
+            --network default \
+            --subnet default \
+            --vpc-egress private-ranges-only \
             --clear-cloudsql-instances \
             "${SA_ARGS[@]}"
 

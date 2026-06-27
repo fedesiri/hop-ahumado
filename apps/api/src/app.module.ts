@@ -1,7 +1,10 @@
 import { Module } from "@nestjs/common";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
+import { AllExceptionsFilter } from "./common/all-exceptions.filter";
+import { SlowRequestInterceptor } from "./common/slow-request.interceptor";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ScheduleModule } from "@nestjs/schedule";
+import { LoggerModule } from "nestjs-pino";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { AuthModule } from "./auth/auth.module";
@@ -30,6 +33,30 @@ import { UserModule } from "./user/user.module";
 
 @Module({
   imports: [
+    LoggerModule.forRoot({
+      pinoHttp: {
+        messageKey: "message",
+        formatters: {
+          level(label: string) {
+            const map: Record<string, string> = {
+              trace: "DEBUG",
+              debug: "DEBUG",
+              info: "INFO",
+              warn: "WARNING",
+              error: "ERROR",
+              fatal: "CRITICAL",
+            };
+            return { severity: map[label] ?? label.toUpperCase() };
+          },
+        },
+        transport:
+          process.env.NODE_ENV !== "production"
+            ? { target: "pino-pretty", options: { colorize: true } }
+            : undefined,
+        autoLogging: true,
+        redact: ["req.headers.authorization"],
+      },
+    }),
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     PrismaModule,
@@ -61,6 +88,14 @@ import { UserModule } from "./user/user.module";
     {
       provide: APP_GUARD,
       useClass: FirebaseAuthGuard,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SlowRequestInterceptor,
     },
   ],
 })

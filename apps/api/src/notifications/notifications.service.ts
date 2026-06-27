@@ -1,4 +1,5 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { Logger } from "nestjs-pino";
 import { OnEvent } from "@nestjs/event-emitter";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { buildPaginatedResponse, toLimit, toPage } from "../common/pagination";
@@ -17,9 +18,10 @@ const RETENTION_DAYS = Number(process.env.NOTIFICATION_RETENTION_DAYS ?? 90);
 
 @Injectable()
 export class NotificationsService {
-  private readonly log = new Logger(NotificationsService.name);
-
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly log: Logger,
+  ) {}
 
   private async hasRecentDuplicate(
     eventType: string,
