@@ -2,6 +2,7 @@ import { getAuthHeaders } from "@/lib/auth-fetch";
 import type {
   BusinessLineEntity,
   Category,
+  DashboardResponse,
   Cost,
   CreateCategoryRequest,
   CreateCostRequest,
@@ -102,6 +103,11 @@ export class ApiClient {
   // Health
   async checkHealth(): Promise<HealthResponse> {
     return this.request<HealthResponse>("/health");
+  }
+
+  // Dashboard
+  async getDashboard(businessLineId?: string, localMidnight?: string): Promise<DashboardResponse> {
+    return this.request<DashboardResponse>(`/dashboard${this.buildParams({ businessLineId, localMidnight })}`);
   }
 
   // Business Lines

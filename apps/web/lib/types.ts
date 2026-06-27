@@ -264,6 +264,42 @@ export interface TreasuryBaseline {
   updatedAt: string;
 }
 
+export interface DashboardCash {
+  deltaCashIn: number;
+  deltaCashOut: number;
+  deltaCardIn: number;
+  deltaCardOut: number;
+  balanceCash: number;
+  balanceCard: number;
+  total: number;
+}
+
+export interface DashboardPendingDelivery {
+  id: string;
+  customer: { id: string; name: string } | null;
+  total: number;
+  paymentStatus: string;
+  deliveryDate: string;
+  createdAt: string;
+}
+
+export interface DashboardLowStockProduct {
+  id: string;
+  name: string;
+  stock: number;
+  unit: string;
+  category: { name: string } | null;
+}
+
+export interface DashboardResponse {
+  totalOrders: number;
+  totalCustomers: number;
+  lowStockProducts: DashboardLowStockProduct[];
+  pendingDeliveries: DashboardPendingDelivery[];
+  baseline: TreasuryBaseline | null;
+  cash: DashboardCash | null;
+}
+
 export interface UpdateTreasuryBaselineRequest {
   businessLineId: string;
   openingCash: number;

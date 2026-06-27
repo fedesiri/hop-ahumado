@@ -8,6 +8,7 @@ import { LoggerModule } from "nestjs-pino";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { AuthModule } from "./auth/auth.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
 import { FirebaseAuthGuard } from "./auth/firebase-auth.guard";
 import { BusinessLineModule } from "./business-line/business-line.module";
 import { CategoryModule } from "./category/category.module";
@@ -62,6 +63,7 @@ import { UserModule } from "./user/user.module";
     PrismaModule,
     InventoryModule,
     AuthModule,
+    DashboardModule,
     BusinessLineModule,
     CategoryModule,
     ProductModule,

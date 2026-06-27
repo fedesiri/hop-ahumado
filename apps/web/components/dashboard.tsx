@@ -3,47 +3,16 @@
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
-import { isPromoGiftComboName } from "@/lib/order-calculator/order-promo";
 import { toast } from "@/lib/toast";
-import { OrderPaymentStatus, type Expense, type Order, type Product, type TreasuryBaseline } from "@/lib/types";
+import { OrderPaymentStatus, type DashboardCash, type DashboardLowStockProduct, type DashboardPendingDelivery, type TreasuryBaseline } from "@/lib/types";
 import { ChevronDown, Eye, RefreshCw, ShoppingCart, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function startOfLocalDay(d: Date): Date {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
   return x;
-}
-
-function isOnOrAfterCutoff(isoDate: string, cutoffIso: string): boolean {
-  return new Date(isoDate).getTime() >= new Date(cutoffIso).getTime();
-}
-
-function getLinePaymentRatio(order: Order, businessLineId: string): number {
-  const items = order.orderItems ?? [];
-  const lineSubtotal = items
-    .filter((item) => item.product?.businessLineId === businessLineId)
-    .reduce((s, item) => s + item.quantity * (item.price ?? 0), 0);
-  const total = Number(order.total || order.totalPrice || 0);
-  if (!total) return 0;
-  return Math.min(lineSubtotal / total, 1);
-}
-
-function sumPaymentsSince(orders: Order[], method: "CASH" | "CARD", sinceIso: string, businessLineId?: string): number {
-  return orders.reduce((sum, order) => {
-    if (!isOnOrAfterCutoff(order.createdAt, sinceIso)) return sum;
-    const payments = order.payments ?? [];
-    const lineTotal = payments.filter((p) => p.method === method).reduce((ps, p) => ps + Number(p.amount ?? 0), 0);
-    const ratio = businessLineId ? getLinePaymentRatio(order, businessLineId) : 1;
-    return sum + lineTotal * ratio;
-  }, 0);
-}
-
-function sumExpensesSince(expenses: Expense[], method: "CASH" | "CARD", sinceIso: string): number {
-  return expenses
-    .filter((e) => e.method === method && isOnOrAfterCutoff(e.createdAt, sinceIso))
-    .reduce((s, e) => s + Number(e.amount ?? 0), 0);
 }
 
 function toDatetimeLocal(iso: string): string {
@@ -52,18 +21,19 @@ function toDatetimeLocal(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const ZERO_CASH: DashboardCash = { deltaCashIn: 0, deltaCashOut: 0, deltaCardIn: 0, deltaCardOut: 0, balanceCash: 0, balanceCard: 0, total: 0 };
+
 export function Dashboard() {
   const { selectedLineId } = useLineContext();
   const lowStockSectionRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
   const [baseline, setBaseline] = useState<TreasuryBaseline | null>(null);
-  const [rawOrders, setRawOrders] = useState<Order[]>([]);
-  const [rawExpenses, setRawExpenses] = useState<Expense[]>([]);
+  const [cash, setCash] = useState<DashboardCash>(ZERO_CASH);
   const [stats, setStats] = useState({
     totalOrders: 0,
-    lowStockProducts: [] as Product[],
-    recentOrders: [] as Order[],
+    lowStockProducts: [] as DashboardLowStockProduct[],
+    recentOrders: [] as DashboardPendingDelivery[],
     totalCustomers: 0,
   });
   const [cashFlowModalOpen, setCashFlowModalOpen] = useState(false);
@@ -75,66 +45,25 @@ export function Dashboard() {
   const [formSince, setFormSince] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  const cash = useMemo(() => {
-    if (!baseline) {
-      return { deltaCashIn: 0, deltaCashOut: 0, deltaCardIn: 0, deltaCardOut: 0, balanceCash: 0, balanceCard: 0, total: 0 };
-    }
-    const since = baseline.deltaSince;
-    const deltaCashIn = sumPaymentsSince(rawOrders, "CASH", since, selectedLineId ?? undefined);
-    const deltaCardIn = sumPaymentsSince(rawOrders, "CARD", since, selectedLineId ?? undefined);
-    const deltaCashOut = sumExpensesSince(rawExpenses, "CASH", since);
-    const deltaCardOut = sumExpensesSince(rawExpenses, "CARD", since);
-    const balanceCash = baseline.openingCash + deltaCashIn - deltaCashOut;
-    const balanceCard = baseline.openingCard + deltaCardIn - deltaCardOut;
-    return { deltaCashIn, deltaCashOut, deltaCardIn, deltaCardOut, balanceCash, balanceCard, total: balanceCash + balanceCard };
-  }, [baseline, rawOrders, rawExpenses, selectedLineId]);
-
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       setApiConnected(null);
 
-      const limit = 100;
-      const bId = selectedLineId ?? undefined;
-      const [productsRes, customersRes, baselineRes] = await Promise.all([
-        apiClient.getProducts(1, 100, false, undefined, undefined, bId),
-        apiClient.getCustomers(1, 50),
-        bId ? apiClient.getTreasuryBaseline(bId).catch(() => null) : Promise.resolve(null),
-      ]);
+      const data = await apiClient.getDashboard(
+        selectedLineId ?? undefined,
+        startOfLocalDay(new Date()).toISOString(),
+      );
 
       setApiConnected(true);
-      if (baselineRes) setBaseline(baselineRes);
-
-      const firstOrdersRes = await apiClient.getOrders(1, limit, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, bId);
-      const remainingOrderPages = Array.from({ length: firstOrdersRes.meta.totalPages - 1 }, (_, i) =>
-        apiClient.getOrders(i + 2, limit, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, bId),
-      );
-      const restOrders = await Promise.all(remainingOrderPages);
-      const allOrders = [firstOrdersRes, ...restOrders].flatMap((r) => r.data);
-
-      const firstExpensesRes = await apiClient.getExpenses(1, limit, bId);
-      const remainingExpensePages = Array.from({ length: firstExpensesRes.meta.totalPages - 1 }, (_, i) =>
-        apiClient.getExpenses(i + 2, limit, bId),
-      );
-      const restExpenses = await Promise.all(remainingExpensePages);
-      const allExpenses = [firstExpensesRes, ...restExpenses].flatMap((r) => r.data);
-
-      setRawOrders(allOrders);
-      setRawExpenses(allExpenses);
-
-      const lowStock = productsRes.data.filter((p) => p.stock < 12 && !isPromoGiftComboName(p.name));
-      const todayStart = startOfLocalDay(new Date());
-      const recentOrders = allOrders
-        .filter((order) => {
-          if (!order.deliveryDate) return false;
-          if (startOfLocalDay(new Date(order.deliveryDate)).getTime() < todayStart.getTime()) return false;
-          if (order.isDelivered && order.paymentStatus === OrderPaymentStatus.PAID) return false;
-          return true;
-        })
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 5);
-
-      setStats({ totalOrders: firstOrdersRes.meta.total, lowStockProducts: lowStock, recentOrders, totalCustomers: customersRes.meta.total });
+      if (data.baseline) setBaseline(data.baseline);
+      if (data.cash) setCash(data.cash);
+      setStats({
+        totalOrders: data.totalOrders,
+        lowStockProducts: data.lowStockProducts,
+        recentOrders: data.pendingDeliveries,
+        totalCustomers: data.totalCustomers,
+      });
     } catch {
       setApiConnected(false);
     } finally {
@@ -168,14 +97,15 @@ export function Dashboard() {
     if (Object.keys(errors).length) { setFormErrors(errors); return; }
     try {
       setSavingBaseline(true);
-      const updated = await apiClient.updateTreasuryBaseline({
+      await apiClient.updateTreasuryBaseline({
         businessLineId: selectedLineId,
         openingCash: Number(formCash),
         openingCard: Number(formCard),
         deltaSince: new Date(formSince).toISOString(),
       });
-      setBaseline(updated);
       toast.success("Saldos guardados");
+      setCashFlowModalOpen(false);
+      fetchDashboardData();
     } catch {
       toast.error("No se pudo guardar");
     } finally {
@@ -298,9 +228,9 @@ export function Dashboard() {
                     {stats.recentOrders.map((order) => (
                       <tr key={order.id}>
                         <td style={{ fontWeight: 500 }}>
-                          {order.customer?.name ?? (order.customerId ? "—" : "Sin asignar")}
+                          {order.customer?.name ?? "Sin asignar"}
                         </td>
-                        <td className="ha-td--right ha-mono">{formatCurrency(order.total ?? order.totalPrice ?? 0)}</td>
+                        <td className="ha-td--right ha-mono">{formatCurrency(order.total)}</td>
                         <td>
                           <span className={`ha-badge ${order.paymentStatus === "PAID" ? "ha-badge--paid" : order.paymentStatus === "PARTIALLY_PAID" ? "ha-badge--pending" : "ha-badge--draft"}`}>
                             {order.paymentStatus === "PAID" ? "Pagado" : order.paymentStatus === "PARTIALLY_PAID" ? "Parcial" : "Pendiente"}
@@ -332,7 +262,7 @@ export function Dashboard() {
                       </span>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "var(--ha-text-3)" }}>
-                      <span className="ha-mono" style={{ color: "var(--ha-text-2)" }}>{formatCurrency(order.total ?? order.totalPrice ?? 0)}</span>
+                      <span className="ha-mono" style={{ color: "var(--ha-text-2)" }}>{formatCurrency(order.total)}</span>
                       <span>·</span>
                       <span className="ha-mono">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString("es-AR") : "—"}</span>
                     </div>
