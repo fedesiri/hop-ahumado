@@ -3,20 +3,6 @@
    ============================================================ */
 
 :root{
-  --ha-bg:#0f1117; --ha-bg-card:#161b25; --ha-bg-raised:#1e2535; --ha-bg-hover:#253046;
-  --ha-text:rgba(255,255,255,0.92); --ha-text-2:rgba(255,255,255,0.65); --ha-text-3:rgba(255,255,255,0.40);
-  --ha-border:rgba(255,255,255,0.08); --ha-border-2:rgba(255,255,255,0.14);
-  --ha-amber:#f5a623; --ha-amber-soft:rgba(245,166,35,0.15); --ha-amber-deep:#c47d0a; --ha-amber-bright:#ffc84d;
-  --ha-green:#34d399; --ha-green-soft:rgba(52,211,153,0.15);
-  --ha-red:#e05252; --ha-red-soft:rgba(224,82,82,0.14);
-  --ha-blue:#60a5fa; --ha-blue-soft:rgba(96,165,250,0.15);
-  --ha-purple:#a78bfa; --ha-purple-soft:rgba(167,139,250,0.16); --ha-orange:#fb923c;
-  --ha-gray-soft:rgba(255,255,255,0.08);
-  --ha-row-alt:rgba(255,255,255,0.02);
-  --ha-sidebar-bg:#0a0d14; --ha-sidebar-text:rgba(255,255,255,0.70);
-  --ha-sidebar-active:#f5a623; --ha-sidebar-hover:rgba(245,166,35,0.10);
-}
-[data-theme="light"]{
   --ha-bg:#f7f8fa; --ha-bg-card:#ffffff; --ha-bg-raised:#f0f2f5; --ha-bg-hover:#e8ebf0;
   --ha-text:rgba(0,0,0,0.88); --ha-text-2:rgba(0,0,0,0.55); --ha-text-3:rgba(0,0,0,0.35);
   --ha-border:rgba(0,0,0,0.08); --ha-border-2:rgba(0,0,0,0.14);
@@ -26,6 +12,19 @@
   --ha-blue:#2563eb; --ha-blue-soft:rgba(37,99,235,0.12);
   --ha-purple:#7c3aed; --ha-purple-soft:rgba(124,58,237,0.12); --ha-orange:#ea580c;
   --ha-gray-soft:rgba(0,0,0,0.06); --ha-row-alt:rgba(0,0,0,0.02);
+  --ha-sidebar-bg:#0a0d14; --ha-sidebar-text:rgba(255,255,255,0.70);
+  --ha-sidebar-active:#f5a623; --ha-sidebar-hover:rgba(245,166,35,0.10);
+}
+[data-theme="dark"]{
+  --ha-bg:#0f1117; --ha-bg-card:#161b25; --ha-bg-raised:#1e2535; --ha-bg-hover:#253046;
+  --ha-text:rgba(255,255,255,0.92); --ha-text-2:rgba(255,255,255,0.65); --ha-text-3:rgba(255,255,255,0.40);
+  --ha-border:rgba(255,255,255,0.08); --ha-border-2:rgba(255,255,255,0.14);
+  --ha-amber:#f5a623; --ha-amber-soft:rgba(245,166,35,0.15); --ha-amber-deep:#c47d0a; --ha-amber-bright:#ffc84d;
+  --ha-green:#34d399; --ha-green-soft:rgba(52,211,153,0.15);
+  --ha-red:#e05252; --ha-red-soft:rgba(224,82,82,0.14);
+  --ha-blue:#60a5fa; --ha-blue-soft:rgba(96,165,250,0.15);
+  --ha-purple:#a78bfa; --ha-purple-soft:rgba(167,139,250,0.16); --ha-orange:#fb923c;
+  --ha-gray-soft:rgba(255,255,255,0.08); --ha-row-alt:rgba(255,255,255,0.02);
 }
 
 /* base reset */
@@ -285,7 +284,8 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .ha-nrow{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-bottom:1px solid var(--ha-border);cursor:pointer}
 .ha-nrow:hover{background:var(--ha-bg-hover)}
 .ha-nrow.unread{background:rgba(52,211,153,0.06)}
-[data-theme="light"] .ha-nrow.unread{background:rgba(5,150,105,0.07)}
+.ha-nrow.unread{background:rgba(5,150,105,0.07)}
+[data-theme="dark"] .ha-nrow.unread{background:rgba(52,211,153,0.08)}
 .ha-nrow__ic{flex:none;color:var(--ha-green);display:grid;place-items:center;margin-top:1px}
 .ha-nrow__mid{flex:1;min-width:0}
 .ha-nrow__msg{font-size:13px;color:var(--ha-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
