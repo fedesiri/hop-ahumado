@@ -3,6 +3,10 @@
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import type { CreateUserRequest, UpdateUserRequest, User } from "@/lib/types";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
+import { Paginator } from "@/components/paginator";
+import { Spinner } from "@/components/spinner";
 import { CheckCircle2, Edit2, Eye, EyeOff, Plus, Trash2, XCircle, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -174,14 +178,9 @@ function UsersContent() {
 
       {/* Content */}
       {loading ? (
-        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
-        </div>
+        <Spinner />
       ) : users.length === 0 ? (
-        <div className="ha-empty">
-          <p className="ha-empty__t">Sin usuarios</p>
-          <p className="ha-empty__s">Creá el primer usuario con el botón de arriba.</p>
-        </div>
+        <EmptyState title="Sin usuarios" subtitle="Creá el primer usuario con el botón de arriba." />
       ) : (
         <div className="us-card">
           {/* Desktop table */}
@@ -251,15 +250,13 @@ function UsersContent() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="us-pag">
-              <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>← Anterior</button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button key={p} className={"pg" + (p === page ? " on" : "")} onClick={() => setPage(p)}>{p}</button>
-              ))}
-              <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Siguiente →</button>
-            </div>
-          )}
+          <Paginator
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            label="usuarios"
+            onPageChange={setPage}
+          />
         </div>
       )}
 
@@ -339,20 +336,12 @@ function UsersContent() {
 
       {/* Delete dialog */}
       {deleteId && (
-        <div className="ha-dialog-back" onClick={() => setDeleteId(null)}>
-          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="ha-dialog__head">
-              <h3 className="ha-dialog__title">¿Eliminar usuario?</h3>
-              <p className="ha-dialog__sub">
-                Se eliminará la cuenta de <strong>{deleteTarget}</strong>. Esta acción no puede deshacerse.
-              </p>
-            </div>
-            <div className="ha-dialog__foot">
-              <button className="ha-btn ha-btn--secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
-              <button className="ha-btn ha-btn--destructive" onClick={() => void handleDelete()}>Eliminar</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="¿Eliminar usuario?"
+          description={<>Se eliminará la cuenta de <strong>{deleteTarget}</strong>. Esta acción no puede deshacerse.</>}
+          onCancel={() => setDeleteId(null)}
+          onConfirm={() => void handleDelete()}
+        />
       )}
     </div>
   );

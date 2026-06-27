@@ -9,6 +9,8 @@ import type {
   UpdateCustomerProfileRequest,
   User,
 } from "@/lib/types";
+import { Paginator } from "@/components/paginator";
+import { Spinner } from "@/components/spinner";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -173,7 +175,7 @@ function CustomerProfilesContent() {
       </div>
 
       {loading ? (
-        <div className="ha-spin-wrap"><div className="ha-spin-el" /></div>
+        <Spinner />
       ) : (
         <div className="cf-card">
           <div className="cf-tablewrap">
@@ -244,15 +246,14 @@ function CustomerProfilesContent() {
             )}
           </div>
 
-          {meta && meta.total > pagination.limit && (
-            <div className="cf-pag" style={{ padding: "16px" }}>
-              <span className="cf-pag__info">{meta.total} resultados</span>
-              <div className="cf-pag__btns">
-                <button className="cf-pgbtn" disabled={pagination.page === 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>←</button>
-                <span className="cf-pgbtn act">{pagination.page}</span>
-                <button className="cf-pgbtn" disabled={pagination.page >= totalPages} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>→</button>
-              </div>
-            </div>
+          {meta && (
+            <Paginator
+              page={pagination.page}
+              totalPages={totalPages}
+              total={meta.total}
+              label="perfiles"
+              onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+            />
           )}
         </div>
       )}

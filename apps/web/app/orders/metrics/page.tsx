@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import type { Order } from "@/lib/types";
+import { Spinner } from "@/components/spinner";
 import { RefreshCw } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -325,16 +326,7 @@ function OrdersMetricsContent() {
   const compareMonthBLabel = compareMonthB ? formatMonthEs(compareMonthB) : "Mes a comparar";
 
   if (metricsLoading && metricsOrders.length === 0) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: "50%",
-          border: "2px solid var(--ha-border-2)",
-          borderTopColor: "var(--ha-amber)",
-          animation: "ha-spin .7s linear infinite",
-        }} />
-      </div>
-    );
+    return <Spinner />;
   }
 
   return (

@@ -12,6 +12,9 @@ import {
   type Product,
   type RecipeItem,
 } from "@/lib/types";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
+import { Spinner } from "@/components/spinner";
 import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -246,13 +249,9 @@ function RecipesContent() {
       </div>
 
       {!selectedProductId ? (
-        <div className="ha-empty" style={{ marginTop: 48 }}>
-          <p className="ha-empty__t">Seleccioná un producto para ver su receta</p>
-        </div>
+        <EmptyState title="Seleccioná un producto para ver su receta" style={{ marginTop: 48 }} />
       ) : loading ? (
-        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
-        </div>
+        <Spinner />
       ) : (
         <>
           {/* Mobile tabs */}
@@ -274,10 +273,7 @@ function RecipesContent() {
               </div>
 
               {recipes.length === 0 && !addOpen ? (
-                <div className="ha-empty" style={{ padding: "32px 0" }}>
-                  <p className="ha-empty__t">Sin ingredientes</p>
-                  <p className="ha-empty__s">Agregá el primer ingrediente con el botón de arriba</p>
-                </div>
+                <EmptyState title="Sin ingredientes" subtitle="Agregá el primer ingrediente con el botón de arriba" style={{ padding: "32px 0" }} />
               ) : (
                 <>
                   {/* Desktop table */}
@@ -517,18 +513,12 @@ function RecipesContent() {
 
       {/* Delete confirmation dialog */}
       {deleteId && (
-        <div className="ha-dialog-back" onClick={() => setDeleteId(null)}>
-          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="ha-dialog__head">
-              <h3 className="ha-dialog__title">¿Eliminar ingrediente?</h3>
-              <p className="ha-dialog__sub">Esta acción no se puede deshacer.</p>
-            </div>
-            <div className="ha-dialog__foot">
-              <button className="ha-btn ha-btn--secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
-              <button className="ha-btn ha-btn--destructive" onClick={() => void handleDelete(deleteId)}>Eliminar</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="¿Eliminar ingrediente?"
+          description="Esta acción no se puede deshacer."
+          onCancel={() => setDeleteId(null)}
+          onConfirm={() => void handleDelete(deleteId)}
+        />
       )}
     </div>
   );

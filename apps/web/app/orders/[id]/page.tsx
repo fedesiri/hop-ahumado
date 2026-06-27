@@ -6,6 +6,7 @@ import { toast } from "@/lib/toast";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import { Spinner } from "@/components/spinner";
 import type { Order } from "@/lib/types";
 
 interface OrderDetailPageProps {
@@ -39,11 +40,7 @@ function OrderDetailContent({ id }: { id: string }) {
   }, [id]);
 
   if (loading) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
-        <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
-      </div>
-    );
+    return <Spinner />;
   }
 
   if (!order) {

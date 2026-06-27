@@ -9,6 +9,8 @@ import type {
   UpdateCustomerInteractionRequest,
 } from "@/lib/types";
 import { InteractionChannel } from "@/lib/types";
+import { Paginator } from "@/components/paginator";
+import { Spinner } from "@/components/spinner";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -144,7 +146,7 @@ function CustomerInteractionsContent() {
       </div>
 
       {loading ? (
-        <div className="ha-spin-wrap"><div className="ha-spin-el" /></div>
+        <Spinner />
       ) : (
         <div className="ci-card">
           <div className="ci-tablewrap">
@@ -215,15 +217,14 @@ function CustomerInteractionsContent() {
             )}
           </div>
 
-          {meta && meta.total > pagination.limit && (
-            <div className="ci-pag" style={{ padding: "16px" }}>
-              <span className="ci-pag__info">{meta.total} resultados</span>
-              <div className="ci-pag__btns">
-                <button className="ci-pgbtn" disabled={pagination.page === 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>←</button>
-                <span className="ci-pgbtn act">{pagination.page}</span>
-                <button className="ci-pgbtn" disabled={pagination.page >= totalPages} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>→</button>
-              </div>
-            </div>
+          {meta && (
+            <Paginator
+              page={pagination.page}
+              totalPages={totalPages}
+              total={meta.total}
+              label="interacciones"
+              onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+            />
           )}
         </div>
       )}

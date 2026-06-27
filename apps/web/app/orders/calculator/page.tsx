@@ -12,6 +12,7 @@ import {
   type RecipeIngredientRow,
 } from "@/lib/order-calculator/stock-preview";
 import { toast } from "@/lib/toast";
+import { Spinner } from "@/components/spinner";
 import type { CreateOrderRequest, Customer, Price, Product, StockLocation } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -233,11 +234,7 @@ function OrderCalculatorPageContent() {
   };
 
   if (loading) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
-        <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
-      </div>
-    );
+    return <Spinner />;
   }
 
   return (

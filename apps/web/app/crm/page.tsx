@@ -12,6 +12,9 @@ import dayjs from "@/lib/dayjs";
 import { toast } from "@/lib/toast";
 import type { CreateCrmCustomerRequest, CrmCustomerListItem, PaginationMeta, User } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
+import { EmptyState } from "@/components/empty-state";
+import { Paginator } from "@/components/paginator";
+import { Spinner } from "@/components/spinner";
 import { Eye, FilePen, ListFilter, Plus, Search, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -416,14 +419,9 @@ function CrmContent() {
       </div>
 
       {loading ? (
-        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
-        </div>
+        <Spinner />
       ) : list.length === 0 ? (
-        <div className="ha-empty">
-          <p className="ha-empty__t">No hay clientes</p>
-          <p className="ha-empty__s">Creá el primer cliente con el botón de arriba.</p>
-        </div>
+        <EmptyState title="No hay clientes" subtitle="Creá el primer cliente con el botón de arriba." />
       ) : (
         <>
           {/* Desktop table */}
@@ -586,36 +584,14 @@ function CrmContent() {
           </div>
 
           {/* Pagination */}
-          {meta && meta.totalPages > 1 && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button
-                  className="ha-btn ha-btn--secondary"
-                  disabled={pagination.page <= 1}
-                  onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
-                >
-                  ← Anterior
-                </button>
-                <span style={{
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  width: 36, height: 36, borderRadius: "50%",
-                  background: "var(--ha-amber)", color: "#0f1117",
-                  fontWeight: 700, fontSize: 14,
-                }}>
-                  {pagination.page}
-                </span>
-                <button
-                  className="ha-btn ha-btn--secondary"
-                  disabled={pagination.page >= meta.totalPages}
-                  onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
-                >
-                  Siguiente →
-                </button>
-              </div>
-              <span style={{ fontSize: 13, color: "var(--ha-text-3)" }}>
-                {meta.total} clientes · página {pagination.page} de {meta.totalPages}
-              </span>
-            </div>
+          {meta && (
+            <Paginator
+              page={pagination.page}
+              totalPages={meta.totalPages}
+              total={meta.total}
+              label="clientes"
+              onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+            />
           )}
         </>
       )}

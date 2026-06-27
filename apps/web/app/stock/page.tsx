@@ -5,6 +5,8 @@ import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import type { Cost, PaginationMeta, Product, StockLocation, StockMovement, StockMovementType } from "@/lib/types";
+import { Paginator } from "@/components/paginator";
+import { Spinner } from "@/components/spinner";
 import { Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -296,13 +298,7 @@ function StockContent() {
 
       {/* Table */}
       {loading ? (
-        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: "50%",
-            border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)",
-            animation: "ha-spin .7s linear infinite",
-          }} />
-        </div>
+        <Spinner />
       ) : filtered.length === 0 ? (
         <div className="ha-empty">
           <p className="ha-empty__t">{movements.length === 0 ? "No hay movimientos de stock" : "Sin resultados para los filtros aplicados"}</p>
@@ -352,24 +348,14 @@ function StockContent() {
       )}
 
       {/* Pagination */}
-      {meta && meta.total > 0 && (
-        <div className="sm-pager">
-          <button
-            className="pc-btn pc-btn--ghost pc-btn--sm"
-            disabled={pagination.page <= 1}
-            onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
-          >
-            ← Anterior
-          </button>
-          <span className="sm-pager__info">Página {pagination.page} de {totalPages}</span>
-          <button
-            className="pc-btn pc-btn--ghost pc-btn--sm"
-            disabled={pagination.page >= totalPages}
-            onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
-          >
-            Siguiente →
-          </button>
-        </div>
+      {meta && (
+        <Paginator
+          page={pagination.page}
+          totalPages={totalPages}
+          total={meta.total}
+          label="movimientos"
+          onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+        />
       )}
 
       {/* Create Modal */}

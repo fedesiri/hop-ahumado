@@ -5,6 +5,9 @@ import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
 import type { StockBalanceRow, StockLocation } from "@/lib/types";
 import { toast } from "@/lib/toast";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
+import { Spinner } from "@/components/spinner";
 import { ArrowLeftRight, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -170,17 +173,9 @@ function StockLocationsContent() {
       </div>
 
       {loading ? (
-        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: "50%",
-            border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)",
-            animation: "ha-spin .7s linear infinite",
-          }} />
-        </div>
+        <Spinner />
       ) : locations.length === 0 ? (
-        <div className="ha-empty">
-          <p className="ha-empty__t">No hay ubicaciones de stock</p>
-        </div>
+        <EmptyState title="No hay ubicaciones de stock" />
       ) : (
         <>
           {/* Desktop table */}
@@ -401,18 +396,13 @@ function StockLocationsContent() {
 
       {/* Delete dialog */}
       {confirmDelete && (
-        <div className="ha-dialog-back" onClick={() => setConfirmDelete(null)}>
-          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="ha-dialog__head">
-              <h3 className="ha-dialog__title">¿Eliminar esta ubicación?</h3>
-              <p className="ha-dialog__sub">Solo se puede si no tiene stock. Los movimientos viejos quedarán sin ubicación.</p>
-            </div>
-            <div className="ha-dialog__foot">
-              <button className="ha-btn ha-btn--secondary" onClick={() => setConfirmDelete(null)}>Cancelar</button>
-              <button className="ha-btn ha-btn--destructive" onClick={() => void doDelete()}>Sí, eliminar</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="¿Eliminar esta ubicación?"
+          description="Solo se puede si no tiene stock. Los movimientos viejos quedarán sin ubicación."
+          confirmLabel="Sí, eliminar"
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => void doDelete()}
+        />
       )}
 
       <LocationStockModal

@@ -5,6 +5,10 @@ import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import type { Cost, CreateCostRequest, Product, UpdateCostRequest } from "@/lib/types";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
+import { Paginator } from "@/components/paginator";
+import { Spinner } from "@/components/spinner";
 import { Check, History, Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -287,17 +291,9 @@ function CostsContent() {
 
       {/* Main card */}
       {loading ? (
-        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: "50%",
-            border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)",
-            animation: "ha-spin .7s linear infinite",
-          }} />
-        </div>
+        <Spinner />
       ) : costs.length === 0 ? (
-        <div className="ha-empty">
-          <p className="ha-empty__t">No hay costos cargados todavía</p>
-        </div>
+        <EmptyState title="No hay costos cargados todavía" />
       ) : (
         <div className="pc-card">
           {/* Desktop table */}
@@ -459,27 +455,14 @@ function CostsContent() {
       )}
 
       {/* Pagination */}
-      {meta && meta.total > 0 && (
-        <div style={{
-          display: "flex", justifyContent: "flex-end", alignItems: "center",
-          gap: 12, marginTop: 16, flexWrap: "wrap",
-        }}>
-          <span style={{ color: "var(--ha-text-3)", fontSize: 13 }}>
-            {meta.total} total · página {pagination.page} de {totalPages}
-          </span>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button
-              className="pc-btn pc-btn--ghost pc-btn--sm"
-              disabled={pagination.page <= 1}
-              onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
-            >‹</button>
-            <button
-              className="pc-btn pc-btn--ghost pc-btn--sm"
-              disabled={pagination.page >= totalPages}
-              onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
-            >›</button>
-          </div>
-        </div>
+      {meta && (
+        <Paginator
+          page={pagination.page}
+          totalPages={totalPages}
+          total={meta.total}
+          label="costos"
+          onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+        />
       )}
 
       {/* Mobile bottom sheet for replace */}
@@ -559,23 +542,12 @@ function CostsContent() {
 
       {/* Delete dialog */}
       {deleteId && (
-        <div className="ha-dialog-back" onClick={() => setDeleteId(null)}>
-          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="ha-dialog__head">
-              <h3 className="ha-dialog__title">¿Eliminar costo?</h3>
-              <p className="ha-dialog__sub">Esta acción no se puede deshacer.</p>
-            </div>
-            <div className="ha-dialog__foot">
-              <button className="ha-btn ha-btn--secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
-              <button
-                className="ha-btn ha-btn--destructive"
-                onClick={() => void handleDelete(deleteId)}
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="¿Eliminar costo?"
+          description="Esta acción no se puede deshacer."
+          onCancel={() => setDeleteId(null)}
+          onConfirm={() => void handleDelete(deleteId)}
+        />
       )}
     </div>
   );

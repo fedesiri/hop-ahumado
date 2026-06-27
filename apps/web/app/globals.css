@@ -1171,6 +1171,17 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .us-pag button:not(:disabled):hover{background:var(--ha-bg-hover);color:var(--ha-text)}
 .us-pag .pg{min-width:32px;height:32px;padding:0;display:inline-grid;place-items:center}
 .us-pag .pg.on{background:var(--ha-amber);border-color:var(--ha-amber);color:#0f1117;font-weight:600}
+/* shared paginator */
+.ha-pag{display:flex;align-items:center;justify-content:center;gap:6px;padding:14px 20px;border-top:1px solid var(--ha-border);flex-wrap:wrap}
+.ha-pag__btn{height:32px;padding:0 14px;border-radius:7px;background:transparent;border:1px solid var(--ha-border-2);color:var(--ha-text-2);font-family:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.ha-pag__btn:disabled{opacity:.4;cursor:not-allowed}
+.ha-pag__btn:not(:disabled):hover{background:var(--ha-bg-hover);color:var(--ha-text)}
+.ha-pag__nums{display:flex;gap:4px}
+.ha-pag__pg{min-width:32px;height:32px;padding:0;border-radius:7px;background:transparent;border:1px solid var(--ha-border-2);color:var(--ha-text-2);font-family:inherit;font-size:13px;cursor:pointer;display:inline-grid;place-items:center}
+.ha-pag__pg:hover{background:var(--ha-bg-hover);color:var(--ha-text)}
+.ha-pag__pg.on{background:var(--ha-amber);border-color:var(--ha-amber);color:#0f1117;font-weight:600}
+.ha-pag__ellipsis{min-width:32px;height:32px;display:inline-grid;place-items:center;color:var(--ha-text-3);font-size:13px}
+.ha-pag__info{font-size:13px;color:var(--ha-text-3);padding:0 6px;width:100%;text-align:center}
 .us-cardlist{display:flex;flex-direction:column;gap:8px}
 @container (min-width:768px){.us-cardlist{display:none}}
 .us-ucard{background:var(--ha-bg-card);border:1px solid var(--ha-border);border-radius:10px;padding:14px 16px}

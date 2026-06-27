@@ -4,6 +4,7 @@ import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
 import type { Category, CreateCategoryRequest, UpdateCategoryRequest } from "@/lib/types";
 import { toast } from "@/lib/toast";
+import { Spinner } from "@/components/spinner";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -136,13 +137,7 @@ function CategoriesContent() {
       </div>
 
       {loading ? (
-        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: "50%",
-            border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)",
-            animation: "ha-spin .7s linear infinite",
-          }} />
-        </div>
+        <Spinner />
       ) : filtered.length === 0 ? (
         <div className="ha-empty">
           <p className="ha-empty__t">Sin categorías</p>

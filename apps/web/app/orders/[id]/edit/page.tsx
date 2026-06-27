@@ -13,6 +13,7 @@ import {
 } from "@/lib/order-calculator/stock-preview";
 import { toast } from "@/lib/toast";
 import type { Customer, Order, Price, Product, StockLocation } from "@/lib/types";
+import { Spinner } from "@/components/spinner";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
@@ -261,11 +262,7 @@ function OrderEditPageContent({ id }: { id: string }) {
   };
 
   if (loading) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
-        <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)", animation: "ha-spin .7s linear infinite" }} />
-      </div>
-    );
+    return <Spinner />;
   }
 
   if (!order) {

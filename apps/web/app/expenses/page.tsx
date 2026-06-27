@@ -5,6 +5,8 @@ import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import type { CreateExpenseRequest, Expense } from "@/lib/types";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Spinner } from "@/components/spinner";
 import { Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -204,13 +206,7 @@ function ExpensesContent() {
 
       {/* Main content */}
       {loading ? (
-        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: "50%",
-            border: "2px solid var(--ha-border-2)", borderTopColor: "var(--ha-amber)",
-            animation: "ha-spin .7s linear infinite",
-          }} />
-        </div>
+        <Spinner />
       ) : filtered.length === 0 ? (
         <div className="ha-empty">
           <p className="ha-empty__t">{groups.length === 0 ? "Sin egresos registrados" : "Sin resultados para los filtros aplicados"}</p>
@@ -359,20 +355,12 @@ function ExpensesContent() {
 
       {/* Delete dialog */}
       {deleteId && (
-        <div className="ha-dialog-back" onClick={() => setDeleteId(null)}>
-          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="ha-dialog__head">
-              <h3 className="ha-dialog__title">¿Eliminar egreso?</h3>
-              <p className="ha-dialog__sub">
-                Se eliminará <strong>{deleteTarget || "este egreso"}</strong> junto con sus registros de efectivo y tarjeta.
-              </p>
-            </div>
-            <div className="ha-dialog__foot">
-              <button className="ha-btn ha-btn--secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
-              <button className="ha-btn ha-btn--destructive" onClick={() => void handleDelete()}>Eliminar</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="¿Eliminar egreso?"
+          description={<>Se eliminará <strong>{deleteTarget || "este egreso"}</strong> junto con sus registros de efectivo y tarjeta.</>}
+          onCancel={() => setDeleteId(null)}
+          onConfirm={() => void handleDelete()}
+        />
       )}
     </div>
   );
