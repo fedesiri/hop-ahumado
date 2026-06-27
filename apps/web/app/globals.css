@@ -274,7 +274,8 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .ha-bell:hover{background:var(--ha-bg-raised);color:var(--ha-text)}
 .ha-bell.is-open{background:var(--ha-bg-raised);color:var(--ha-text)}
 .ha-bell__badge{position:absolute;top:4px;right:4px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--ha-red);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;line-height:1}
-.ha-notif{position:absolute;top:calc(100% + 8px);right:0;z-index:100;width:380px;max-width:calc(100cqw - 24px);max-height:440px;display:flex;flex-direction:column;background:var(--ha-bg-card);border:1px solid var(--ha-border-2);border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,0.5);overflow:hidden;animation:ha-popdown .16s ease-out}
+.ha-notif{position:absolute;top:calc(100% + 8px);right:0;z-index:100;width:380px;max-width:calc(100vw - 24px);max-height:440px;display:flex;flex-direction:column;background:var(--ha-bg-card);border:1px solid var(--ha-border-2);border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,0.5);overflow:hidden;animation:ha-popdown .16s ease-out}
+@media(max-width:520px){.ha-notif{position:fixed;top:56px;left:8px;right:8px;width:auto;max-width:none;max-height:calc(100vh - 72px)}}
 .ha-notif__hd{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--ha-border);position:sticky;top:0;background:var(--ha-bg-card);z-index:1}
 .ha-notif__title{font-size:14px;font-weight:600}
 .ha-notif__mark{background:none;border:none;font-family:inherit;font-size:12px;color:var(--ha-amber);cursor:pointer;padding:0}
@@ -1160,6 +1161,7 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .ha-pag__pg.on{background:var(--ha-amber);border-color:var(--ha-amber);color:#0f1117;font-weight:600}
 .ha-pag__ellipsis{min-width:32px;height:32px;display:inline-grid;place-items:center;color:var(--ha-text-3);font-size:13px}
 .ha-pag__info{font-size:13px;color:var(--ha-text-3);padding:0 6px;width:100%;text-align:center}
+@media(max-width:480px){.ha-pag__label{display:none}}
 .us-cardlist{display:flex;flex-direction:column;gap:8px}
 @container (min-width:768px){.us-cardlist{display:none}}
 .us-ucard{background:var(--ha-bg-card);border:1px solid var(--ha-border);border-radius:10px;padding:14px 16px}

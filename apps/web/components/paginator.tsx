@@ -24,7 +24,7 @@ export function Paginator({ page, totalPages, total, label, onPageChange }: Pagi
   return (
     <div className="ha-pag">
       <button className="ha-pag__btn" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
-        ← Anterior
+        ←<span className="ha-pag__label"> Anterior</span>
       </button>
       <div className="ha-pag__nums">
         {buildPages(page, totalPages).map((p, i) =>
@@ -42,7 +42,7 @@ export function Paginator({ page, totalPages, total, label, onPageChange }: Pagi
         )}
       </div>
       <button className="ha-pag__btn" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
-        Siguiente →
+        <span className="ha-pag__label">Siguiente </span>→
       </button>
       {total != null && (
         <span className="ha-pag__info">
