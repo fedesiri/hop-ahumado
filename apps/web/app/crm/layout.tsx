@@ -1,7 +1,5 @@
-"use client";
+import type { ReactNode } from "react";
 
-import { AppLayout } from "@/components/app-layout";
-
-export default function CrmLayout({ children }: { children: React.ReactNode }) {
-  return <AppLayout>{children}</AppLayout>;
+export default function CrmLayout({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }

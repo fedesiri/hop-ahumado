@@ -45,3 +45,7 @@ coverage
 # Claude
 .claude
 /docs
+
+# Local dev notes and infra scripts
+.dev.notes
+scripts/

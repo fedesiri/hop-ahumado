@@ -1,8 +1,6 @@
 "use client";
 
 import { formatCurrency } from "@/lib/format-currency";
-import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button } from "antd";
 
 interface QuantityControlProps {
   label: string;
@@ -30,71 +28,39 @@ export function QuantityControl({
   onBulkDecrement,
 }: QuantityControlProps) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        flexWrap: "wrap",
-      }}
-    >
+    <div className="oc-stepper">
       <div>
-        <div style={{ fontWeight: 600, color: "#ffffff" }}>{label}</div>
-        <div style={{ fontSize: 12, color: "#9ca3af" }}>{formatCurrency(price)}</div>
+        <div style={{ fontWeight: 600 }}>{label}</div>
+        <div className="oc-pcard__price">{formatCurrency(price)}</div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <Button
-          size="small"
-          onClick={() => {
-            vibrate();
-            onBulkDecrement();
-          }}
+      <div className="oc-nf" style={{ gap: 4 }}>
+        <button
+          className="oc-sbtn oc-sbtn--pm oc-sbtn--bulk"
           disabled={quantity < 12}
-          style={{ minWidth: 40 }}
+          onClick={() => { vibrate(); onBulkDecrement(); }}
         >
           -12
-        </Button>
-        <Button
-          size="small"
-          icon={<MinusOutlined />}
-          onClick={() => {
-            vibrate();
-            onDecrement();
-          }}
+        </button>
+        <button
+          className="oc-sbtn oc-sbtn--pm"
           disabled={quantity === 0}
-        />
-        <span
-          style={{
-            minWidth: 44,
-            textAlign: "center",
-            fontSize: 18,
-            fontWeight: 700,
-            color: quantity > 0 ? "#22c55e" : "#9ca3af",
-          }}
+          onClick={() => { vibrate(); onDecrement(); }}
         >
-          {quantity}
-        </span>
-        <Button
-          type="primary"
-          size="small"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            vibrate();
-            onIncrement();
-          }}
-        />
-        <Button
-          type="primary"
-          size="small"
-          onClick={() => {
-            vibrate();
-            onBulkIncrement();
-          }}
-          style={{ minWidth: 40 }}
+          −
+        </button>
+        <span className={`oc-qty${quantity > 0 ? " pos" : ""}`}>{quantity}</span>
+        <button
+          className="oc-sbtn oc-sbtn--pm oc-sbtn--plus"
+          onClick={() => { vibrate(); onIncrement(); }}
+        >
+          +
+        </button>
+        <button
+          className="oc-sbtn oc-sbtn--pm oc-sbtn--plus oc-sbtn--bulk"
+          onClick={() => { vibrate(); onBulkIncrement(); }}
         >
           +12
-        </Button>
+        </button>
       </div>
     </div>
   );

@@ -3,157 +3,158 @@
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth } from "@/lib/firebase";
-import { useMediaQuery } from "@/lib/use-media-query";
-import { ApiOutlined } from "@ant-design/icons";
-import { App, Button, Card, Form, Input, Spin } from "antd";
+import { Eye, EyeOff, TriangleAlert } from "lucide-react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export default function LoginPage() {
   const router = useRouter();
-  const isMobile = useMediaQuery("(max-width: 768px)");
-  const { message } = App.useApp();
   const { refresh } = useAuth();
 
   const [checkingSession, setCheckingSession] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [emailErr, setEmailErr] = useState(false);
+  const [passErr, setPassErr] = useState(false);
 
   const getFromPath = () => {
     if (typeof window === "undefined") return "/";
     return new URLSearchParams(window.location.search).get("from") || "/";
   };
 
-  // Si ya tenés sesión, no tiene sentido mostrar el login.
   useEffect(() => {
     let mounted = true;
-
     async function checkSession() {
       try {
-        const res = await authFetch(`${API_URL}/auth/me`, {
-          method: "GET",
-        });
+        const res = await authFetch(`${API_URL}/auth/me`, { method: "GET" });
         if (mounted && res.ok) {
           router.replace(getFromPath());
           return;
         }
       } catch {
-        // No autenticado o backend caído: mostramos el login.
+        // not authenticated
       } finally {
         if (mounted) setCheckingSession(false);
       }
     }
-
     checkSession();
-
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [router]);
 
-  const [form] = Form.useForm();
-
-  const onFinish = async (values: { email: string; password: string }) => {
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setEmailErr(false);
+    setPassErr(false);
+    if (!email) { setEmailErr(true); return; }
+    if (!password) { setPassErr(true); return; }
     setSubmitting(true);
     try {
       const auth = getFirebaseAuth();
-      await signInWithEmailAndPassword(auth, values.email, values.password);
-
-      message.success("Sesión iniciada");
+      await signInWithEmailAndPassword(auth, email, password);
       await refresh();
       router.replace(getFromPath());
-    } catch (e: any) {
-      message.error(e?.message || "Error al iniciar sesión");
+    } catch {
+      setError("Correo o contraseña incorrectos.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const cardStyle = useMemo(
-    () => ({
-      background: "#1f2937",
-      border: "1px solid #2d3748",
-      borderRadius: 8,
-      width: "100%",
-      maxWidth: 420,
-      padding: isMobile ? 16 : 24,
-    }),
-    [isMobile],
-  );
-
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: isMobile ? 12 : 24,
-        background: "#0a0a0a",
-      }}
-    >
-      <Card style={cardStyle} styles={{ body: { padding: isMobile ? 16 : 24 } }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          <ApiOutlined style={{ color: "#22c55e", fontSize: 28 }} />
-          <div>
-            <h1 style={{ margin: 0, color: "#ffffff", fontSize: 20, fontWeight: 700 }}>Iniciar sesión</h1>
-            <p style={{ margin: 0, color: "#9ca3af", fontSize: 13 }}>Acceso para usuarios autorizados por Firebase.</p>
-          </div>
+    <div className="lg-page">
+      {/* Left brand panel — desktop only */}
+      <div className="lg-left">
+        <div className="lg-logo">Hop · Alumo</div>
+        <div className="lg-tag">Sistema de gestión interna</div>
+        <div className="lg-pills">
+          <span className="lg-pill">🍺 Hop</span>
+          <span className="lg-pill">🥩 Alumo</span>
         </div>
+      </div>
 
+      {/* Top brand — mobile only */}
+      <div className="lg-brandtop">
+        <div className="lg-logo">Hop · Alumo</div>
+        <div className="lg-tag">Sistema de gestión interna</div>
+        <div className="lg-pills">
+          <span className="lg-pill">🍺 Hop</span>
+          <span className="lg-pill">🥩 Alumo</span>
+        </div>
+      </div>
+
+      {/* Form area */}
+      <div className="lg-right">
         {checkingSession ? (
-          <div style={{ textAlign: "center", padding: "20px 0" }}>
-            <Spin />
+          <div style={{ display: "grid", placeItems: "center", padding: 48 }}>
+            <span className="lg-spin" />
           </div>
         ) : (
-          <Form form={form} layout="vertical" onFinish={onFinish}>
-            <Form.Item
-              label="Email"
-              name="email"
-              rules={[
-                { required: true, message: "Ingresá tu email" },
-                { type: "email", message: "Email inválido" },
-              ]}
-            >
-              <Input
-                type="email"
-                placeholder="tu@email.com"
-                autoComplete="email"
-                style={{ background: "#111111", borderColor: "#2d3748", color: "#ffffff" }}
-                disabled={submitting}
-              />
-            </Form.Item>
+          <div className="lg-card">
+            <h1 className="lg-card__title">Iniciar sesión</h1>
+            <p className="lg-card__sub">Ingresá con tu cuenta de empresa.</p>
 
-            <Form.Item
-              label="Contraseña"
-              name="password"
-              rules={[{ required: true, message: "Ingresá tu contraseña" }]}
-            >
-              <Input
-                type="password"
-                placeholder="••••••••"
-                autoComplete="current-password"
-                style={{ background: "#111111", borderColor: "#2d3748", color: "#ffffff" }}
-                disabled={submitting}
-              />
-            </Form.Item>
+            {error && (
+              <div className="lg-alert">
+                <TriangleAlert size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                {error}
+              </div>
+            )}
 
-            <Form.Item style={{ marginTop: 16 }}>
-              <Button
-                htmlType="submit"
-                type="primary"
-                loading={submitting}
-                disabled={submitting}
-                style={{ width: "100%", background: "#22c55e", borderColor: "#22c55e" }}
-              >
-                Entrar
-              </Button>
-            </Form.Item>
-          </Form>
+            <form onSubmit={onSubmit} noValidate>
+              <div className="lg-field">
+                <label className="lg-label" htmlFor="email">Correo electrónico</label>
+                <input
+                  id="email"
+                  type="email"
+                  className={`lg-input${emailErr ? " has-err" : ""}`}
+                  placeholder="vos@empresa.com"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); setEmailErr(false); }}
+                  disabled={submitting}
+                />
+                {emailErr && <span className="lg-err">Requerido</span>}
+              </div>
+
+              <div className="lg-field">
+                <label className="lg-label" htmlFor="password">Contraseña</label>
+                <div className="lg-inputwrap">
+                  <input
+                    id="password"
+                    type={showPass ? "text" : "password"}
+                    className={`lg-input lg-input--pass${passErr ? " has-err" : ""}`}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setPassErr(false); }}
+                    disabled={submitting}
+                  />
+                  <button
+                    type="button"
+                    className="lg-eye"
+                    onClick={() => setShowPass((s) => !s)}
+                    aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  >
+                    {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {passErr && <span className="lg-err">Requerido</span>}
+              </div>
+
+              <button type="submit" className="lg-btn" disabled={submitting}>
+                {submitting ? <span className="lg-spin" /> : "Entrar"}
+              </button>
+            </form>
+          </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

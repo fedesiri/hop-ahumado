@@ -1,375 +1,416 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
-import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { LocationStockModal } from "@/components/stock/location-stock-modal";
 import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
 import type { StockBalanceRow, StockLocation } from "@/lib/types";
-import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, SwapOutlined } from "@ant-design/icons";
-import { App, Button, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Spin, Table, Tag } from "antd";
+import { toast } from "@/lib/toast";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
+import { Spinner } from "@/components/spinner";
+import { ArrowLeftRight, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 export default function StockLocationsPage() {
-  return (
-    <AppLayout>
-      <StockLocationsContent />
-    </AppLayout>
-  );
+  return <StockLocationsContent />;
 }
 
 function StockLocationsContent() {
-  const { message } = App.useApp();
   const { selectedLineId } = useLineContext();
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [viewModalOpen, setViewModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [stockCounts, setStockCounts] = useState<Record<string, number>>({});
+
+  type ModalMode = "create" | "edit" | "transfer" | null;
+  const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [editingLocation, setEditingLocation] = useState<StockLocation | null>(null);
+  const [transferFromLocation, setTransferFromLocation] = useState<StockLocation | null>(null);
+
+  const [fname, setFname] = useState("");
+  const [fisDefault, setFisDefault] = useState(false);
+  const [fnameErr, setFnameErr] = useState(false);
+  const [fTransferTo, setFTransferTo] = useState("");
+  const [fTransferErr, setFTransferErr] = useState(false);
+
+  const [confirmDelete, setConfirmDelete] = useState<StockLocation | null>(null);
+  const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewingLocation, setViewingLocation] = useState<StockLocation | null>(null);
   const [viewBalances, setViewBalances] = useState<StockBalanceRow[]>([]);
   const [viewLoading, setViewLoading] = useState(false);
-  const [createForm] = Form.useForm();
-  const [editForm] = Form.useForm();
-  const [transferForm] = Form.useForm();
-  const [transferModalOpen, setTransferModalOpen] = useState(false);
-  const [transferFromLocation, setTransferFromLocation] = useState<StockLocation | null>(null);
+
+  const fetchStockCounts = useCallback(async (locs: StockLocation[]) => {
+    const counts: Record<string, number> = {};
+    await Promise.all(
+      locs.map(async (loc) => {
+        try {
+          const rows = await apiClient.getStockBalancesAtLocation(loc.id, selectedLineId ?? undefined);
+          counts[loc.id] = rows.filter((r) => Number(r.quantity) > 0).length;
+        } catch {
+          counts[loc.id] = 0;
+        }
+      })
+    );
+    setStockCounts(counts);
+  }, [selectedLineId]);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      setLocations(await apiClient.getStockLocations());
+      const locs = await apiClient.getStockLocations();
+      setLocations(locs);
+      void fetchStockCounts(locs);
     } catch {
-      message.error("Error al cargar ubicaciones");
+      toast.error("Error al cargar ubicaciones");
       setLocations([]);
     } finally {
       setLoading(false);
     }
-  }, [message]);
+  }, [fetchStockCounts]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const closeView = () => {
-    setViewModalOpen(false);
-    setViewingLocation(null);
-    setViewBalances([]);
+  const openCreate = () => {
+    setFname(""); setFisDefault(false); setFnameErr(false);
+    setModalMode("create");
+  };
+
+  const openEdit = (loc: StockLocation) => {
+    setEditingLocation(loc);
+    setFname(loc.name); setFisDefault(loc.isDefault); setFnameErr(false);
+    setModalMode("edit");
+  };
+
+  const openTransfer = (loc: StockLocation) => {
+    setTransferFromLocation(loc);
+    setFTransferTo(""); setFTransferErr(false);
+    setModalMode("transfer");
+  };
+
+  const closeModal = () => {
+    setModalMode(null); setEditingLocation(null); setTransferFromLocation(null);
   };
 
   const openView = async (loc: StockLocation) => {
-    setViewingLocation(loc);
-    setViewModalOpen(true);
-    setViewLoading(true);
-    setViewBalances([]);
+    setViewingLocation(loc); setViewModalOpen(true); setViewLoading(true); setViewBalances([]);
     try {
       const rows = await apiClient.getStockBalancesAtLocation(loc.id, selectedLineId ?? undefined);
       setViewBalances(rows);
     } catch {
-      message.error("No se pudo cargar el stock de la ubicación");
-      setViewBalances([]);
+      toast.error("No se pudo cargar el stock de la ubicación");
     } finally {
       setViewLoading(false);
     }
   };
 
-  const openEdit = (loc: StockLocation) => {
-    setEditingLocation(loc);
-    editForm.setFieldsValue({ name: loc.name, isDefault: loc.isDefault });
-    setEditModalOpen(true);
-  };
-
-  const handleCreate = async (values: { name: string; isDefault?: boolean }) => {
-    setSubmitting(true);
+  const saveLocation = async () => {
+    if (!fname.trim()) { setFnameErr(true); return; }
+    setFnameErr(false); setSubmitting(true);
     try {
-      await apiClient.createStockLocation({
-        name: values.name.trim(),
-        isDefault: values.isDefault === true,
-      });
-      message.success("Ubicación creada");
-      setCreateModalOpen(false);
-      createForm.resetFields();
-      await load();
-    } catch {
-      message.error("No se pudo crear la ubicación");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleEdit = async (values: { name: string; isDefault?: boolean }) => {
-    if (!editingLocation) return;
-    setSubmitting(true);
-    try {
-      await apiClient.updateStockLocation(editingLocation.id, {
-        name: values.name.trim(),
-        isDefault: values.isDefault === true,
-      });
-      message.success("Ubicación actualizada");
-      setEditModalOpen(false);
-      setEditingLocation(null);
-      editForm.resetFields();
-      await load();
-    } catch {
-      message.error("No se pudo actualizar la ubicación");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const openTransferAll = (loc: StockLocation) => {
-    setTransferFromLocation(loc);
-    transferForm.resetFields();
-    setTransferModalOpen(true);
-  };
-
-  const handleTransferAll = async (values: { toLocationId: string }) => {
-    if (!transferFromLocation) return;
-    setSubmitting(true);
-    try {
-      const res = await apiClient.transferAllStockBetweenLocations(transferFromLocation.id, {
-        toLocationId: values.toLocationId,
-      });
-      if (res.movementsCreated === 0) {
-        message.info(res.message ?? "No había stock para mover en el origen");
-      } else {
-        message.success(`Traspasados ${res.movementsCreated} productos (movimientos registrados)`);
+      if (modalMode === "create") {
+        await apiClient.createStockLocation({ name: fname.trim(), isDefault: fisDefault });
+        toast.success("Ubicación creada");
+      } else if (editingLocation) {
+        await apiClient.updateStockLocation(editingLocation.id, { name: fname.trim(), isDefault: fisDefault });
+        toast.success("Ubicación actualizada");
       }
-      setTransferModalOpen(false);
-      setTransferFromLocation(null);
-      transferForm.resetFields();
+      closeModal();
+      await load();
+    } catch {
+      toast.error("No se pudo guardar la ubicación");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const doTransfer = async () => {
+    if (!fTransferTo || !transferFromLocation) { setFTransferErr(true); return; }
+    setFTransferErr(false); setSubmitting(true);
+    try {
+      const res = await apiClient.transferAllStockBetweenLocations(transferFromLocation.id, { toLocationId: fTransferTo });
+      if (res.movementsCreated === 0) {
+        toast.info(res.message ?? "No había stock para mover en el origen");
+      } else {
+        toast.success(`Traspasados ${res.movementsCreated} productos`);
+      }
+      closeModal();
       await load();
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "";
-      message.error(msg || "No se pudo completar el traspaso");
+      const msg = err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "";
+      toast.error(msg || "No se pudo completar el traspaso");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (loc: StockLocation) => {
+  const doDelete = async () => {
+    if (!confirmDelete) return;
+    const loc = confirmDelete;
+    setConfirmDelete(null);
     try {
       await apiClient.deleteStockLocation(loc.id);
-      message.success("Ubicación eliminada");
+      toast.success("Ubicación eliminada");
       await load();
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "";
-      message.error(msg || "No se pudo eliminar la ubicación");
+      const msg = err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "";
+      toast.error(msg || "No se pudo eliminar la ubicación");
     }
+  };
+
+  const stockCountLabel = (locId: string) => {
+    const count = stockCounts[locId] ?? null;
+    if (count === null) return null;
+    return `${count} producto${count !== 1 ? "s" : ""}`;
   };
 
   return (
     <div>
-      <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Ubicaciones de stock</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-          Nueva ubicación
-        </Button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <h1 className="pc-pagetitle" style={{ margin: 0 }}>Stock · Ubicaciones</h1>
+        <button className="pc-btn pc-btn--primary ub-newbtn" onClick={openCreate}>
+          + Nueva ubicación
+        </button>
       </div>
 
-      <ScreenInfoPanel title="Cómo funcionan las ubicaciones de stock">
-        <div>
-          <p style={{ margin: "0 0 8px 0" }}>
-            Cada ubicación es un depósito o lugar donde tenés inventario (local, tu casa, casa de un socio). Los
-            movimientos y los pedidos eligen desde cuál se descuenta o hacia cuál ingresa.
-          </p>
-          <p style={{ margin: "0 0 8px 0" }}>
-            Usá la <strong>misma unidad</strong> de cantidad que definiste al cargar el producto (enteros o decimales,
-            ej. 10,5 kg).
-          </p>
-          <p style={{ margin: 0 }}>
-            Podés <strong>traspasar todo el stock</strong> para consolidar depósitos. Solo podés eliminar una ubicación
-            si no tiene stock.
-          </p>
-        </div>
-      </ScreenInfoPanel>
-
       {loading ? (
-        <Spin />
+        <Spinner />
+      ) : locations.length === 0 ? (
+        <EmptyState title="No hay ubicaciones de stock" />
       ) : (
-        <Table
-          rowKey="id"
-          dataSource={locations}
-          pagination={false}
-          style={{ backgroundColor: "#1f2937" }}
-          columns={[
-            { title: "Nombre", dataIndex: "name", key: "name" },
-            {
-              title: "Predeterminada",
-              dataIndex: "isDefault",
-              key: "isDefault",
-              render: (v: boolean) => (v ? <Tag color="green">Sí</Tag> : <Tag>No</Tag>),
-            },
-            {
-              title: "Alta",
-              dataIndex: "createdAt",
-              key: "createdAt",
-              render: (d: string) => new Date(d).toLocaleDateString("es-AR"),
-            },
-            {
-              title: "Acciones",
-              key: "actions",
-              width: 200,
-              render: (_: unknown, record: StockLocation) => (
-                <Space>
-                  <Button
-                    type="default"
-                    size="small"
-                    icon={<EyeOutlined />}
-                    title="Ver stock"
-                    aria-label="Ver stock"
-                    onClick={() => openView(record)}
-                  />
-                  <Button
-                    type="primary"
-                    size="small"
-                    icon={<EditOutlined />}
-                    title="Editar"
-                    aria-label="Editar"
-                    onClick={() => openEdit(record)}
-                  />
-                  <Button
-                    type="default"
-                    size="small"
-                    icon={<SwapOutlined />}
-                    title="Traspasar todo el stock"
-                    aria-label="Traspasar todo el stock"
-                    disabled={locations.length < 2}
-                    onClick={() => openTransferAll(record)}
-                  />
-                  <Popconfirm
-                    title="¿Eliminar esta ubicación?"
-                    description="Solo se puede si no hay stock. Los movimientos y pedidos viejos quedarán sin ubicación asociada."
-                    onConfirm={() => handleDelete(record)}
-                    okText="Sí, eliminar"
-                    cancelText="Cancelar"
-                    okButtonProps={{ danger: true }}
-                  >
-                    <Button danger size="small" icon={<DeleteOutlined />} title="Eliminar" aria-label="Eliminar" />
-                  </Popconfirm>
-                </Space>
-              ),
-            },
-          ]}
-        />
+        <>
+          {/* Desktop table */}
+          <div className="pc-card">
+            <div className="pc-tablewrap" style={{ overflowX: "auto" }}>
+              <table className="pc-table">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Por defecto</th>
+                    <th>Creada</th>
+                    <th>Productos con stock</th>
+                    <th style={{ textAlign: "right" }}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {locations.map((loc) => {
+                    const count = stockCounts[loc.id] ?? null;
+                    const canDelete = count === 0;
+                    return (
+                      <tr key={loc.id}>
+                        <td style={{ fontWeight: 500 }}>{loc.name}</td>
+                        <td>
+                          <span className={`ub-pill ${loc.isDefault ? "ub-pill--yes" : "ub-pill--no"}`}>
+                            {loc.isDefault ? "Sí" : "No"}
+                          </span>
+                        </td>
+                        <td className="pc-vig">{new Date(loc.createdAt).toLocaleDateString("es-AR")}</td>
+                        <td>
+                          {count === null
+                            ? <span className="pc-vig">—</span>
+                            : <span className="ub-prod">{count} producto{count !== 1 ? "s" : ""}</span>}
+                        </td>
+                        <td>
+                          <div className="ub-acts">
+                            <button className="ub-actbtn" title="Ver stock" onClick={() => void openView(loc)}>
+                              <Eye size={14} />
+                            </button>
+                            <button className="ub-actbtn" title="Editar" onClick={() => openEdit(loc)}>
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              className="ub-actbtn"
+                              title="Traspasar todo el stock"
+                              disabled={locations.length < 2}
+                              onClick={() => openTransfer(loc)}
+                            >
+                              <ArrowLeftRight size={14} />
+                            </button>
+                            <button
+                              className={`ub-actbtn${canDelete ? " ub-actbtn--del" : " ub-actbtn--off"}`}
+                              title={canDelete ? "Eliminar" : "No se puede eliminar: tiene stock"}
+                              disabled={!canDelete}
+                              onClick={() => canDelete && setConfirmDelete(loc)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="ub-cardlist">
+            {locations.map((loc) => {
+              const count = stockCounts[loc.id] ?? null;
+              const canDelete = count === 0;
+              const label = stockCountLabel(loc.id);
+              return (
+                <div key={loc.id} className="ub-loccard">
+                  <div className="ub-loccard__top">
+                    <span className="ub-loccard__name">{loc.name}</span>
+                    <span className={`ub-pill ${loc.isDefault ? "ub-pill--yes" : "ub-pill--no"}`}>
+                      {loc.isDefault ? "Sí" : "No"}
+                    </span>
+                  </div>
+                  <div className="ub-loccard__mid">
+                    {label !== null
+                      ? <span className="ub-prod">{label}</span>
+                      : <span className="ub-loccard__date">—</span>}
+                    <span className="ub-loccard__date">
+                      {new Date(loc.createdAt).toLocaleDateString("es-AR")}
+                    </span>
+                  </div>
+                  <div className="ub-loccard__acts">
+                    <button className="ub-actbtn" onClick={() => void openView(loc)} aria-label="Ver stock">
+                      <Eye size={16} />
+                    </button>
+                    <button className="ub-actbtn" onClick={() => openEdit(loc)} aria-label="Editar">
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      className="ub-actbtn"
+                      disabled={locations.length < 2}
+                      onClick={() => openTransfer(loc)}
+                      aria-label="Traspasar"
+                    >
+                      <ArrowLeftRight size={16} />
+                    </button>
+                    <button
+                      className={`ub-actbtn${canDelete ? " ub-actbtn--del" : " ub-actbtn--off"}`}
+                      disabled={!canDelete}
+                      onClick={() => canDelete && setConfirmDelete(loc)}
+                      aria-label="Eliminar"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
-      <Modal
-        title={transferFromLocation ? `Traspasar todo desde «${transferFromLocation.name}»` : "Traspasar stock"}
-        open={transferModalOpen}
-        onCancel={() => {
-          setTransferModalOpen(false);
-          setTransferFromLocation(null);
-          transferForm.resetFields();
-        }}
-        footer={null}
-        destroyOnClose
-      >
-        <p style={{ color: "#9ca3af", marginBottom: 16 }}>
-          Se mueven todas las cantidades distintas de cero del origen al destino. El total por producto no cambia; queda
-          registro en movimientos de stock (traslado).
-        </p>
-        <Form form={transferForm} layout="vertical" onFinish={handleTransferAll}>
-          <Form.Item
-            name="toLocationId"
-            label="Ubicación destino"
-            rules={[{ required: true, message: "Elegí el destino" }]}
-          >
-            <Select
-              placeholder="Destino"
-              options={locations
-                .filter((l) => l.id !== transferFromLocation?.id)
-                .map((l) => ({
-                  label: l.isDefault ? `${l.name} (predeterminada)` : l.name,
-                  value: l.id,
-                }))}
-            />
-          </Form.Item>
-          <Space>
-            <Button
-              onClick={() => {
-                setTransferModalOpen(false);
-                setTransferFromLocation(null);
-                transferForm.resetFields();
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button type="primary" htmlType="submit" loading={submitting}>
-              Traspasar todo
-            </Button>
-          </Space>
-        </Form>
-      </Modal>
+      {/* Mobile FAB */}
+      <button className="ha-fab" onClick={openCreate} aria-label="Nueva ubicación">
+        <Plus size={24} />
+      </button>
 
-      <Modal
-        title="Nueva ubicación"
-        open={createModalOpen}
-        onCancel={() => setCreateModalOpen(false)}
-        footer={null}
-        destroyOnClose
-      >
-        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
-          <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "Ingresá un nombre" }]}>
-            <Input placeholder="Ej. Local, Casa Centro, Depósito Norte" />
-          </Form.Item>
-          <Form.Item name="isDefault" valuePropName="checked">
-            <Checkbox>Marcar como ubicación predeterminada</Checkbox>
-          </Form.Item>
-          <Space>
-            <Button onClick={() => setCreateModalOpen(false)}>Cancelar</Button>
-            <Button type="primary" htmlType="submit" loading={submitting}>
-              Guardar
-            </Button>
-          </Space>
-        </Form>
-      </Modal>
+      {/* Create / Edit Modal */}
+      {(modalMode === "create" || modalMode === "edit") && (
+        <div className="ha-modal-backdrop" onClick={closeModal}>
+          <div className="ha-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">
+                {modalMode === "create" ? "Nueva ubicación" : `Editar: ${editingLocation?.name}`}
+              </span>
+              <button className="ha-iconbtn" onClick={closeModal} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body">
+              <div className="ha-field" style={{ marginBottom: 16 }}>
+                <label className="ha-label">Nombre <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <input
+                  className={`ha-input${fnameErr ? " ha-input--error" : ""}`}
+                  value={fname}
+                  onChange={(e) => { setFname(e.target.value); if (fnameErr) setFnameErr(false); }}
+                  placeholder="Ej. Depósito Norte, Local Centro"
+                  // eslint-disable-next-line jsx-a11y/no-autofocus
+                  autoFocus
+                />
+                {fnameErr && <span className="ha-error">Ingresá un nombre</span>}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  className={`pc-check${fisDefault ? " on" : ""}`}
+                  onClick={() => setFisDefault((v) => !v)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {fisDefault && (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                <label
+                  className="ha-label"
+                  style={{ margin: 0, cursor: "pointer" }}
+                  onClick={() => setFisDefault((v) => !v)}
+                >
+                  Marcar como ubicación predeterminada
+                </label>
+              </div>
+            </div>
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={closeModal}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={() => void saveLocation()} disabled={submitting}>
+                {submitting ? "Guardando…" : modalMode === "create" ? "Guardar" : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      <Modal
-        title={editingLocation ? `Editar: ${editingLocation.name}` : "Editar ubicación"}
-        open={editModalOpen}
-        onCancel={() => {
-          setEditModalOpen(false);
-          setEditingLocation(null);
-          editForm.resetFields();
-        }}
-        footer={null}
-        destroyOnClose
-      >
-        <Form form={editForm} layout="vertical" onFinish={handleEdit}>
-          <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "Ingresá un nombre" }]}>
-            <Input placeholder="Nombre" />
-          </Form.Item>
-          <Form.Item name="isDefault" valuePropName="checked">
-            <Checkbox>Ubicación predeterminada</Checkbox>
-          </Form.Item>
-          <Space>
-            <Button
-              onClick={() => {
-                setEditModalOpen(false);
-                setEditingLocation(null);
-                editForm.resetFields();
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button type="primary" htmlType="submit" loading={submitting}>
-              Guardar cambios
-            </Button>
-          </Space>
-        </Form>
-      </Modal>
+      {/* Transfer Modal */}
+      {modalMode === "transfer" && (
+        <div className="ha-modal-backdrop" onClick={closeModal}>
+          <div className="ha-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">Traspasar desde «{transferFromLocation?.name}»</span>
+              <button className="ha-iconbtn" onClick={closeModal} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body">
+              <p style={{ color: "var(--ha-text-3)", marginBottom: 16, fontSize: 14 }}>
+                Se mueven todas las cantidades distintas de cero al destino. El total por producto no cambia; queda registro en movimientos.
+              </p>
+              <div className="ha-field">
+                <label className="ha-label">Ubicación destino</label>
+                <select
+                  className={`ha-input${fTransferErr ? " ha-input--error" : ""}`}
+                  value={fTransferTo}
+                  onChange={(e) => { setFTransferTo(e.target.value); if (fTransferErr) setFTransferErr(false); }}
+                >
+                  <option value="">Elegí el destino</option>
+                  {locations
+                    .filter((l) => l.id !== transferFromLocation?.id)
+                    .map((l) => (
+                      <option key={l.id} value={l.id}>{l.name}{l.isDefault ? " (predeterminada)" : ""}</option>
+                    ))}
+                </select>
+                {fTransferErr && <span className="ha-error">Elegí el destino</span>}
+              </div>
+            </div>
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={closeModal}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={() => void doTransfer()} disabled={submitting}>
+                {submitting ? "Traspasando…" : "Traspasar todo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete dialog */}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="¿Eliminar esta ubicación?"
+          description="Solo se puede si no tiene stock. Los movimientos viejos quedarán sin ubicación."
+          confirmLabel="Sí, eliminar"
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => void doDelete()}
+        />
+      )}
 
       <LocationStockModal
         open={viewModalOpen}
         locationName={viewingLocation?.name ?? null}
         loading={viewLoading}
         balances={viewBalances}
-        onClose={closeView}
+        onClose={() => { setViewModalOpen(false); setViewingLocation(null); setViewBalances([]); }}
       />
     </div>
   );

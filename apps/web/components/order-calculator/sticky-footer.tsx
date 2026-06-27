@@ -1,8 +1,7 @@
 "use client";
 
 import { formatCurrency } from "@/lib/format-currency";
-import { CheckCircleOutlined, CopyOutlined, DeleteOutlined, RollbackOutlined } from "@ant-design/icons";
-import { Button } from "antd";
+import { CheckCircle, Copy, RotateCcw, Trash2 } from "lucide-react";
 
 interface StickyFooterProps {
   total: number;
@@ -12,7 +11,6 @@ interface StickyFooterProps {
   onNewOrder: () => void;
   onConfirmOrder?: () => void;
   confirmButtonLabel?: string;
-  /** Texto secundario bajo el total (p. ej. estado de promo). */
   footerNote?: string;
 }
 
@@ -27,62 +25,39 @@ export function StickyFooter({
   footerNote,
 }: StickyFooterProps) {
   return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 50,
-        borderTop: "1px solid #2d3748",
-        backgroundColor: "rgba(31, 41, 55, 0.95)",
-        backdropFilter: "blur(8px)",
-        padding: "12px 16px",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 1200,
-          margin: "0 auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "baseline",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 8,
-          }}
-        >
-          <span style={{ fontSize: 12, fontWeight: 500, color: "#9ca3af", textTransform: "uppercase" }}>Total</span>
-          <span
-            style={{
-              fontSize: 24,
-              fontWeight: 700,
-              fontVariantNumeric: "tabular-nums",
-              color: total > 0 ? "#22c55e" : "#9ca3af",
-            }}
-          >
+    <div className="oc-footer">
+      <div className="oc-finner">
+        <div className="oc-totrow">
+          <span className="oc-totlbl">Total</span>
+          <span className={`oc-totamt ha-mono${total > 0 ? " pos" : ""}`}>
             {formatCurrency(total)}
           </span>
         </div>
-        {footerNote ? (
-          <p style={{ margin: 0, fontSize: 12, color: "#9ca3af", lineHeight: 1.4 }}>{footerNote}</p>
-        ) : null}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-          <Button icon={<RollbackOutlined />} onClick={onNewOrder} title="Nueva orden" />
-          <Button icon={<DeleteOutlined />} onClick={onClear} disabled={!hasItems} title="Limpiar" />
-          <Button type="primary" icon={<CopyOutlined />} onClick={onCopy} disabled={!hasItems}>
+        {footerNote && <p className="oc-promo">{footerNote}</p>}
+        <div className="oc-actions">
+          <button className="oc-iconbtn" onClick={onNewOrder} title="Nueva orden">
+            <RotateCcw size={17} />
+          </button>
+          <button className="oc-iconbtn" onClick={onClear} disabled={!hasItems} title="Limpiar">
+            <Trash2 size={17} />
+          </button>
+          <button
+            className="oc-btn oc-btn--primary oc-grow"
+            onClick={onCopy}
+            disabled={!hasItems}
+          >
+            <Copy size={15} />
             Copiar pedido
-          </Button>
+          </button>
           {onConfirmOrder && (
-            <Button type="primary" icon={<CheckCircleOutlined />} onClick={onConfirmOrder} disabled={!hasItems}>
+            <button
+              className="oc-btn oc-btn--success oc-grow oc-btn--fmob"
+              onClick={onConfirmOrder}
+              disabled={!hasItems}
+            >
+              <CheckCircle size={15} />
               {confirmButtonLabel}
-            </Button>
+            </button>
           )}
         </div>
       </div>

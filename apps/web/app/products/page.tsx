@@ -1,9 +1,8 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
-import { formatQuantity } from "@/lib/format-currency";
+import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import {
   ProductUnit,
@@ -15,26 +14,13 @@ import {
   type Product,
   type UpdateProductRequest,
 } from "@/lib/types";
-import { DeleteOutlined, EditOutlined, PlusOutlined, UndoOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Card,
-  Col,
-  Empty,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Row,
-  Select,
-  Space,
-  Spin,
-  Table,
-  Tag,
-} from "antd";
+import { toast } from "@/lib/toast";
+import { Eye, ListFilter, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { Paginator } from "@/components/paginator";
+import { Spinner } from "@/components/spinner";
+import { Pencil } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
   { label: "Unidad", value: ProductUnit.UNIT },
@@ -45,43 +31,74 @@ const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
 ];
 
 const UNIT_SHORT_LABEL: Record<ProductUnit, string> = {
-  [ProductUnit.UNIT]: "un",
-  [ProductUnit.KG]: "kg",
-  [ProductUnit.G]: "gr",
-  [ProductUnit.L]: "l",
-  [ProductUnit.ML]: "ml",
+  [ProductUnit.UNIT]: "UN",
+  [ProductUnit.KG]: "KG",
+  [ProductUnit.G]: "GR",
+  [ProductUnit.L]: "L",
+  [ProductUnit.ML]: "ML",
 };
 
+type PriceMap = Record<string, {
+  costo?: number;
+  mayorista?: number;
+  minorista?: number;
+  fabrica?: number;
+}>;
+
 export default function ProductsPage() {
-  return (
-    <AppLayout>
-      <ProductsContent />
-    </AppLayout>
-  );
+  return <ProductsContent />;
 }
 
 function ProductsContent() {
-  const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [priceMap, setPriceMap] = useState<PriceMap>({});
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form] = Form.useForm();
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState("");
+  const [reactivateId, setReactivateId] = useState<string | null>(null);
+  const [reactivateTarget, setReactivateTarget] = useState("");
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
+
   const [showDeactivated, setShowDeactivated] = useState(
     () => searchParams.get("showDeactivated") === "true",
   );
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const [searchInput, setSearchInput] = useState(() => searchParams.get("search") ?? "");
-  const [categoryFilter, setCategoryFilter] = useState<string | undefined>(
-    () => searchParams.get("category") ?? undefined,
+  const [categoryFilter, setCategoryFilter] = useState<string>(
+    () => searchParams.get("category") ?? "",
   );
+
+  // Mobile filter sheet draft state
+  const [draftSearch, setDraftSearch] = useState(search);
+  const [draftCategory, setDraftCategory] = useState(categoryFilter);
+  const [draftDeactivated, setDraftDeactivated] = useState(showDeactivated);
+
+  // Form state
+  const [fname, setFname] = useState("");
+  const [funit, setFunit] = useState<ProductUnit>(ProductUnit.UNIT);
+  const [fcategoryId, setFcategoryId] = useState("");
+  const [fsku, setFsku] = useState("");
+  const [fbarcode, setFbarcode] = useState("");
+  const [fdescription, setFdescription] = useState("");
+  const [fnameErr, setFnameErr] = useState(false);
+  const [fstock, setFstock] = useState("");
+  const [fcostValue, setFcostValue] = useState("");
+  const [fpriceMayorista, setFpriceMayorista] = useState("");
+  const [fpriceMinorista, setFpriceMinorista] = useState("");
+  const [fpriceFabrica, setFpriceFabrica] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const activeFilterCount = (categoryFilter ? 1 : 0) + (showDeactivated ? 1 : 0) + (search ? 1 : 0);
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -103,17 +120,17 @@ function ProductsContent() {
         pagination.limit,
         showDeactivated,
         search || undefined,
-        categoryFilter,
+        categoryFilter || undefined,
         selectedLineId ?? undefined,
       );
       setProducts(response.data);
       setMeta(response.meta);
     } catch {
-      message.error("Error al cargar productos");
+      toast.error("Error al cargar productos");
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, showDeactivated, search, categoryFilter, selectedLineId, message]);
+  }, [pagination.page, pagination.limit, showDeactivated, search, categoryFilter, selectedLineId]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -124,237 +141,230 @@ function ProductsContent() {
     }
   }, [selectedLineId]);
 
+  const fetchPricesAndCosts = useCallback(async () => {
+    try {
+      const fetchAllPages = async <T,>(
+        fetcher: (page: number) => Promise<{ data: T[]; meta: PaginationMeta }>,
+      ): Promise<T[]> => {
+        const first = await fetcher(1);
+        if (first.meta.totalPages <= 1) return first.data;
+        const rest = await Promise.all(
+          Array.from({ length: first.meta.totalPages - 1 }, (_, i) => fetcher(i + 2)),
+        );
+        return [first, ...rest].flatMap((r) => r.data);
+      };
+
+      const [allPrices, allCosts] = await Promise.all([
+        fetchAllPages((page) => apiClient.getPrices(page, 100, undefined, true)),
+        fetchAllPages((page) => apiClient.getCosts(page, 100, undefined, true)),
+      ]);
+
+      const map: PriceMap = {};
+      for (const cost of allCosts) {
+        if (!map[cost.productId]) map[cost.productId] = {};
+        map[cost.productId].costo = cost.value;
+      }
+      for (const price of allPrices) {
+        if (!map[price.productId]) map[price.productId] = {};
+        const t = price.description;
+        if (t === "mayorista") map[price.productId].mayorista = price.value;
+        else if (t === "minorista") map[price.productId].minorista = price.value;
+        else if (t === "fabrica") map[price.productId].fabrica = price.value;
+      }
+      setPriceMap(map);
+    } catch (err) {
+      console.error("fetchPricesAndCosts failed:", err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchProducts();
+  }, [fetchProducts]);
+
+  useEffect(() => {
     fetchCategories();
-  }, [fetchProducts, fetchCategories]);
+  }, [fetchCategories]);
 
-  const handleCreate = () => {
+  useEffect(() => {
+    fetchPricesAndCosts();
+  }, [fetchPricesAndCosts]);
+
+  useEffect(() => {
+    if (drawerOpen) setTimeout(() => nameInputRef.current?.focus(), 80);
+  }, [drawerOpen]);
+
+  const resetForm = () => {
+    setFname(""); setFunit(ProductUnit.UNIT); setFcategoryId("");
+    setFsku(""); setFbarcode(""); setFdescription(""); setFnameErr(false);
+    setFstock(""); setFcostValue(""); setFpriceMayorista(""); setFpriceMinorista(""); setFpriceFabrica("");
+  };
+
+  const openCreate = () => {
+    if (!selectedLineId) { toast.error("Seleccioná una línea de negocio"); return; }
     setEditingId(null);
-    form.resetFields();
-    setModalOpen(true);
+    resetForm();
+    setDrawerOpen(true);
   };
 
-  const handleEdit = (record: Product) => {
+  const openEdit = (record: Product) => {
     setEditingId(record.id);
-    form.setFieldsValue({
-      name: record.name,
-      unit: record.unit,
-      description: record.description,
-      categoryId: record.categoryId,
-      sku: record.sku,
-      barcode: record.barcode,
-      stock: record.stock,
-    });
-    setModalOpen(true);
+    setFname(record.name);
+    setFunit(record.unit);
+    setFcategoryId(record.categoryId ?? "");
+    setFsku(record.sku ?? "");
+    setFbarcode(record.barcode ?? "");
+    setFdescription(record.description ?? "");
+    setFnameErr(false);
+    setFstock(String(record.stock ?? ""));
+    setFcostValue(""); setFpriceMayorista(""); setFpriceMinorista(""); setFpriceFabrica("");
+    setDrawerOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    modal.confirm({
-      title: "Confirmar eliminacion",
-      content: "Estas seguro de que deseas eliminar este producto?",
-      okText: "Si",
-      cancelText: "No",
-      onOk: async () => {
-        try {
-          await apiClient.deleteProduct(id);
-          message.success("Producto eliminado");
-          fetchProducts();
-        } catch (error) {
-          message.error("Error al eliminar producto");
-        }
-      },
-    });
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setEditingId(null);
+    resetForm();
   };
 
-  const handleReactivate = (id: string) => {
-    modal.confirm({
-      title: "Reactivar producto",
-      content:
-        "Vuelve al listado de activos y a las ventas. Las cantidades en stock que tenía al desactivarse se conservan; podés editarlas después si hace falta.",
-      okText: "Reactivar",
-      cancelText: "Cancelar",
-      onOk: async () => {
-        try {
-          await apiClient.updateProduct(id, { deactivationDate: null });
-          message.success("Producto reactivado");
-          fetchProducts();
-        } catch (error) {
-          message.error("Error al reactivar producto");
-        }
-      },
-    });
-  };
-
-  const handleSubmit = async (values: any) => {
-    if (!selectedLineId && !editingId) {
-      message.error("Seleccioná una línea de negocio");
-      return;
-    }
+  const handleSubmit = async () => {
+    const trimmedName = fname.trim();
+    if (!trimmedName) { setFnameErr(true); nameInputRef.current?.focus(); return; }
+    if (!selectedLineId && !editingId) { toast.error("Seleccioná una línea de negocio"); return; }
     setSubmitting(true);
     try {
       const data: CreateProductRequest = {
         businessLineId: selectedLineId!,
-        name: values.name,
-        unit: values.unit,
-        description: values.description,
-        categoryId: values.categoryId,
-        sku: values.sku,
-        barcode: values.barcode,
-        stock: values.stock != null && values.stock !== "" ? Number(values.stock) : 0,
+        name: trimmedName,
+        unit: funit,
+        description: fdescription || undefined,
+        categoryId: fcategoryId || undefined,
+        sku: fsku || undefined,
+        barcode: fbarcode || undefined,
+        stock: fstock ? Number(fstock) : 0,
       };
 
       if (editingId) {
         await apiClient.updateProduct(editingId, data as UpdateProductRequest);
-        message.success("Producto actualizado");
+        toast.success("Producto actualizado");
       } else {
         const created = await apiClient.createProduct(data);
 
-        // Costo: para que el producto sea utilizable en cálculos/costos asociados.
-        const costValue = values.costValue as number | undefined;
+        const costValue = fcostValue ? Number(fcostValue) : undefined;
         if (typeof costValue === "number" && Number.isFinite(costValue)) {
           const costData: CreateCostRequest = { productId: created.id, value: costValue };
           await apiClient.createCost(costData);
         }
 
-        // Precios: opcionales (mayorista/minorista/fabrica).
-        const priceFields: { field: string; description: "mayorista" | "minorista" | "fabrica" }[] = [
-          { field: "priceMayorista", description: "mayorista" },
-          { field: "priceMinorista", description: "minorista" },
-          { field: "priceFabrica", description: "fabrica" },
+        const priceFields: { val: string; description: "mayorista" | "minorista" | "fabrica" }[] = [
+          { val: fpriceMayorista, description: "mayorista" },
+          { val: fpriceMinorista, description: "minorista" },
+          { val: fpriceFabrica, description: "fabrica" },
         ];
-
         for (const pf of priceFields) {
-          const raw = values[pf.field] as number | undefined;
+          const raw = pf.val ? Number(pf.val) : undefined;
           if (typeof raw !== "number" || !Number.isFinite(raw)) continue;
           const priceData: CreatePriceRequest = { productId: created.id, value: raw, description: pf.description };
           await apiClient.createPrice(priceData);
         }
 
-        message.success("Producto creado");
+        toast.success("Producto creado");
       }
-      setModalOpen(false);
+      closeDrawer();
       fetchProducts();
-    } catch (error) {
-      message.error("Error al guardar producto");
+      fetchPricesAndCosts();
+    } catch {
+      toast.error("Error al guardar producto");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const columns = [
-    {
-      title: "Nombre",
-      dataIndex: "name",
-      key: "name",
-    },
-    {
-      title: "SKU",
-      dataIndex: "sku",
-      key: "sku",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Categoría",
-      dataIndex: ["category", "name"],
-      key: "category",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Stock",
-      dataIndex: "stock",
-      key: "stock",
-      render: (stock: number, record: Product) => {
-        const n = Number(stock);
-        return (
-          <Tag color={n < 5 ? "red" : n < 10 ? "orange" : "green"}>
-            {formatQuantity(stock)} {UNIT_SHORT_LABEL[record.unit] ?? ""}
-          </Tag>
-        );
-      },
-    },
-    {
-      title: "Acciones",
-      key: "actions",
-      width: showDeactivated ? 160 : 120,
-      render: (_: any, record: Product) => (
-        <Space>
-          <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-          {showDeactivated ? (
-            <Button
-              type="default"
-              size="small"
-              title="Reactivar"
-              icon={<UndoOutlined />}
-              onClick={() => handleReactivate(record.id)}
-            />
-          ) : (
-            <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
-          )}
-        </Space>
-      ),
-    },
-  ];
+  const stockColor = (stock: number) => {
+    const n = Number(stock);
+    if (n < 5) return { bg: "var(--ha-red-soft)", color: "var(--ha-red)" };
+    if (n < 10) return { bg: "rgba(251,146,60,0.16)", color: "var(--ha-orange)" };
+    return { bg: "var(--ha-green-soft)", color: "var(--ha-green)" };
+  };
+
+  const p = (v?: number) => v != null ? formatCurrency(v) : "–";
+
+  const openFilterSheet = () => {
+    setDraftSearch(search);
+    setDraftCategory(categoryFilter);
+    setDraftDeactivated(showDeactivated);
+    setFilterSheetOpen(true);
+  };
+
+  const applyFilters = () => {
+    setPagination((prev) => ({ ...prev, page: 1 }));
+    setSearch(draftSearch);
+    setSearchInput(draftSearch);
+    setCategoryFilter(draftCategory);
+    setShowDeactivated(draftDeactivated);
+    updateParams({
+      search: draftSearch || null,
+      category: draftCategory || null,
+      showDeactivated: draftDeactivated ? "true" : null,
+    });
+    setFilterSheetOpen(false);
+  };
 
   return (
     <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Productos</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} disabled={!selectedLineId}>
-          Nuevo Producto
-        </Button>
+      <div className="ha-page-header">
+        <h1 className="ha-pagetitle">Productos</h1>
+        <button className="ha-btn ha-btn--primary ha-desktop-only" onClick={openCreate} disabled={!selectedLineId}>
+          <Plus size={15} /> Nuevo producto
+        </button>
       </div>
 
       <ScreenInfoPanel title="¿Qué número va en «stock»?">
         <div>
           <p style={{ margin: "0 0 8px 0" }}>
-            Es <strong>cuánto tenés disponible</strong> de ese producto, en la unidad que elijas para él (el sistema no
-            guarda «kg» o «unidades» aparte: vos lo interpretás).
+            Es <strong>cuánto tenés disponible</strong> de ese producto, en la unidad que elijas para él.
           </p>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
-            <li>
-              <strong>Venta por unidad</strong> (ej. cerveza, pan en unidades): stock = cantidad de unidades (12, 50…).
-            </li>
-            <li>
-              <strong>Venta o insumo por peso/volumen</strong> (ej. tomate en kg): stock = kg o litros, podés usar
-              decimales (10,5).
-            </li>
+            <li><strong>Venta por unidad</strong> (ej. cerveza): stock = cantidad de unidades.</li>
+            <li><strong>Venta por peso/volumen</strong> (ej. tomate en kg): stock = kg o litros, decimales válidos.</li>
           </ul>
-          <p style={{ margin: "8px 0 0 0" }}>
-            Usá la <strong>misma unidad</strong> en movimientos de stock y en recetas para ese producto.
-          </p>
+          <p style={{ margin: "8px 0 0" }}>Usá la <strong>misma unidad</strong> en movimientos y recetas.</p>
         </div>
       </ScreenInfoPanel>
 
-      <Card style={{ marginBottom: "16px", background: "#1f2937", borderColor: "#2d3748" }}>
-        <Space wrap>
-          <Input.Search
-            placeholder="Buscar por nombre, SKU o código"
-            allowClear
+      {/* Desktop filters */}
+      <div className="ha-filters ha-desktop-only" style={{ marginBottom: 16 }}>
+        <div className="ha-filters__row">
+          <input
+            className="ha-filter-input"
+            style={{ width: 280 }}
+            placeholder="Buscar por nombre, SKU o código…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            onSearch={(value) => {
-              setPagination((prev) => ({ ...prev, page: 1 }));
-              const trimmed = value.trim();
-              setSearch(trimmed);
-              updateParams({ search: trimmed || null });
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const trimmed = searchInput.trim();
+                setPagination((prev) => ({ ...prev, page: 1 }));
+                setSearch(trimmed);
+                updateParams({ search: trimmed || null });
+              }
             }}
-            style={{ minWidth: 240 }}
           />
-          <Select
-            allowClear
-            placeholder="Filtrar por categoría"
-            style={{ minWidth: 200 }}
+          <select
+            className="ha-filter-input ha-select"
+            style={{ width: 200, height: 36, padding: "0 30px 0 10px" }}
             value={categoryFilter}
-            options={categories.map((c) => ({ label: c.name, value: c.id }))}
-            onChange={(value) => {
+            onChange={(e) => {
               setPagination((prev) => ({ ...prev, page: 1 }));
-              setCategoryFilter(value);
-              updateParams({ category: value ?? null });
+              setCategoryFilter(e.target.value);
+              updateParams({ category: e.target.value || null });
             }}
-          />
-          <Button
-            type={showDeactivated ? "primary" : "default"}
+          >
+            <option value="">Todas las categorías</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button
+            className={`ha-btn ${showDeactivated ? "ha-btn--primary" : "ha-btn--secondary"}`}
+            style={{ flex: "none", gap: 8 }}
             onClick={() => {
               setPagination((prev) => ({ ...prev, page: 1 }));
               const next = !showDeactivated;
@@ -362,158 +372,432 @@ function ProductsContent() {
               updateParams({ showDeactivated: next ? "true" : null });
             }}
           >
-            {showDeactivated ? "Mostrar activos" : "Mostrar desactivados"}
-          </Button>
-        </Space>
-      </Card>
+            <Eye size={15} /> Mostrar desactivados
+          </button>
+          {meta && (
+            <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--ha-text-3)", whiteSpace: "nowrap" }}>
+              {meta.total} productos
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile filter button */}
+      <div className="ha-mobile-only" style={{ marginBottom: 12 }}>
+        <button
+          onClick={openFilterSheet}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            height: 40, padding: "0 16px", border: "1.5px solid var(--ha-border-2)",
+            borderRadius: 10, background: "transparent", color: "var(--ha-text)",
+            fontSize: 14, fontWeight: 600, cursor: "pointer",
+            ...(activeFilterCount > 0 ? { borderColor: "var(--ha-amber)", color: "var(--ha-amber)" } : {}),
+          }}
+        >
+          <ListFilter size={16} />
+          Filtros
+          {activeFilterCount > 0 && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              width: 18, height: 18, borderRadius: "50%",
+              background: "var(--ha-amber)", color: "#0f1117",
+              fontSize: 11, fontWeight: 700,
+            }}>
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+        {meta && (
+          <div style={{ marginTop: 6, fontSize: 13, color: "var(--ha-text-3)" }}>
+            {meta.total} productos
+          </div>
+        )}
+      </div>
 
       {loading ? (
-        <Spin />
-      ) : products.length > 0 ? (
-        <Table
-          columns={columns}
-          dataSource={products}
-          rowKey="id"
-          style={{ backgroundColor: "#1f2937" }}
-          pagination={{
-            current: pagination.page,
-            pageSize: pagination.limit,
-            total: meta?.total || 0,
-            onChange: (page, pageSize) => {
-              setPagination({ page, limit: pageSize });
-            },
-          }}
-        />
+        <Spinner />
+      ) : products.length === 0 ? (
+        <div className="ha-empty">
+          <p className="ha-empty__t">Sin productos</p>
+          <p className="ha-empty__s">{search ? "Ningún producto coincide con la búsqueda." : "Creá el primer producto."}</p>
+        </div>
       ) : (
-        <Empty description="No hay productos" style={{ color: "#9ca3af" }} />
+        <>
+          {/* Desktop table */}
+          <div className="ha-table-wrap">
+            <table className="ha-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Categoría</th>
+                  <th>Unidad</th>
+                  <th>Stock</th>
+                  <th>Costo</th>
+                  <th>Mayorista</th>
+                  <th>Minorista</th>
+                  <th>Fábrica</th>
+                  <th>Estado</th>
+                  <th style={{ textAlign: "right" }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((prod) => {
+                  const sc = stockColor(prod.stock);
+                  const prices = priceMap[prod.id] ?? {};
+                  const isActive = !prod.deactivationDate;
+                  return (
+                    <tr key={prod.id}>
+                      <td style={{ fontWeight: 500 }}>{prod.name}</td>
+                      <td style={{ color: "var(--ha-text-2)" }}>{prod.category?.name || "—"}</td>
+                      <td style={{ color: "var(--ha-text-2)" }} className="ha-mono">{UNIT_SHORT_LABEL[prod.unit]}</td>
+                      <td>
+                        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 36, padding: "2px 8px", borderRadius: 6, fontSize: 12, fontWeight: 700, background: sc.bg, color: sc.color }}>
+                          {formatQuantity(prod.stock)}
+                        </span>
+                      </td>
+                      <td style={{ color: "var(--ha-text)" }}>{p(prices.costo)}</td>
+                      <td style={{ color: "var(--ha-text-2)" }}>{p(prices.mayorista)}</td>
+                      <td style={{ color: "var(--ha-text-2)" }}>{p(prices.minorista)}</td>
+                      <td style={{ color: "var(--ha-text-2)" }}>{p(prices.fabrica)}</td>
+                      <td>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", padding: "2px 10px",
+                          borderRadius: 999, fontSize: 12, fontWeight: 600,
+                          background: isActive ? "var(--ha-green-soft)" : "var(--ha-bg-raised)",
+                          color: isActive ? "var(--ha-green)" : "var(--ha-text-3)",
+                        }}>
+                          {isActive ? "Activo" : "Inactivo"}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                          <button
+                            onClick={() => openEdit(prod)}
+                            style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          {showDeactivated ? (
+                            <button
+                              onClick={() => { setReactivateId(prod.id); setReactivateTarget(prod.name); }}
+                              title="Reactivar"
+                              style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => { setDeleteId(prod.id); setDeleteTarget(prod.name); }}
+                              style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "1px solid var(--ha-red)", background: "transparent", borderRadius: 7, color: "var(--ha-red)", cursor: "pointer" }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="ha-cardlist">
+            {products.map((prod) => {
+              const sc = stockColor(prod.stock);
+              const prices = priceMap[prod.id] ?? {};
+              const isActive = !prod.deactivationDate;
+              return (
+                <div key={prod.id} className="ha-ordcard">
+                  <div className="ha-ordcard__top">
+                    <div>
+                      <div className="ha-ordcard__name">{prod.name}</div>
+                      <div style={{ fontSize: 12, color: "var(--ha-text-3)", marginTop: 2 }}>
+                        {[prod.category?.name, UNIT_SHORT_LABEL[prod.unit]].filter(Boolean).join(" · ")}
+                      </div>
+                    </div>
+                    <span style={{
+                      padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600, flexShrink: 0,
+                      background: isActive ? "var(--ha-green-soft)" : "var(--ha-bg-raised)",
+                      color: isActive ? "var(--ha-green)" : "var(--ha-text-3)",
+                    }}>
+                      {isActive ? "Activo" : "Inactivo"}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 36, padding: "4px 10px", borderRadius: 8, fontSize: 13, fontWeight: 700, background: sc.bg, color: sc.color }}>
+                      {formatQuantity(prod.stock)}
+                    </span>
+                    {prices.mayorista != null && (
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--ha-text)" }}>
+                        {formatCurrency(prices.mayorista)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="ha-ordcard__actions">
+                    <button className="ha-actbtn" onClick={() => openEdit(prod)}>
+                      <Pencil size={15} />
+                    </button>
+                    {showDeactivated ? (
+                      <button className="ha-actbtn" onClick={() => { setReactivateId(prod.id); setReactivateTarget(prod.name); }}>
+                        <RotateCcw size={15} />
+                      </button>
+                    ) : (
+                      <button
+                        className="ha-actbtn"
+                        onClick={() => { setDeleteId(prod.id); setDeleteTarget(prod.name); }}
+                        style={{ borderColor: "var(--ha-red)", color: "var(--ha-red)" }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Pagination */}
+          {meta && (
+            <Paginator
+              page={pagination.page}
+              totalPages={meta.totalPages}
+              total={meta.total}
+              label="productos"
+              onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+            />
+          )}
+        </>
       )}
 
-      <Modal
-        title={editingId ? "Editar Producto" : "Nuevo Producto"}
-        open={modalOpen}
-        onOk={() => form.submit()}
-        onCancel={() => setModalOpen(false)}
-        okButtonProps={{ loading: submitting, disabled: submitting }}
-        width="min(92vw, 760px)"
-        centered
-        classNames={{ body: "app-panel-scroll" }}
-        styles={{
-          body: {
-            maxHeight: "calc(100vh - 200px)",
-            overflowY: "auto",
-            paddingRight: 8,
-            paddingTop: 16,
-          },
-        }}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Row gutter={[16, 0]}>
-            <Col xs={24} sm={16}>
-              <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "El nombre es requerido" }]}>
-                <Input placeholder="Nombre del producto" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Form.Item name="unit" label="Unidad" initialValue={ProductUnit.UNIT}>
-                <Select placeholder="Unidad" options={PRODUCT_UNIT_OPTIONS} />
-              </Form.Item>
-            </Col>
-          </Row>
+      {/* FAB — mobile */}
+      <button className="ha-fab" onClick={openCreate} aria-label="Nuevo producto">
+        <Plus size={24} />
+      </button>
 
-          <Row gutter={[16, 0]}>
-            <Col xs={24} sm={12}>
-              <Form.Item name="categoryId" label="Categoría">
-                <Select
-                  placeholder="Selecciona una categoría"
-                  options={categories.map((c) => ({ label: c.name, value: c.id }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                name="stock"
-                label="Stock inicial"
-                extra="Unidades, kg o l según la unidad elegida."
-              >
-                <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 12 o 10,5" style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={[16, 0]}>
-            <Col xs={24} sm={12}>
-              <Form.Item name="sku" label="SKU">
-                <Input placeholder="SKU" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="barcode" label="Código de Barras">
-                <Input placeholder="Código de barras" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item name="description" label="Descripción">
-            <Input.TextArea placeholder="Descripción (opcional)" rows={2} />
-          </Form.Item>
-
-          {!editingId && (
-            <div
-              style={{
-                marginTop: 4,
-                marginBottom: 8,
-                padding: "16px 16px 4px",
-                borderRadius: 8,
-                border: "1px solid #2d3748",
-                background: "rgba(255,255,255,0.02)",
-              }}
-            >
-              <div style={{ marginBottom: 16, color: "#ffffff", fontWeight: 600, fontSize: 13, letterSpacing: "0.02em" }}>
-                Costo y precios
-              </div>
-
-              <Row gutter={[16, 0]}>
-                <Col xs={24} sm={12}>
-                  <Form.Item
-                    name="costValue"
-                    label="Costo por unidad"
-                    rules={[{ required: true, message: "El costo es requerido" }]}
-                  >
-                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1200" style={{ width: "100%" }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Row gutter={[16, 0]}>
-                <Col xs={24} sm={8}>
-                  <Form.Item name="priceMayorista" label="Mayorista">
-                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1500" style={{ width: "100%" }} />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} sm={8}>
-                  <Form.Item name="priceMinorista" label="Minorista">
-                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1800" style={{ width: "100%" }} />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} sm={8}>
-                  <Form.Item name="priceFabrica" label="Fábrica">
-                    <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1300" style={{ width: "100%" }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <ScreenInfoPanel
-                title="Sobre costos y precios en este formulario"
-                style={{ marginBottom: 12, marginTop: 0 }}
-              >
-                <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
-                  Si dejás algún precio vacío, podés cargarlo después en la pantalla de <strong>Precios</strong>.
-                </span>
-              </ScreenInfoPanel>
+      {/* Mobile filter sheet */}
+      {filterSheetOpen && (
+        <>
+          <div className="ha-sheet-back" onClick={() => setFilterSheetOpen(false)} />
+          <div className="ha-sheet">
+            <div className="ha-sheet__handle" />
+            <div className="ha-sheet__head">
+              <span className="ha-sheet__title">Filtros</span>
+              <button className="ha-iconbtn" onClick={() => setFilterSheetOpen(false)} aria-label="Cerrar">
+                <X size={18} />
+              </button>
             </div>
-          )}
-        </Form>
-      </Modal>
+            <div className="ha-sheet__body">
+              <div className="ha-field">
+                <div style={{ position: "relative" }}>
+                  <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--ha-text-3)", pointerEvents: "none" }} />
+                  <input
+                    className="ha-input"
+                    style={{ paddingLeft: 36 }}
+                    placeholder="Buscar productos…"
+                    value={draftSearch}
+                    onChange={(e) => setDraftSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="ha-field" style={{ marginTop: 12 }}>
+                <select
+                  className="ha-input ha-select"
+                  value={draftCategory}
+                  onChange={(e) => setDraftCategory(e.target.value)}
+                >
+                  <option value="">Todas las categorías</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <button
+                onClick={() => setDraftDeactivated((v) => !v)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12, width: "100%",
+                  marginTop: 12, padding: "12px 14px", border: "1px solid var(--ha-border)",
+                  borderRadius: 10, background: draftDeactivated ? "var(--ha-amber-soft)" : "var(--ha-bg-raised)",
+                  color: draftDeactivated ? "var(--ha-amber)" : "var(--ha-text-2)",
+                  cursor: "pointer", fontSize: 14, fontWeight: 500,
+                }}
+              >
+                <Eye size={16} />
+                Mostrar desactivados
+              </button>
+            </div>
+            <div className="ha-sheet__foot">
+              <button className="ha-btn ha-btn--primary" onClick={applyFilters}>
+                Aplicar filtros
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Drawer — create / edit */}
+      {drawerOpen && (
+        <>
+          <div className="ha-overlay" onClick={closeDrawer} />
+          <div className="ha-drawer" style={{ width: "min(90vw, 520px)" }}>
+            <div className="ha-drawer__head">
+              <span className="ha-drawer__title">{editingId ? "Editar producto" : "Nuevo producto"}</span>
+              <button className="ha-iconbtn" onClick={closeDrawer} aria-label="Cerrar"><X size={18} /></button>
+            </div>
+            <div className="ha-drawer__body">
+              <div className="ha-formgrid">
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 12 }}>
+                  <div className="ha-field">
+                    <label className="ha-label">Nombre <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                    <input
+                      ref={nameInputRef}
+                      className={`ha-input${fnameErr ? " ha-input--error" : ""}`}
+                      placeholder="Nombre del producto"
+                      value={fname}
+                      onChange={(e) => { setFname(e.target.value); if (fnameErr) setFnameErr(false); }}
+                    />
+                    {fnameErr && <span className="ha-error">El nombre es obligatorio.</span>}
+                  </div>
+                  <div className="ha-field">
+                    <label className="ha-label">Unidad</label>
+                    <select className="ha-input ha-select" value={funit} onChange={(e) => setFunit(e.target.value as ProductUnit)}>
+                      {PRODUCT_UNIT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="ha-field">
+                    <label className="ha-label">Categoría</label>
+                    <select className="ha-input ha-select" value={fcategoryId} onChange={(e) => setFcategoryId(e.target.value)}>
+                      <option value="">Sin categoría</option>
+                      {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="ha-field">
+                    <label className="ha-label">Stock inicial</label>
+                    <input type="number" className="ha-input" placeholder="Ej. 12 o 10.5" min={0} step={0.01} value={fstock} onChange={(e) => setFstock(e.target.value)} />
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="ha-field">
+                    <label className="ha-label">SKU</label>
+                    <input className="ha-input" placeholder="SKU" value={fsku} onChange={(e) => setFsku(e.target.value)} />
+                  </div>
+                  <div className="ha-field">
+                    <label className="ha-label">Código de barras</label>
+                    <input className="ha-input" placeholder="Código de barras" value={fbarcode} onChange={(e) => setFbarcode(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="ha-field">
+                  <label className="ha-label">Descripción</label>
+                  <textarea className="ha-textarea" placeholder="Descripción (opcional)" rows={2} value={fdescription} onChange={(e) => setFdescription(e.target.value)} />
+                </div>
+
+                {!editingId && (
+                  <div style={{ border: "1px solid var(--ha-border)", borderRadius: 8, padding: 16 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, letterSpacing: "0.02em", marginBottom: 14, color: "var(--ha-text)" }}>
+                      Costo y precios
+                    </div>
+                    <div className="ha-formgrid">
+                      <div className="ha-field">
+                        <label className="ha-label">Costo por unidad</label>
+                        <input type="number" className="ha-input" placeholder="Ej: 1200" min={0} step={0.01} value={fcostValue} onChange={(e) => setFcostValue(e.target.value)} />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                        <div className="ha-field">
+                          <label className="ha-label">Mayorista</label>
+                          <input type="number" className="ha-input" placeholder="Precio" min={0} step={0.01} value={fpriceMayorista} onChange={(e) => setFpriceMayorista(e.target.value)} />
+                        </div>
+                        <div className="ha-field">
+                          <label className="ha-label">Minorista</label>
+                          <input type="number" className="ha-input" placeholder="Precio" min={0} step={0.01} value={fpriceMinorista} onChange={(e) => setFpriceMinorista(e.target.value)} />
+                        </div>
+                        <div className="ha-field">
+                          <label className="ha-label">Fábrica</label>
+                          <input type="number" className="ha-input" placeholder="Precio" min={0} step={0.01} value={fpriceFabrica} onChange={(e) => setFpriceFabrica(e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+                    <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--ha-text-3)" }}>
+                      Si dejás algún precio vacío, podés cargarlo después en la pantalla de <strong style={{ color: "var(--ha-text-2)" }}>Precios</strong>.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="ha-drawer__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={closeDrawer}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Delete dialog */}
+      {deleteId && (
+        <div className="ha-dialog-back" onClick={() => setDeleteId(null)}>
+          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="ha-dialog__head">
+              <h3 className="ha-dialog__title">¿Eliminar producto?</h3>
+              <p className="ha-dialog__sub">Esta acción no puede deshacerse.</p>
+            </div>
+            <div className="ha-dialog__body">
+              <p style={{ color: "var(--ha-text-2)", margin: 0, fontSize: 14 }}>
+                Se eliminará <strong style={{ color: "var(--ha-text)" }}>{deleteTarget}</strong>.
+              </p>
+            </div>
+            <div className="ha-dialog__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
+              <button className="ha-btn ha-btn--destructive" onClick={async () => {
+                try {
+                  await apiClient.deleteProduct(deleteId!);
+                  toast.success("Producto eliminado");
+                  setDeleteId(null);
+                  fetchProducts();
+                } catch {
+                  toast.error("Error al eliminar producto");
+                  setDeleteId(null);
+                }
+              }}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reactivate dialog */}
+      {reactivateId && (
+        <div className="ha-dialog-back" onClick={() => setReactivateId(null)}>
+          <div className="ha-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="ha-dialog__head">
+              <h3 className="ha-dialog__title">Reactivar producto</h3>
+              <p className="ha-dialog__sub">Vuelve al listado de activos y a las ventas.</p>
+            </div>
+            <div className="ha-dialog__body">
+              <p style={{ color: "var(--ha-text-2)", margin: 0, fontSize: 14 }}>
+                Las cantidades en stock que tenía <strong style={{ color: "var(--ha-text)" }}>{reactivateTarget}</strong> al desactivarse se conservan.
+              </p>
+            </div>
+            <div className="ha-dialog__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setReactivateId(null)}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={async () => {
+                try {
+                  await apiClient.updateProduct(reactivateId!, { deactivationDate: null });
+                  toast.success("Producto reactivado");
+                  setReactivateId(null);
+                  fetchProducts();
+                } catch {
+                  toast.error("Error al reactivar producto");
+                  setReactivateId(null);
+                }
+              }}>Reactivar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

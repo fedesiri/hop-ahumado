@@ -1,12 +1,12 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { OrderDetailView } from "@/components/orders/order-detail-view";
 import { apiClient } from "@/lib/api-client";
-import { ArrowLeftOutlined } from "@ant-design/icons";
-import { App, Button, Card, Spin } from "antd";
+import { toast } from "@/lib/toast";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import { Spinner } from "@/components/spinner";
 import type { Order } from "@/lib/types";
 
 interface OrderDetailPageProps {
@@ -15,15 +15,10 @@ interface OrderDetailPageProps {
 
 export default function OrderDetailPage({ params }: OrderDetailPageProps) {
   const { id } = use(params);
-  return (
-    <AppLayout>
-        <OrderDetailContent id={id} />
-      </AppLayout>
-  );
+  return <OrderDetailContent id={id} />;
 }
 
 function OrderDetailContent({ id }: { id: string }) {
-  const { message } = App.useApp();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -32,9 +27,8 @@ function OrderDetailContent({ id }: { id: string }) {
     try {
       const data = await apiClient.getOrder(id);
       setOrder(data);
-    } catch (error) {
-      console.error(error);
-      message.error("Error al cargar la orden");
+    } catch {
+      toast.error("Error al cargar la orden");
     } finally {
       setLoading(false);
     }
@@ -42,49 +36,37 @@ function OrderDetailContent({ id }: { id: string }) {
 
   useEffect(() => {
     void loadOrder();
-  }, [id, message]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   if (loading) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
-        <Spin size="large" />
-      </div>
-    );
+    return <Spinner />;
   }
 
   if (!order) {
     return (
       <div>
         <div style={{ marginBottom: 16 }}>
-          <Link href="/orders">
-            <Button icon={<ArrowLeftOutlined />}>Volver al listado</Button>
+          <Link href="/orders" className="ha-btn ha-btn--secondary ha-btn--sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
+            <ArrowLeft size={15} /> Volver al listado
           </Link>
         </div>
-        <Card style={{ background: "#1f2937" }}>
-          <p style={{ color: "#9ca3af" }}>No se encontró la orden.</p>
-        </Card>
+        <div style={{ background: "var(--ha-bg-card)", border: "1px solid var(--ha-border)", borderRadius: 12, padding: 24 }}>
+          <p style={{ color: "var(--ha-text-3)", margin: 0 }}>No se encontró la orden.</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div>
-      <div
-        style={{
-          marginBottom: 24,
-          display: "flex",
-          flexWrap: "wrap",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
+      <div style={{ marginBottom: 24, display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <div>
-          <h1 style={{ margin: 0, color: "#ffffff" }}>Orden {order.id.slice(0, 8)}…</h1>
-          <p style={{ margin: 0, color: "#9ca3af" }}>Creada: {new Date(order.createdAt).toLocaleString("es-AR")}</p>
+          <h1 style={{ margin: 0, color: "var(--ha-text)", fontSize: 22, fontWeight: 700 }}>Orden {order.id.slice(0, 8)}…</h1>
+          <p style={{ margin: 0, color: "var(--ha-text-3)", fontSize: 13 }}>Creada: {new Date(order.createdAt).toLocaleString("es-AR")}</p>
         </div>
-        <Link href="/orders">
-          <Button icon={<ArrowLeftOutlined />}>Volver al listado</Button>
+        <Link href="/orders" className="ha-btn ha-btn--secondary ha-btn--sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
+          <ArrowLeft size={15} /> Volver al listado
         </Link>
       </div>
 

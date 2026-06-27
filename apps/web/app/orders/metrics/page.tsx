@@ -1,26 +1,24 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
 import { apiClient } from "@/lib/api-client";
 import type { Dayjs } from "@/lib/dayjs";
 import dayjs from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
+import { toast } from "@/lib/toast";
 import type { Order } from "@/lib/types";
-import { useMediaQuery } from "@/lib/use-media-query";
-import { App, Button, Card, DatePicker, Select, Space, Spin } from "antd";
-import Link from "next/link";
+import { Spinner } from "@/components/spinner";
+import { RefreshCw } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-type PeriodPreset = "all" | "last3m" | "last12m" | "thisYear" | "custom";
+type PeriodPreset = "last3m" | "last12m" | "thisYear" | "all" | "custom";
 
-const PERIOD_OPTIONS: { value: PeriodPreset; label: string }[] = [
-  { value: "all", label: "Todo el período cargado" },
+const PERIOD_SEGS: { value: PeriodPreset; label: string }[] = [
   { value: "last3m", label: "Últimos 3 meses" },
   { value: "last12m", label: "Últimos 12 meses" },
-  { value: "thisYear", label: "Año actual" },
-  { value: "custom", label: "Rango libre…" },
+  { value: "thisYear", label: "Este año" },
+  { value: "all", label: "Todo el historial" },
+  { value: "custom", label: "Personalizado" },
 ];
 
 function formatMonthEs(monthValue?: string): string {
@@ -30,7 +28,11 @@ function formatMonthEs(monthValue?: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString("es-AR", { month: "long", year: "numeric" });
 }
 
-function ordersInPreset(orders: Order[], preset: PeriodPreset, customRange: [Dayjs, Dayjs] | null): Order[] {
+function ordersInPreset(
+  orders: Order[],
+  preset: PeriodPreset,
+  customRange: [Dayjs, Dayjs] | null,
+): Order[] {
   const now = dayjs();
   return orders.filter((order) => {
     const t = dayjs(order.createdAt);
@@ -46,7 +48,10 @@ function ordersInPreset(orders: Order[], preset: PeriodPreset, customRange: [Day
         return !t.isBefore(now.startOf("year"));
       case "custom": {
         if (!customRange?.[0] || !customRange?.[1]) return true;
-        return !t.isBefore(customRange[0].startOf("day")) && !t.isAfter(customRange[1].endOf("day"));
+        return (
+          !t.isBefore(customRange[0].startOf("day")) &&
+          !t.isAfter(customRange[1].endOf("day"))
+        );
       }
       default:
         return true;
@@ -54,24 +59,40 @@ function ordersInPreset(orders: Order[], preset: PeriodPreset, customRange: [Day
   });
 }
 
+function pctChange(b: number, a: number): number | null {
+  return a > 0 ? Math.round(((b - a) / a) * 100) : null;
+}
+
+function trendClass(pct: number | null): string {
+  if (pct === null || pct === 0) return "me-tag me-tag--muted";
+  return pct > 0 ? "me-tag me-tag--green" : "me-tag me-tag--red";
+}
+
+function trendLabel(pct: number | null): string {
+  if (pct === null) return "—";
+  return pct >= 0 ? `↑ ${pct}%` : `↓ ${Math.abs(pct)}%`;
+}
+
 export default function OrdersMetricsPage() {
-  return (
-    <AppLayout>
-      <OrdersMetricsContent />
-    </AppLayout>
-  );
+  return <OrdersMetricsContent />;
 }
 
 function OrdersMetricsContent() {
-  const { message } = App.useApp();
   const { selectedLineId } = useLineContext();
-  const isMobile = useMediaQuery("(max-width: 768px)");
   const [metricsOrders, setMetricsOrders] = useState<Order[]>([]);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("last12m");
-  const [customRange, setCustomRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [compareMonthA, setCompareMonthA] = useState<string | undefined>(undefined);
   const [compareMonthB, setCompareMonthB] = useState<string | undefined>(undefined);
+
+  const customRange: [Dayjs, Dayjs] | null = useMemo(() => {
+    if (!customFrom || !customTo) return null;
+    const a = dayjs(customFrom);
+    const b = dayjs(customTo);
+    return a.isValid() && b.isValid() ? [a, b] : null;
+  }, [customFrom, customTo]);
 
   const fetchAllOrdersForMetrics = async () => {
     try {
@@ -81,14 +102,17 @@ function OrdersMetricsContent() {
       const limit = 100;
       const bId = selectedLineId ?? undefined;
       while (true) {
-        const response = await apiClient.getOrders(page, limit, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, bId);
+        const response = await apiClient.getOrders(
+          page, limit, undefined, undefined, undefined,
+          undefined, undefined, undefined, undefined, undefined, bId,
+        );
         all.push(...response.data);
         if (page >= response.meta.totalPages || response.data.length === 0) break;
         page += 1;
       }
       setMetricsOrders(all);
     } catch {
-      message.error("Error al cargar métricas globales de órdenes");
+      toast.error("Error al cargar métricas de órdenes");
     } finally {
       setMetricsLoading(false);
     }
@@ -126,14 +150,41 @@ function OrdersMetricsContent() {
     [metricsOrders, periodPreset, customRange],
   );
 
-  const periodLabel =
-    PERIOD_OPTIONS.find((o) => o.value === periodPreset)?.label ??
-    (periodPreset === "custom" && customRange
-      ? `${customRange[0].format("DD/MM/YY")} – ${customRange[1].format("DD/MM/YY")}`
-      : "");
+  const previousPeriodOrders = useMemo(() => {
+    const now = dayjs();
+    switch (periodPreset) {
+      case "last3m": {
+        const start = now.subtract(5, "month").startOf("month");
+        const end = now.subtract(3, "month").endOf("month");
+        return metricsOrders.filter((o) => {
+          const t = dayjs(o.createdAt);
+          return t.isValid() && !t.isBefore(start) && !t.isAfter(end);
+        });
+      }
+      case "last12m": {
+        const start = now.subtract(23, "month").startOf("month");
+        const end = now.subtract(12, "month").endOf("month");
+        return metricsOrders.filter((o) => {
+          const t = dayjs(o.createdAt);
+          return t.isValid() && !t.isBefore(start) && !t.isAfter(end);
+        });
+      }
+      case "thisYear": {
+        const y = now.year() - 1;
+        const yearStart = dayjs().year(y).startOf("year");
+        const yearEnd = dayjs().year(y).month(now.month()).endOf("month");
+        return metricsOrders.filter((o) => {
+          const t = dayjs(o.createdAt);
+          return t.isValid() && !t.isBefore(yearStart) && !t.isAfter(yearEnd);
+        });
+      }
+      default:
+        return [];
+    }
+  }, [metricsOrders, periodPreset]);
 
   const metricsTotalAmount = useMemo(
-    () => filteredOrders.reduce((sum, order) => sum + Number(order.totalPrice ?? 0), 0),
+    () => filteredOrders.reduce((sum, o) => sum + Number(o.totalPrice ?? 0), 0),
     [filteredOrders],
   );
   const metricsAvgTicket = useMemo(
@@ -141,24 +192,70 @@ function OrdersMetricsContent() {
     [filteredOrders, metricsTotalAmount],
   );
 
+  const kpiTrends = useMemo(() => {
+    if (previousPeriodOrders.length === 0) return null;
+    const prevTotal = previousPeriodOrders.reduce((s, o) => s + Number(o.totalPrice ?? 0), 0);
+    const prevAvg = prevTotal / previousPeriodOrders.length;
+    return {
+      count: pctChange(filteredOrders.length, previousPeriodOrders.length),
+      amount: pctChange(metricsTotalAmount, prevTotal),
+      avg: pctChange(metricsAvgTicket, prevAvg),
+    };
+  }, [previousPeriodOrders, filteredOrders.length, metricsTotalAmount, metricsAvgTicket]);
+
+  const periodRangeLabel = useMemo(() => {
+    const now = dayjs();
+    switch (periodPreset) {
+      case "last3m":
+        return `${now.subtract(2, "month").startOf("month").format("MMM YYYY")} – ${now.format("MMM YYYY")}`;
+      case "last12m":
+        return `${now.subtract(11, "month").startOf("month").format("MMM YYYY")} – ${now.format("MMM YYYY")}`;
+      case "thisYear":
+        return `Ene ${now.year()} – ${now.format("MMM YYYY")}`;
+      case "all":
+        return metricsOrders.length > 0 ? "Todo el historial" : "";
+      case "custom":
+        return customRange
+          ? `${customRange[0].format("DD/MM/YY")} – ${customRange[1].format("DD/MM/YY")}`
+          : "Seleccioná un rango";
+      default:
+        return "";
+    }
+  }, [periodPreset, customRange, metricsOrders.length]);
+
   const monthlyOrdersSeries = useMemo(() => {
     const map = new Map<string, { month: string; monthSort: string; orders: number }>();
-    const MAX_MONTHS = 36;
     for (const order of filteredOrders) {
       const d = dayjs(order.createdAt);
       if (!d.isValid()) continue;
       const monthSort = d.format("YYYY-MM");
-      const monthLabel = new Date(d.year(), d.month(), 1).toLocaleDateString("es-AR", {
-        month: "short",
-        year: "2-digit",
-      });
+      const raw = new Date(d.year(), d.month(), 1)
+        .toLocaleDateString("es-AR", { month: "short" })
+        .replace(".", "");
+      const monthLabel = raw.charAt(0).toUpperCase() + raw.slice(1, 3);
       const cur = map.get(monthSort) ?? { month: monthLabel, monthSort, orders: 0 };
       cur.orders += 1;
       map.set(monthSort, cur);
     }
-    const sorted = Array.from(map.values()).sort((a, b) => a.monthSort.localeCompare(b.monthSort));
-    return sorted.slice(-Math.min(sorted.length, MAX_MONTHS));
+    return Array.from(map.values())
+      .sort((a, b) => a.monthSort.localeCompare(b.monthSort))
+      .slice(-36);
   }, [filteredOrders]);
+
+  const barChartData = useMemo(() => {
+    if (monthlyOrdersSeries.length === 0) return { bars: [], yMax: 0, ySteps: [0, 0, 0] };
+    const maxOrders = Math.max(...monthlyOrdersSeries.map((m) => m.orders));
+    const yMax = Math.ceil(maxOrders / 5) * 5 || 5;
+    const step = yMax / 3;
+    return {
+      bars: monthlyOrdersSeries.map((m) => ({
+        ...m,
+        heightPct: `${Math.round((m.orders / yMax) * 100)}%`,
+      })),
+      yMax,
+      ySteps: [yMax, Math.round(yMax - step), Math.round(yMax - 2 * step)],
+    };
+  }, [monthlyOrdersSeries]);
 
   const topItemsSeries = useMemo(() => {
     const unitsByName = new Map<string, number>();
@@ -174,404 +271,331 @@ function OrdersMetricsContent() {
       .slice(0, 10);
   }, [filteredOrders]);
 
+  const topItemsMax = useMemo(
+    () => (topItemsSeries.length > 0 ? topItemsSeries[0].units : 1),
+    [topItemsSeries],
+  );
+
   const comparisonKpis = useMemo(() => {
     if (!compareMonthA || !compareMonthB) return null;
-    const countMonth = (key: string) =>
-      metricsOrders.filter((order) => dayjs(order.createdAt).format("YYYY-MM") === key).length;
-    const amountMonth = (key: string) =>
-      metricsOrders
-        .filter((order) => dayjs(order.createdAt).format("YYYY-MM") === key)
-        .reduce((s, o) => s + Number(o.totalPrice ?? 0), 0);
-    const aCount = countMonth(compareMonthA);
-    const bCount = countMonth(compareMonthB);
-    const aAmt = amountMonth(compareMonthA);
-    const bAmt = amountMonth(compareMonthB);
-    return { aCount, bCount, deltaCount: aCount - bCount, aAmt, bAmt, deltaAmt: aAmt - bAmt };
+    const forMonth = (key: string) =>
+      metricsOrders.filter((o) => dayjs(o.createdAt).format("YYYY-MM") === key);
+    const aOrders = forMonth(compareMonthA);
+    const bOrders = forMonth(compareMonthB);
+    const aAmt = aOrders.reduce((s, o) => s + Number(o.totalPrice ?? 0), 0);
+    const bAmt = bOrders.reduce((s, o) => s + Number(o.totalPrice ?? 0), 0);
+    const aAvg = aOrders.length > 0 ? aAmt / aOrders.length : 0;
+    const bAvg = bOrders.length > 0 ? bAmt / bOrders.length : 0;
+    return {
+      aCount: aOrders.length, bCount: bOrders.length,
+      aAmt, bAmt, aAvg, bAvg,
+      countPct: pctChange(bOrders.length, aOrders.length),
+      amtPct: pctChange(bAmt, aAmt),
+      avgPct: pctChange(bAvg, aAvg),
+    };
   }, [compareMonthA, compareMonthB, metricsOrders]);
 
   const itemComparisonByMonth = useMemo(() => {
     if (!compareMonthA || !compareMonthB) return [];
-    const byMonthLine = new Map<string, Map<string, number>>();
+    const byMonth = new Map<string, Map<string, number>>();
     const addUnit = (monthKey: string, itemName: string, qty: number) => {
-      const inner = byMonthLine.get(monthKey) ?? new Map<string, number>();
+      const inner = byMonth.get(monthKey) ?? new Map<string, number>();
       inner.set(itemName, (inner.get(itemName) ?? 0) + qty);
-      byMonthLine.set(monthKey, inner);
+      byMonth.set(monthKey, inner);
     };
     for (const order of metricsOrders) {
       const monthKey = dayjs(order.createdAt).format("YYYY-MM");
       if (monthKey !== compareMonthA && monthKey !== compareMonthB) continue;
       for (const item of order.orderItems ?? []) {
-        addUnit(monthKey, item.product?.name ?? "Ítem sin nombre", Number(item.quantity ?? 0));
+        addUnit(
+          monthKey,
+          item.product?.name ?? "Ítem sin nombre",
+          Number(item.quantity ?? 0),
+        );
       }
     }
-    const ma = byMonthLine.get(compareMonthA) ?? new Map();
-    const mb = byMonthLine.get(compareMonthB) ?? new Map();
-    const names = [...new Set([...ma.keys(), ...mb.keys()])]
-      .map((name) => ({ name, sum: (ma.get(name) ?? 0) + (mb.get(name) ?? 0) }))
-      .sort((x, y) => y.sum - x.sum)
-      .slice(0, 10)
-      .map((row) => row.name);
-    return names.map((name) => ({
-      name,
-      monthAUnits: ma.get(name) ?? 0,
-      monthBUnits: mb.get(name) ?? 0,
-    }));
+    const ma = byMonth.get(compareMonthA) ?? new Map<string, number>();
+    const mb = byMonth.get(compareMonthB) ?? new Map<string, number>();
+    return [...new Set([...ma.keys(), ...mb.keys()])]
+      .map((name) => ({ name, aUnits: ma.get(name) ?? 0, bUnits: mb.get(name) ?? 0 }))
+      .sort((x, y) => (y.aUnits + y.bUnits) - (x.aUnits + x.bUnits))
+      .slice(0, 10);
   }, [compareMonthA, compareMonthB, metricsOrders]);
 
-  const compareMonthALabel = compareMonthA ? formatMonthEs(compareMonthA) : "Mes A";
-  const compareMonthBLabel = compareMonthB ? formatMonthEs(compareMonthB) : "Mes B";
+  const compareMonthALabel = compareMonthA ? formatMonthEs(compareMonthA) : "Mes base";
+  const compareMonthBLabel = compareMonthB ? formatMonthEs(compareMonthB) : "Mes a comparar";
 
-  const globalItemsBarMinWidthPx = useMemo(() => {
-    if (!isMobile || topItemsSeries.length === 0) return null as number | null;
-    const longest = topItemsSeries.reduce((m, r) => Math.max(m, r.name?.length ?? 0), 8);
-    return Math.min(780, Math.max(300, longest * 6.5 + 200));
-  }, [isMobile, topItemsSeries]);
-
-  const globalItemsYAxisWidth = useMemo(() => {
-    const longest = topItemsSeries.reduce((m, r) => Math.max(m, r.name?.length ?? 0), 8);
-    if (!isMobile) return Math.min(200, longest * 5.5 + 24);
-    return Math.min(300, Math.max(120, longest * 6));
-  }, [isMobile, topItemsSeries]);
-
-  const globalMonthlyMinWidthPx = useMemo(() => {
-    if (!isMobile || monthlyOrdersSeries.length === 0) return null as number | null;
-    return Math.min(980, Math.max(300, monthlyOrdersSeries.length * 52 + 40));
-  }, [isMobile, monthlyOrdersSeries]);
-
-  const globalComparisonMinWidthPx = useMemo(() => {
-    if (!isMobile || itemComparisonByMonth.length === 0) return null as number | null;
-    const n = itemComparisonByMonth.length;
-    const longest = itemComparisonByMonth.reduce((m, r) => Math.max(m, r.name?.length ?? 0), 6);
-    return Math.min(900, Math.max(320, n * 64 + longest * 4 + 40));
-  }, [isMobile, itemComparisonByMonth]);
-
-  const kpiAnalysis = useMemo(() => {
-    if (filteredOrders.length === 0) return null;
-    return `${filteredOrders.length} orden${filteredOrders.length !== 1 ? "es" : ""} en el período, con una facturación total de ${formatCurrency(metricsTotalAmount)} y un ticket promedio de ${formatCurrency(metricsAvgTicket)}.`;
-  }, [filteredOrders.length, metricsTotalAmount, metricsAvgTicket]);
-
-  const monthlyAnalysis = useMemo(() => {
-    if (monthlyOrdersSeries.length === 0) return null;
-    const sorted = [...monthlyOrdersSeries].sort((a, b) => b.orders - a.orders);
-    const best = sorted[0];
-    const worst = sorted[sorted.length - 1];
-    const last3 = monthlyOrdersSeries.slice(-3);
-    const prev3 = monthlyOrdersSeries.slice(-6, -3);
-    let trend = "";
-    if (last3.length === 3 && prev3.length >= 2) {
-      const lastAvg = last3.reduce((s, m) => s + m.orders, 0) / 3;
-      const prevAvg = prev3.reduce((s, m) => s + m.orders, 0) / prev3.length;
-      if (lastAvg > prevAvg * 1.1) trend = "La tendencia de los últimos 3 meses es al alza.";
-      else if (lastAvg < prevAvg * 0.9) trend = "La tendencia de los últimos 3 meses es a la baja.";
-      else trend = "La tendencia de los últimos 3 meses es estable.";
-    }
-    return { best, worst, trend };
-  }, [monthlyOrdersSeries]);
-
-  const topItemsAnalysis = useMemo(() => {
-    if (topItemsSeries.length === 0) return null;
-    const total = topItemsSeries.reduce((s, i) => s + i.units, 0);
-    const top3Total = topItemsSeries.slice(0, 3).reduce((s, i) => s + i.units, 0);
-    const top3Pct = total > 0 ? Math.round((top3Total / total) * 100) : 0;
-    return { top: topItemsSeries[0], top3Pct, total };
-  }, [topItemsSeries]);
-
-  const comparisonAnalysis = useMemo(() => {
-    if (!comparisonKpis || itemComparisonByMonth.length === 0) return null;
-    const grew = [...itemComparisonByMonth].sort(
-      (a, b) => b.monthAUnits - b.monthBUnits - (a.monthAUnits - a.monthBUnits),
-    )[0];
-    const fell = [...itemComparisonByMonth].sort(
-      (a, b) => a.monthAUnits - a.monthBUnits - (b.monthAUnits - b.monthBUnits),
-    )[0];
-    const pctCount =
-      comparisonKpis.bCount > 0
-        ? Math.round(((comparisonKpis.aCount - comparisonKpis.bCount) / comparisonKpis.bCount) * 100)
-        : null;
-    const pctAmt =
-      comparisonKpis.bAmt > 0
-        ? Math.round(((comparisonKpis.aAmt - comparisonKpis.bAmt) / comparisonKpis.bAmt) * 100)
-        : null;
-    return { grew, fell, pctCount, pctAmt };
-  }, [comparisonKpis, itemComparisonByMonth]);
+  if (metricsLoading && metricsOrders.length === 0) {
+    return <Spinner />;
+  }
 
   return (
-    <div style={{ width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box" }}>
+    <div style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}>
+      <h1 className="me-pagetitle">Métricas de Órdenes</h1>
 
-      <div
-        style={{
-          marginBottom: "24px",
-          display: "flex",
-          flexWrap: "wrap",
-          justifyContent: "space-between",
-          alignItems: isMobile ? "stretch" : "center",
-          gap: 12,
-          flexDirection: isMobile ? "column" : "row",
-        }}
-      >
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Órdenes — Métricas</h1>
-        <Space
-          wrap={!isMobile}
-          direction={isMobile ? "vertical" : "horizontal"}
-          style={isMobile ? { width: "100%" } : undefined}
-        >
-          <Link href="/orders" style={isMobile ? { width: "100%" } : undefined}>
-            <Button block={isMobile}>Ir al listado</Button>
-          </Link>
-          <Link href="/orders/calculator" style={isMobile ? { width: "100%" } : undefined}>
-            <Button type="primary" block={isMobile}>
-              Nueva orden
-            </Button>
-          </Link>
-          <Button onClick={() => void fetchAllOrdersForMetrics()} loading={metricsLoading} block={isMobile}>
-            Actualizar datos
-          </Button>
-        </Space>
+      {/* Period filter */}
+      <div className="me-period">
+        <div className="me-segs">
+          {PERIOD_SEGS.map((seg) => (
+            <button
+              key={seg.value}
+              className={`me-seg${periodPreset === seg.value ? " is-active" : ""}`}
+              onClick={() => setPeriodPreset(seg.value)}
+            >
+              {seg.label}
+            </button>
+          ))}
+        </div>
+        {periodPreset === "custom" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", marginTop: 8 }}>
+            <input
+              type="date"
+              className="me-fselect"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <span className="me-vs">—</span>
+            <input
+              type="date"
+              className="me-fselect"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              style={{ flex: 1 }}
+            />
+          </div>
+        )}
+        <span className="me-periodlabel">
+          Período: {periodRangeLabel}
+          <button
+            onClick={() => void fetchAllOrdersForMetrics()}
+            disabled={metricsLoading}
+            style={{
+              background: "transparent", border: "none",
+              color: "var(--ha-text-3)", cursor: "pointer", padding: 0,
+              display: "inline-flex", alignItems: "center",
+            }}
+            title="Actualizar datos"
+          >
+            <RefreshCw
+              size={13}
+              style={metricsLoading ? { animation: "ha-spin .7s linear infinite" } : {}}
+            />
+          </button>
+        </span>
       </div>
 
-      <Card style={{ marginBottom: 16, background: "#1f2937", borderColor: "#2d3748" }}>
-        <Space direction="vertical" style={{ width: "100%" }} size={12}>
-          <div style={{ color: "#94a3b8", fontSize: 13 }}>
-            Los KPIs y los tres primeros gráficos usan el{" "}
-            <strong style={{ color: "#e5e7eb" }}>período seleccionado</strong>. La comparación de meses abajo usa el
-            historial cargado ({metricsOrders.length} órdenes).
+      {/* KPI cards */}
+      <div className="me-kpis">
+        <div className="me-kpi">
+          <div className="me-kpi__val">{filteredOrders.length}</div>
+          <div className="me-kpi__label">Órdenes en el período</div>
+          {kpiTrends?.count != null && (
+            <div className={`me-kpi__trend${(kpiTrends.count ?? 0) < 0 ? " me-kpi__trend--neg" : ""}`}>
+              {trendLabel(kpiTrends.count)} vs período anterior
+            </div>
+          )}
+        </div>
+        <div className="me-kpi">
+          <div className="me-kpi__val">{formatCurrency(metricsTotalAmount)}</div>
+          <div className="me-kpi__label">Ingresos en el período</div>
+          {kpiTrends?.amount != null && (
+            <div className={`me-kpi__trend${(kpiTrends.amount ?? 0) < 0 ? " me-kpi__trend--neg" : ""}`}>
+              {trendLabel(kpiTrends.amount)} vs período anterior
+            </div>
+          )}
+        </div>
+        <div className="me-kpi">
+          <div className="me-kpi__val">{formatCurrency(metricsAvgTicket)}</div>
+          <div className="me-kpi__label">Promedio por orden</div>
+          {kpiTrends?.avg != null && (
+            <div className={`me-kpi__trend${(kpiTrends.avg ?? 0) < 0 ? " me-kpi__trend--neg" : ""}`}>
+              {trendLabel(kpiTrends.avg)} vs período anterior
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bar chart: órdenes por mes */}
+      <div className="me-card">
+        <div className="me-card__head">Órdenes por mes</div>
+        <div className="me-card__body">
+          {barChartData.bars.length === 0 ? (
+            <div style={{ color: "var(--ha-text-3)", fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+              Sin datos en el período
+            </div>
+          ) : (
+            <>
+              <div className="me-chart">
+                <div className="me-yaxis">
+                  <div className="me-ylabel" style={{ top: "0%" }}>{barChartData.yMax}</div>
+                  <div className="me-ylabel" style={{ top: "33.3%" }}>{barChartData.ySteps[1]}</div>
+                  <div className="me-ylabel" style={{ top: "66.6%" }}>{barChartData.ySteps[2]}</div>
+                  <div className="me-ylabel" style={{ top: "100%" }}>0</div>
+                </div>
+                <div className="me-yline" style={{ top: "0%" }} />
+                <div className="me-yline" style={{ top: "33.3%" }} />
+                <div className="me-yline" style={{ top: "66.6%" }} />
+                <div className="me-yline" style={{ bottom: 22 }} />
+                {barChartData.bars.map((b) => (
+                  <div key={b.monthSort} className="me-bar">
+                    <div className="me-bar__tip">{b.orders} órdenes</div>
+                    <div className="me-bar__fill" style={{ height: b.heightPct }} />
+                    <div className="me-bar__lab">{b.month}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="me-legend">Cada barra representa el total de órdenes creadas en ese mes.</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Top 10 products */}
+      <div className="me-card">
+        <div className="me-card__head">Top 10 productos por unidades vendidas</div>
+        {topItemsSeries.length === 0 ? (
+          <div style={{ padding: "20px", color: "var(--ha-text-3)", fontSize: 13 }}>
+            Sin datos en el período
           </div>
-          <Space wrap style={{ width: "100%" }}>
-            <Select
-              value={periodPreset}
-              style={{ width: isMobile ? "100%" : 280 }}
-              options={PERIOD_OPTIONS}
-              onChange={(value) => {
-                setPeriodPreset(value as PeriodPreset);
-              }}
-            />
-            {periodPreset === "custom" ? (
-              <DatePicker.RangePicker
-                style={{ width: isMobile ? "100%" : undefined }}
-                value={customRange as any}
-                format="DD/MM/YYYY"
-                onChange={(v) => setCustomRange(v as [Dayjs, Dayjs] | null)}
-              />
-            ) : null}
-          </Space>
-        </Space>
-      </Card>
-
-      <Spin spinning={metricsLoading && metricsOrders.length === 0}>
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Card style={{ background: "#1f2937", borderColor: "#2d3748" }}>
-            <Space size={24} wrap direction={isMobile ? "vertical" : "horizontal"}>
-              <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Período</div>
-                <div style={{ color: "#e5e7eb", fontSize: 13 }}>{periodLabel}</div>
-              </div>
-              <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Órdenes</div>
-                <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>{filteredOrders.length}</div>
-              </div>
-              <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Facturación</div>
-                <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>
-                  {formatCurrency(metricsTotalAmount)}
-                </div>
-              </div>
-              <div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>Ticket promedio</div>
-                <div style={{ color: "#fafafa", fontSize: 24, fontWeight: 600 }}>
-                  {formatCurrency(metricsAvgTicket)}
-                </div>
-              </div>
-            </Space>
-            {kpiAnalysis ? <AnalysisBlock>{kpiAnalysis}</AnalysisBlock> : null}
-          </Card>
-
-          <Card title={`Pedidos por mes (período: ${periodLabel})`}>
-            <div style={{ overflowX: isMobile ? "auto" : undefined, WebkitOverflowScrolling: "touch", width: "100%" }}>
-              <div style={{ height: isMobile ? 240 : 280, minWidth: globalMonthlyMinWidthPx ?? "100%" }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyOrdersSeries} margin={{ bottom: isMobile ? 16 : 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis
-                      dataKey="month"
-                      stroke="#9ca3af"
-                      tick={{ fill: "#9ca3af", fontSize: isMobile ? 10 : 12 }}
-                      interval={isMobile ? 0 : undefined}
-                    />
-                    <YAxis stroke="#9ca3af" allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="orders" name="Pedidos" fill="#60a5fa" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            {monthlyAnalysis ? (
-              <AnalysisBlock>
-                El mes con más pedidos fue <strong>{monthlyAnalysis.best.month}</strong> con{" "}
-                <strong>{monthlyAnalysis.best.orders}</strong> órdenes. El mes con menos actividad fue{" "}
-                <strong>{monthlyAnalysis.worst.month}</strong> con{" "}
-                <strong>{monthlyAnalysis.worst.orders}</strong> orden{monthlyAnalysis.worst.orders !== 1 ? "es" : ""}.
-                {monthlyAnalysis.trend ? ` ${monthlyAnalysis.trend}` : ""}
-              </AnalysisBlock>
-            ) : null}
-          </Card>
-
-          <Card title="Ítems más pedidos (unidades), período seleccionado">
-            <div style={{ overflowX: isMobile ? "auto" : undefined, WebkitOverflowScrolling: "touch", width: "100%" }}>
-              <div style={{ height: isMobile ? 280 : 320, minWidth: globalItemsBarMinWidthPx ?? "100%" }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topItemsSeries} layout="vertical" margin={{ left: isMobile ? 12 : 20, right: 16 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis type="number" stroke="#9ca3af" allowDecimals={false} />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      stroke="#9ca3af"
-                      width={globalItemsYAxisWidth}
-                      interval={0}
-                      tick={{ fill: "#9ca3af", fontSize: isMobile ? 11 : 12 }}
-                    />
-                    <Tooltip />
-                    <Bar dataKey="units" name="Unidades" fill="#22c55e" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            {topItemsAnalysis ? (
-              <AnalysisBlock>
-                El producto más demandado es <strong>{topItemsAnalysis.top.name}</strong> con{" "}
-                <strong>{topItemsAnalysis.top.units}</strong> unidades.
-                {topItemsSeries.length >= 3
-                  ? ` Los 3 primeros productos concentran el ${topItemsAnalysis.top3Pct}% del total de unidades pedidas.`
-                  : ""}
-              </AnalysisBlock>
-            ) : null}
-          </Card>
-
-          <Card title="Comparar dos meses (unidades por ítem)">
-            <Space direction="vertical" style={{ width: "100%" }} size={12}>
-              <Space wrap style={{ width: "100%" }}>
-                <Select
-                  placeholder="Mes 1"
-                  style={{ width: isMobile ? "100%" : 220 }}
-                  value={compareMonthA}
-                  options={monthOptions}
-                  onChange={setCompareMonthA}
-                  showSearch
-                  optionFilterProp="label"
-                />
-                <Select
-                  placeholder="Mes 2"
-                  style={{ width: isMobile ? "100%" : 220 }}
-                  value={compareMonthB}
-                  options={monthOptions}
-                  onChange={setCompareMonthB}
-                  showSearch
-                  optionFilterProp="label"
-                />
-              </Space>
-              {comparisonKpis ? (
-                <Space direction="vertical" size={8} style={{ color: "#9ca3af" }}>
-                  <div>
-                    <strong style={{ color: "#fafafa" }}>{compareMonthALabel}</strong>: {comparisonKpis.aCount} pedidos
-                    · {formatCurrency(comparisonKpis.aAmt)}
-                  </div>
-                  <div>
-                    <strong style={{ color: "#fafafa" }}>{compareMonthBLabel}</strong>: {comparisonKpis.bCount} pedidos
-                    · {formatCurrency(comparisonKpis.bAmt)}
-                  </div>
-                  <div style={{ color: comparisonKpis.deltaCount >= 0 ? "#22c55e" : "#f87171" }}>
-                    Δ pedidos: {comparisonKpis.deltaCount >= 0 ? "+" : ""}
-                    {comparisonKpis.deltaCount}
-                    {comparisonAnalysis?.pctCount != null
-                      ? ` (${comparisonAnalysis.pctCount >= 0 ? "+" : ""}${comparisonAnalysis.pctCount}%)`
-                      : ""}
-                  </div>
-                  <div style={{ color: comparisonKpis.deltaAmt >= 0 ? "#22c55e" : "#f87171" }}>
-                    Δ facturación: {comparisonKpis.deltaAmt >= 0 ? "+" : ""}
-                    {formatCurrency(comparisonKpis.deltaAmt)}
-                    {comparisonAnalysis?.pctAmt != null
-                      ? ` (${comparisonAnalysis.pctAmt >= 0 ? "+" : ""}${comparisonAnalysis.pctAmt}%)`
-                      : ""}
-                  </div>
-                </Space>
-              ) : null}
-              <div
-                style={{ overflowX: isMobile ? "auto" : undefined, WebkitOverflowScrolling: "touch", width: "100%" }}
-              >
-                <div style={{ height: isMobile ? 300 : 320, minWidth: globalComparisonMinWidthPx ?? "100%" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={itemComparisonByMonth}
-                      margin={{ left: 4, right: 8, top: 8, bottom: isMobile ? 112 : 64 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis
-                        dataKey="name"
-                        stroke="#9ca3af"
-                        interval={0}
-                        angle={isMobile ? -42 : -20}
-                        textAnchor="end"
-                        height={isMobile ? 110 : 72}
-                        tick={{ fill: "#9ca3af", fontSize: isMobile ? 9 : 12 }}
+        ) : (
+          <table className="me-toptable">
+            <tbody>
+              {topItemsSeries.map((item, i) => (
+                <tr key={item.name}>
+                  <td className="me-rankcol" style={{ width: 46, paddingRight: 0 }}>
+                    <span className={`me-rank${i === 0 ? " is-1" : ""}`}>{i + 1}</span>
+                  </td>
+                  <td className="me-topname">{item.name}</td>
+                  <td className="me-partcell">
+                    <div className="me-partbar">
+                      <div
+                        className="me-partbar__f"
+                        style={{ width: `${Math.round((item.units / topItemsMax) * 100)}%` }}
                       />
-                      <YAxis stroke="#9ca3af" allowDecimals={false} tick={{ fill: "#9ca3af", fontSize: 11 }} />
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: isMobile ? 11 : undefined }} />
-                      <Bar dataKey="monthAUnits" name={compareMonthALabel} fill="#60a5fa" />
-                      <Bar dataKey="monthBUnits" name={compareMonthBLabel} fill="#f59e0b" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                    </div>
+                  </td>
+                  <td className="me-topu">{item.units} un</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Month comparison */}
+      <div className="me-card" style={{ marginBottom: 0 }}>
+        <div className="me-card__head">Comparar meses</div>
+        <div className="me-cmp-sel">
+          <select
+            className="me-fselect"
+            value={compareMonthA ?? ""}
+            onChange={(e) => setCompareMonthA(e.target.value || undefined)}
+          >
+            <option value="">Mes base</option>
+            {monthOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <span className="me-vs">vs.</span>
+          <select
+            className="me-fselect"
+            value={compareMonthB ?? ""}
+            onChange={(e) => setCompareMonthB(e.target.value || undefined)}
+          >
+            <option value="">Mes a comparar</option>
+            {monthOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {comparisonKpis && (
+          <>
+            <div className="me-cmp-cols">
+              <div className="me-cmpcol">
+                <div className="me-cmpcol__h">{compareMonthALabel}</div>
+                <div className="me-cmprow">
+                  <span className="me-cmprow__l">Órdenes</span>
+                  <span className="me-cmprow__v">{comparisonKpis.aCount}</span>
+                </div>
+                <div className="me-cmprow">
+                  <span className="me-cmprow__l">Facturación</span>
+                  <span className="me-cmprow__v">{formatCurrency(comparisonKpis.aAmt)}</span>
+                </div>
+                <div className="me-cmprow">
+                  <span className="me-cmprow__l">Ticket promedio</span>
+                  <span className="me-cmprow__v">{formatCurrency(comparisonKpis.aAvg)}</span>
                 </div>
               </div>
-              {comparisonAnalysis ? (
-                <AnalysisBlock>
-                  {comparisonKpis && comparisonKpis.deltaCount !== 0 ? (
-                    <>
-                      <strong>{compareMonthALabel}</strong>{" "}
-                      {comparisonKpis.deltaCount > 0 ? "superó" : "estuvo por debajo de"}{" "}
-                      <strong>{compareMonthBLabel}</strong> en pedidos
-                      {comparisonAnalysis.pctCount != null
-                        ? ` (${comparisonAnalysis.pctCount >= 0 ? "+" : ""}${comparisonAnalysis.pctCount}%)`
-                        : ""}.{" "}
-                    </>
-                  ) : null}
-                  {comparisonAnalysis.grew && comparisonAnalysis.grew.monthAUnits > comparisonAnalysis.grew.monthBUnits ? (
-                    <>
-                      El producto con mayor crecimiento fue <strong>{comparisonAnalysis.grew.name}</strong> (
-                      {comparisonAnalysis.grew.monthBUnits} → {comparisonAnalysis.grew.monthAUnits} un.).{" "}
-                    </>
-                  ) : null}
-                  {comparisonAnalysis.fell && comparisonAnalysis.fell.monthBUnits > comparisonAnalysis.fell.monthAUnits ? (
-                    <>
-                      El que más cayó fue <strong>{comparisonAnalysis.fell.name}</strong> (
-                      {comparisonAnalysis.fell.monthBUnits} → {comparisonAnalysis.fell.monthAUnits} un.).
-                    </>
-                  ) : null}
-                </AnalysisBlock>
-              ) : null}
-            </Space>
-          </Card>
-        </Space>
-      </Spin>
-    </div>
-  );
-}
+              <div className="me-cmpcol">
+                <div className="me-cmpcol__h">{compareMonthBLabel}</div>
+                <div className="me-cmprow">
+                  <span className="me-cmprow__l">Órdenes</span>
+                  <span className="me-cmprow__v">
+                    {comparisonKpis.bCount}
+                    {comparisonKpis.countPct != null && (
+                      <span className={trendClass(comparisonKpis.countPct)}>
+                        {trendLabel(comparisonKpis.countPct)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="me-cmprow">
+                  <span className="me-cmprow__l">Facturación</span>
+                  <span className="me-cmprow__v">
+                    {formatCurrency(comparisonKpis.bAmt)}
+                    {comparisonKpis.amtPct != null && (
+                      <span className={trendClass(comparisonKpis.amtPct)}>
+                        {trendLabel(comparisonKpis.amtPct)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="me-cmprow">
+                  <span className="me-cmprow__l">Ticket promedio</span>
+                  <span className="me-cmprow__v">
+                    {formatCurrency(comparisonKpis.bAvg)}
+                    {comparisonKpis.avgPct != null && (
+                      <span className={trendClass(comparisonKpis.avgPct)}>
+                        {trendLabel(comparisonKpis.avgPct)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
 
-function AnalysisBlock({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        background: "#0f172a",
-        border: "1px solid #1e293b",
-        borderRadius: 8,
-        padding: "10px 14px",
-        color: "#94a3b8",
-        fontSize: 13,
-        marginTop: 12,
-        lineHeight: 1.7,
-      }}
-    >
-      {children}
+            {itemComparisonByMonth.length > 0 && (
+              <table className="me-cmptable">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th className="r">{compareMonthALabel.split(" ")[0]}</th>
+                    <th className="r">{compareMonthBLabel.split(" ")[0]}</th>
+                    <th className="r">Variación</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itemComparisonByMonth.map((row) => {
+                    const delta = pctChange(row.bUnits, row.aUnits);
+                    return (
+                      <tr key={row.name}>
+                        <td className="nm">{row.name}</td>
+                        <td className="r num">{row.aUnits}</td>
+                        <td className="r num">{row.bUnits}</td>
+                        <td className="r">
+                          <span className={trendClass(delta)}>{trendLabel(delta)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

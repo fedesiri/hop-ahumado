@@ -1,79 +1,86 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
-import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
-import { PRICE_TYPE_LABELS, PRICE_TYPES, type PriceType } from "@/lib/order-calculator/price-types";
-import type { CreatePriceRequest, Price, Product, UpdatePriceRequest } from "@/lib/types";
-import { DeleteOutlined, EditOutlined, PlusOutlined, SwapOutlined } from "@ant-design/icons";
-import type { ColumnsType } from "antd/es/table";
 import {
-  App,
-  AutoComplete,
-  Button,
-  Empty,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Select,
-  Space,
-  Spin,
-  Table,
-  Tooltip,
-  Typography,
-} from "antd";
+  normalizePriceListKey,
+  PRICE_TYPES,
+  type PriceType,
+} from "@/lib/order-calculator/price-types";
+import { toast } from "@/lib/toast";
+import type { CreatePriceRequest, Price, Product, UpdatePriceRequest } from "@/lib/types";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
+import { Paginator } from "@/components/paginator";
+import { Spinner } from "@/components/spinner";
+import { Check, Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-function formatPriceListLabel(text: string | null | undefined): string {
-  if (!text?.trim()) return "—";
-  const t = text.trim().toLowerCase();
-  if (PRICE_TYPES.includes(t as PriceType)) return PRICE_TYPE_LABELS[t as PriceType];
-  return text.trim();
+const LIST_OPTIONS = [
+  { value: "", label: "Todas las listas" },
+  { value: "mayorista", label: "Mayorista" },
+  { value: "minorista", label: "Minorista" },
+  { value: "fabrica", label: "Fábrica" },
+];
+
+function pillInfo(description: string | null | undefined) {
+  const key = normalizePriceListKey(description);
+  if (key === "mayorista") return { cls: "pc-pill pc-pill--may", label: "May", full: "Lista Mayorista" };
+  if (key === "minorista") return { cls: "pc-pill pc-pill--min", label: "Min", full: "Lista Minorista" };
+  if (key === "fabrica") return { cls: "pc-pill pc-pill--fab", label: "Fab", full: "Lista Fábrica" };
+  return { cls: "pc-pill", label: description?.substring(0, 3) ?? "—", full: description ?? "—" };
+}
+
+function formatPriceListLabel(description: string | null | undefined): string {
+  const key = normalizePriceListKey(description);
+  if (key === "mayorista") return "Mayorista";
+  if (key === "minorista") return "Minorista";
+  if (key === "fabrica") return "Fábrica";
+  return description?.trim() || "—";
 }
 
 export default function PricesPage() {
-  return (
-    <AppLayout>
-      <PricesContent />
-    </AppLayout>
-  );
+  return <PricesContent />;
 }
 
 function PricesContent() {
-  const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const [prices, setPrices] = useState<Price[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [replaceModalOpen, setReplaceModalOpen] = useState(false);
-  const [replaceTarget, setReplaceTarget] = useState<Price | null>(null);
-  const [bulkReplaceModalOpen, setBulkReplaceModalOpen] = useState(false);
-  const [bulkPreviewRows, setBulkPreviewRows] = useState<Price[] | null>(null);
-  const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
-  const [selectedPriceIds, setSelectedPriceIds] = useState<string[]>([]);
-
-  const [form] = Form.useForm();
-  const [replaceForm] = Form.useForm();
-  const [bulkReplaceForm] = Form.useForm();
-
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [meta, setMeta] = useState<{ page: number; limit: number; total: number } | null>(null);
-  /** Solo precios activos; alineado con la grilla de Costos (sin toggle en UI por ahora). */
-  const showActive = true;
+
   const [searchText, setSearchText] = useState(() => searchParams.get("search") ?? "");
   const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get("search") ?? "");
   const [listTypeFilter, setListTypeFilter] = useState<"" | PriceType>(
     () => (searchParams.get("listType") as PriceType) ?? "",
   );
+
+  const [selectedPriceIds, setSelectedPriceIds] = useState<string[]>([]);
+  const [bulkValue, setBulkValue] = useState("");
+
+  // Inline replace popover
+  const [popOpenId, setPopOpenId] = useState<string | null>(null);
+  const [popValue, setPopValue] = useState("");
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Create/Edit modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [fProductId, setFProductId] = useState("");
+  const [fValue, setFValue] = useState("");
+  const [fDescription, setFDescription] = useState("");
+
+  // Delete dialog
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -94,22 +101,13 @@ function PricesContent() {
       updateParams({ search: trimmed || null });
     }, 350);
     return () => clearTimeout(t);
-  }, [searchText]);
+  }, [searchText, updateParams]);
 
   useEffect(() => {
     setPagination((p) => (p.page === 1 ? p : { ...p, page: 1 }));
-  }, [debouncedSearch]);
+  }, [debouncedSearch, listTypeFilter]);
 
-  useEffect(() => {
-    setPagination((p) => (p.page === 1 ? p : { ...p, page: 1 }));
-  }, [listTypeFilter]);
-
-  useEffect(() => {
-    fetchPrices();
-    fetchProducts();
-  }, [pagination.page, pagination.limit, debouncedSearch, listTypeFilter, selectedLineId]);
-
-  const fetchPrices = async () => {
+  const fetchPrices = useCallback(async () => {
     try {
       setLoading(true);
       const response = await apiClient.getPrices(
@@ -123,480 +121,474 @@ function PricesContent() {
       );
       setPrices(response.data);
       setMeta(response.meta);
-    } catch (error) {
-      message.error("Error al cargar precios");
-      console.error(error);
+    } catch {
+      toast.error("Error al cargar precios");
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page, pagination.limit, debouncedSearch, listTypeFilter, selectedLineId]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
-      const response = await apiClient.getProducts(1, 100, false, undefined, undefined, selectedLineId ?? undefined);
+      const response = await apiClient.getProducts(
+        1, 100, false, undefined, undefined, selectedLineId ?? undefined,
+      );
       setProducts(response.data);
     } catch {
       // silent
     }
+  }, [selectedLineId]);
+
+  useEffect(() => {
+    void fetchPrices();
+    void fetchProducts();
+  }, [fetchPrices, fetchProducts]);
+
+  const totalPages = meta ? Math.ceil(meta.total / pagination.limit) : 1;
+  const allPageSelected = prices.length > 0 && prices.every((p) => selectedPriceIds.includes(p.id));
+  const somePageSelected = prices.some((p) => selectedPriceIds.includes(p.id)) && !allPageSelected;
+
+  const toggleAllPage = () => {
+    if (allPageSelected) {
+      setSelectedPriceIds((prev) => prev.filter((id) => !prices.find((p) => p.id === id)));
+    } else {
+      const pageIds = prices.filter((p) => !p.deactivatedAt).map((p) => p.id);
+      setSelectedPriceIds((prev) => [...new Set([...prev, ...pageIds])]);
+    }
   };
 
-  const bulkSelectionSummary = useMemo(() => {
-    const selectedOnPage = prices.filter((p) => selectedPriceIds.includes(p.id));
-    const rowCount = selectedPriceIds.length;
-    const someSelectionOffPage = rowCount > 0 && selectedOnPage.length < rowCount;
-    return { rowCount, someSelectionOffPage };
-  }, [prices, selectedPriceIds]);
+  const toggleRow = (id: string) => {
+    setSelectedPriceIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
 
-  const bulkPreviewColumns: ColumnsType<Price> = useMemo(
-    () => [
-      {
-        title: "Producto",
-        key: "product",
-        ellipsis: true,
-        render: (_: unknown, row: Price) => row.product?.name ?? "—",
-      },
-      {
-        title: "Lista",
-        dataIndex: "description",
-        key: "description",
-        width: 160,
-        ellipsis: true,
-        render: (text: string | null) => formatPriceListLabel(text),
-      },
-      {
-        title: "Precio actual",
-        dataIndex: "value",
-        key: "value",
-        width: 148,
-        align: "right",
-        render: (v: number | string) => formatCurrency(v),
-      },
-    ],
-    [],
-  );
+  const openPop = (id: string) => {
+    setPopOpenId(id);
+    setPopValue("");
+  };
+
+  const closePop = () => {
+    setPopOpenId(null);
+    setPopValue("");
+  };
+
+  const savePop = async (price: Price) => {
+    const value = Number(popValue);
+    if (!Number.isFinite(value) || value < 0) { toast.error("Ingresá un precio válido"); return; }
+    setSubmitting(true);
+    try {
+      await apiClient.replacePrice(price.id, { value });
+      toast.success("Precio actualizado");
+      closePop();
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      setFlashId(price.id);
+      flashTimer.current = setTimeout(() => setFlashId(null), 1100);
+      void fetchPrices();
+    } catch {
+      toast.error("Error al actualizar precio");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const applyBulk = async () => {
+    const value = Number(bulkValue);
+    if (!Number.isFinite(value) || value < 0) { toast.error("Ingresá un precio válido"); return; }
+    if (selectedPriceIds.length === 0) return;
+    setSubmitting(true);
+    try {
+      const res = await apiClient.bulkReplacePrices({ priceIds: selectedPriceIds, value });
+      toast.success(`${res.count} precio(s) actualizado(s)`);
+      setSelectedPriceIds([]);
+      setBulkValue("");
+      void fetchPrices();
+    } catch {
+      toast.error("Error al actualizar precios");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleCreate = () => {
     setEditingId(null);
-    form.resetFields();
+    setFProductId("");
+    setFValue("");
+    setFDescription("");
     setModalOpen(true);
   };
 
   const handleEdit = (record: Price) => {
     setEditingId(record.id);
-    form.setFieldsValue({
-      productId: record.productId,
-      value: record.value,
-      description: record.description,
-    });
+    setFProductId(record.productId);
+    setFValue(String(record.value));
+    setFDescription(record.description ?? "");
     setModalOpen(true);
   };
 
-  const openReplacePrice = (record: Price) => {
-    setReplaceTarget(record);
-    replaceForm.resetFields();
-    setReplaceModalOpen(true);
-  };
-
-  const handleReplaceSubmit = async (values: { value: number }) => {
-    if (!replaceTarget) return;
-    setSubmitting(true);
-    try {
-      await apiClient.replacePrice(replaceTarget.id, { value: values.value });
-      message.success("Precio actualizado: el anterior quedó archivado.");
-      setReplaceModalOpen(false);
-      setReplaceTarget(null);
-      fetchPrices();
-    } catch {
-      message.error("Error al actualizar precio");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const openBulkReplace = async () => {
-    if (selectedPriceIds.length === 0) return;
-    bulkReplaceForm.resetFields();
-    setBulkPreviewRows(null);
-    setBulkReplaceModalOpen(true);
-    setBulkPreviewLoading(true);
-    const orderedUniqueIds = [...new Set(selectedPriceIds)];
-    try {
-      const rows = await Promise.all(orderedUniqueIds.map((id) => apiClient.getPrice(id)));
-      setBulkPreviewRows(rows);
-    } catch {
-      message.error("No se pudo cargar el detalle de los precios");
-      setBulkReplaceModalOpen(false);
-      setBulkPreviewRows(null);
-    } finally {
-      setBulkPreviewLoading(false);
-    }
-  };
-
-  const handleBulkReplaceSubmit = async (values: { value: number }) => {
-    if (selectedPriceIds.length === 0) return;
-    setSubmitting(true);
-    try {
-      const res = await apiClient.bulkReplacePrices({
-        priceIds: selectedPriceIds,
-        value: values.value,
-      });
-      message.success(
-        `Listo: ${res.count} producto(s)/lista(s) con nuevo precio; los anteriores quedaron archivados.`,
-      );
-      setBulkReplaceModalOpen(false);
-      setBulkPreviewRows(null);
-      setSelectedPriceIds([]);
-      bulkReplaceForm.resetFields();
-      fetchPrices();
-    } catch {
-      message.error("Error al actualizar precios");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = (id: string) => {
-    modal.confirm({
-      title: "Confirmar eliminacion",
-      content: "Estas seguro de que deseas eliminar este precio?",
-      okText: "Si",
-      cancelText: "No",
-      onOk: async () => {
-        try {
-          await apiClient.deletePrice(id);
-          message.success("Precio eliminado");
-          fetchPrices();
-        } catch (error) {
-          message.error("Error al eliminar precio");
-        }
-      },
-    });
-  };
-
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async () => {
+    if (!fProductId) { toast.error("El producto es requerido"); return; }
+    const value = Number(fValue);
+    if (!Number.isFinite(value) || value < 0) { toast.error("El valor es requerido"); return; }
     setSubmitting(true);
     try {
       const data: CreatePriceRequest = {
-        productId: values.productId,
-        value: values.value,
-        description: values.description,
+        productId: fProductId,
+        value,
+        description: fDescription || undefined,
       };
-
       if (editingId) {
         await apiClient.updatePrice(editingId, data as UpdatePriceRequest);
-        message.success("Precio actualizado");
+        toast.success("Precio actualizado");
       } else {
         await apiClient.createPrice(data);
-        message.success("Precio creado");
+        toast.success("Precio creado");
       }
       setModalOpen(false);
-      fetchPrices();
-    } catch (error) {
-      message.error("Error al guardar precio");
+      void fetchPrices();
+    } catch {
+      toast.error("Error al guardar precio");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const columns = [
-    {
-      title: "Producto",
-      dataIndex: ["product", "name"],
-      key: "product",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Valor",
-      dataIndex: "value",
-      key: "value",
-      render: (value: number | string) => formatCurrency(value),
-    },
-    {
-      title: "Lista / descripción",
-      dataIndex: "description",
-      key: "description",
-      render: (text: string | null) => formatPriceListLabel(text),
-    },
-    {
-      title: "Fecha de Creación",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      render: (date: string) => new Date(date).toLocaleDateString("es-AR"),
-    },
-    {
-      title: "Acciones",
-      key: "actions",
-      width: showActive ? 188 : 120,
-      render: (_: unknown, record: Price) => (
-        <Space size="small" wrap>
-          {showActive && !record.deactivatedAt && (
-            <Tooltip title="Archiva este precio y crea uno nuevo (misma lista: mayorista/minorista/fábrica)">
-              <Button type="default" size="small" icon={<SwapOutlined />} onClick={() => openReplacePrice(record)} />
-            </Tooltip>
-          )}
-          <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
-        </Space>
-      ),
-    },
-  ];
+  const handleDelete = async (id: string) => {
+    try {
+      await apiClient.deletePrice(id);
+      toast.success("Precio eliminado");
+      setDeleteId(null);
+      void fetchPrices();
+    } catch {
+      toast.error("Error al eliminar precio");
+      setDeleteId(null);
+    }
+  };
+
+  const sheetPrice = popOpenId ? prices.find((p) => p.id === popOpenId) : null;
 
   return (
     <div>
-      <div
-        style={{
-          marginBottom: "24px",
-          display: "flex",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 12,
-          alignItems: "center",
-        }}
-      >
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Precios</h1>
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 12,
-            alignItems: "center",
-            flex: 1,
-            justifyContent: "flex-end",
-            minWidth: 0,
-          }}
-        >
-          <Input.Search
-            allowClear
-            placeholder="Buscar por nombre, SKU o código de barras"
+      <h1 className="pc-pagetitle">Precios</h1>
+
+      {/* Filter bar */}
+      <div className="pc-filter">
+        <div className="pc-search">
+          <Search size={17} />
+          <input
+            placeholder="Buscar producto…"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            style={{ maxWidth: 420, width: "100%", minWidth: 200 }}
           />
-          <Select
-            allowClear
-            placeholder="Lista de precio"
-            value={listTypeFilter === "" ? undefined : listTypeFilter}
-            onChange={(v) => {
-              const val = (v ?? "") as "" | PriceType;
-              setListTypeFilter(val);
-              updateParams({ listType: val || null });
-            }}
-            style={{ minWidth: 200 }}
-            options={PRICE_TYPES.map((t) => ({
-              value: t,
-              label: PRICE_TYPE_LABELS[t],
-            }))}
-          />
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-            Nuevo Precio
-          </Button>
         </div>
-      </div>
-
-      <ScreenInfoPanel title="Tres listas para todos los productos">
-        <>
-          Podés cargar <strong>mayorista</strong>, <strong>minorista</strong> y <strong>fábrica</strong> para{" "}
-          <strong>cualquier</strong> producto (cerveza, pan, lo que sea): son tres registros de precio distintos con la
-          misma descripción de lista. En <strong>Nueva orden</strong> el selector usa esas etiquetas para elegir qué
-          valor aplicar. Si dejás otra descripción libre, el precio se guarda pero la calculadora puede no reconocerla
-          como lista estándar. Podés <strong>seleccionar varias filas</strong> y aplicar un{" "}
-          <strong>mismo valor nuevo</strong>: cada fila conserva su lista (mayorista/minorista/fábrica); si varios
-          productos comparten el mismo aumento en la misma lista, marcá todas y usá{" "}
-          <strong>Mismo nuevo precio para todos</strong>.
-        </>
-      </ScreenInfoPanel>
-
-      {showActive && bulkSelectionSummary.rowCount > 0 && (
-        <div
-          style={{
-            marginBottom: 16,
-            marginTop: 16,
-            padding: "10px 14px",
-            borderRadius: 8,
-            background: "rgba(59, 130, 246, 0.12)",
-            border: "1px solid rgba(59, 130, 246, 0.35)",
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            gap: 12,
+        <select
+          className="pc-select"
+          value={listTypeFilter}
+          onChange={(e) => {
+            const val = e.target.value as "" | PriceType;
+            setListTypeFilter(val);
+            updateParams({ listType: val || null });
           }}
         >
-          <span style={{ color: "#e5e7eb" }}>
-            <strong>{bulkSelectionSummary.rowCount}</strong> precio(s) seleccionado(s)
-            {bulkSelectionSummary.someSelectionOffPage && (
-              <span style={{ color: "#9ca3af" }}> (incluye otras páginas)</span>
-            )}
-            .
+          {LIST_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <button className="pc-btn pc-btn--primary" onClick={handleCreate}>
+          + Nuevo precio
+        </button>
+        <span className="pc-count">
+          {meta?.total ?? prices.length} precios activos
+        </span>
+      </div>
+
+      {/* Bulk action bar */}
+      {selectedPriceIds.length > 0 && (
+        <div className="pc-bulk">
+          <span className="pc-bulk__t">
+            <b>{selectedPriceIds.length} precios seleccionados</b> · Nuevo precio:
           </span>
-          <Button type="primary" icon={<SwapOutlined />} onClick={openBulkReplace}>
-            Mismo nuevo precio para todos
-          </Button>
+          <span className="pc-money">
+            <input
+              value={bulkValue}
+              onChange={(e) => setBulkValue(e.target.value)}
+              placeholder="0"
+              type="number"
+              min={0}
+            />
+          </span>
+          <button className="pc-btn pc-btn--primary" onClick={() => void applyBulk()} disabled={submitting}>
+            Aplicar a todos
+          </button>
+          <button className="pc-btn pc-btn--ghost" onClick={() => { setSelectedPriceIds([]); setBulkValue(""); }}>
+            Cancelar selección
+          </button>
         </div>
       )}
 
-      <Table
-        columns={columns}
-        dataSource={prices}
-        rowKey="id"
-        loading={loading}
-        style={{ backgroundColor: "#1f2937" }}
-        rowSelection={
-          showActive
-            ? {
-                selectedRowKeys: selectedPriceIds,
-                onChange: (keys) => setSelectedPriceIds(keys as string[]),
-                preserveSelectedRowKeys: true,
-                getCheckboxProps: (record) => ({
-                  disabled: !!record.deactivatedAt,
-                }),
-              }
-            : undefined
-        }
-        pagination={{
-          current: pagination.page,
-          pageSize: pagination.limit,
-          total: meta?.total ?? 0,
-          onChange: (page, pageSize) => {
-            setPagination({ page, limit: pageSize });
-          },
-        }}
-        locale={{
-          emptyText: <Empty description="No hay precios cargados todavía" style={{ color: "#9ca3af" }} />,
-        }}
-      />
+      {/* Main card */}
+      {loading ? (
+        <Spinner />
+      ) : prices.length === 0 ? (
+        <EmptyState title="No hay precios cargados todavía" />
+      ) : (
+        <div className="pc-card">
+          {/* Desktop table */}
+          <div className="pc-tablewrap">
+            {/* Invisible backdrop to close popover when clicking outside */}
+            {popOpenId && (
+              <div
+                style={{ position: "fixed", inset: 0, zIndex: 15 }}
+                onClick={closePop}
+              />
+            )}
+            <table className="pc-table">
+              <thead>
+                <tr>
+                  <th>
+                    <div
+                      className={`pc-check${allPageSelected ? " on" : ""}`}
+                      style={somePageSelected ? { opacity: 0.6 } : {}}
+                      onClick={toggleAllPage}
+                    >
+                      {allPageSelected && <Check size={12} />}
+                    </div>
+                  </th>
+                  <th>Producto</th>
+                  <th>Categoría</th>
+                  <th>Lista</th>
+                  <th>Precio actual</th>
+                  <th>Vigente desde</th>
+                  <th style={{ textAlign: "right" }}>Reemplazar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prices.map((price) => {
+                  const isSelected = selectedPriceIds.includes(price.id);
+                  const pill = pillInfo(price.description);
+                  return (
+                    <tr key={price.id} className={isSelected ? "is-sel" : ""}>
+                      <td>
+                        <div
+                          className={`pc-check${isSelected ? " on" : ""}`}
+                          onClick={() => toggleRow(price.id)}
+                        >
+                          {isSelected && <Check size={12} />}
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: 500 }}>{price.product?.name ?? "—"}</td>
+                      <td className="pc-cat">{price.product?.category?.name ?? "—"}</td>
+                      <td><span className={pill.cls}>{pill.label}</span></td>
+                      <td>
+                        <span className={`pc-price${flashId === price.id ? " flash" : ""}`}>
+                          {formatCurrency(price.value)}
+                        </span>
+                      </td>
+                      <td className="pc-vig">
+                        {new Date(price.createdAt).toLocaleDateString("es-AR")}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className="pc-pop-wrap" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="pc-btn pc-btn--ghost pc-btn--sm"
+                            onClick={() => popOpenId === price.id ? closePop() : openPop(price.id)}
+                          >
+                            Reemplazar
+                          </button>
+                          {popOpenId === price.id && (
+                            <div className="pc-pop">
+                              <div className="pc-pop__l">Nuevo precio ({pill.full})</div>
+                              <div className="pc-pop__money">
+                                <input
+                                  value={popValue}
+                                  onChange={(e) => setPopValue(e.target.value)}
+                                  placeholder="0"
+                                  type="number"
+                                  min={0}
+                                  // eslint-disable-next-line jsx-a11y/no-autofocus
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") void savePop(price);
+                                    if (e.key === "Escape") closePop();
+                                  }}
+                                />
+                              </div>
+                              <div className="pc-pop__acts">
+                                <button className="pc-btn pc-btn--ghost pc-btn--sm" onClick={closePop}>
+                                  Cancelar
+                                </button>
+                                <button
+                                  className="pc-btn pc-btn--primary pc-btn--sm"
+                                  onClick={() => void savePop(price)}
+                                  disabled={submitting}
+                                >
+                                  Guardar
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-      <Modal
-        title={editingId ? "Editar Precio" : "Nuevo Precio"}
-        open={modalOpen}
-        onOk={() => form.submit()}
-        onCancel={() => setModalOpen(false)}
-        okButtonProps={{ loading: submitting, disabled: submitting }}
-        forceRender
-      >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item
-            name="productId"
-            label="Producto"
-            rules={[{ required: true, message: "El producto es requerido" }]}
-          >
-            <Select
-              placeholder="Selecciona un producto"
-              options={products.map((p) => ({ label: p.name, value: p.id }))}
-            />
-          </Form.Item>
-
-          <Form.Item name="value" label="Valor" rules={[{ required: true, message: "El valor es requerido" }]}>
-            <InputNumber min={0} step={0.01} placeholder="Valor del producto" style={{ width: "100%" }} />
-          </Form.Item>
-
-          <Form.Item
-            name="description"
-            label="Lista de precio"
-            extra="Usá mayorista, minorista o fabrica (minúsculas) para que coincida con el selector de Nueva orden. Podés repetir para cada producto."
-          >
-            <AutoComplete
-              style={{ width: "100%" }}
-              placeholder="Elegí o escribí: mayorista, minorista, fabrica"
-              options={PRICE_TYPES.map((t) => ({
-                value: t,
-                label: `${PRICE_TYPE_LABELS[t]} (${t})`,
-              }))}
-              filterOption={(input, option) =>
-                (option?.value as string)?.toLowerCase().includes(input.trim().toLowerCase()) ?? false
-              }
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="Nuevo precio (archivar el actual)"
-        open={replaceModalOpen}
-        onOk={() => replaceForm.submit()}
-        onCancel={() => {
-          setReplaceModalOpen(false);
-          setReplaceTarget(null);
-        }}
-        okButtonProps={{ loading: submitting, disabled: submitting }}
-        forceRender
-      >
-        {replaceTarget && (
-          <>
-            <Typography.Paragraph style={{ marginBottom: 12, color: "rgba(255,255,255,0.75)" }}>
-              <strong>{replaceTarget.product?.name ?? "Producto"}</strong>
-              {" — "}
-              {formatPriceListLabel(replaceTarget.description)} — precio vigente{" "}
-              {formatCurrency(replaceTarget.value)} (referencia).
-            </Typography.Paragraph>
-            <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
-              Se crea un registro nuevo con la <strong>misma lista</strong> ({formatPriceListLabel(replaceTarget.description)}).
-            </Typography.Paragraph>
-          </>
-        )}
-        <Form form={replaceForm} layout="vertical" onFinish={handleReplaceSubmit}>
-          <Form.Item
-            name="value"
-            label="Nuevo valor"
-            rules={[{ required: true, message: "Ingresá el nuevo precio" }]}
-          >
-            <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 2500" style={{ width: "100%" }} />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="Mismo nuevo precio para varias filas"
-        open={bulkReplaceModalOpen}
-        onOk={() => bulkReplaceForm.submit()}
-        onCancel={() => {
-          setBulkReplaceModalOpen(false);
-          setBulkPreviewRows(null);
-        }}
-        okButtonProps={{
-          loading: submitting,
-          disabled: submitting || bulkPreviewLoading || !bulkPreviewRows?.length,
-        }}
-        forceRender
-        width={780}
-      >
-        <Typography.Paragraph style={{ marginBottom: 8, color: "rgba(255,255,255,0.85)" }}>
-          Cada fila tiene su <strong>lista</strong> (mayorista, minorista o fábrica). Se archivan los precios vigentes
-          mostrados y se crea <strong>un precio nuevo por cada combinación producto + lista</strong>, todos con el{" "}
-          <strong>mismo valor</strong> que ingreses abajo.
-        </Typography.Paragraph>
-        <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 14 }}>
-          Ejemplo: si marcás &quot;Golden mayorista&quot; y &quot;Red ale mayorista&quot;, ambas pasan al mismo precio
-          nuevo en <strong>mayorista</strong>; las listas minorista/fábrica de esos productos no cambian salvo que las
-          selecciones también.
-        </Typography.Paragraph>
-        <div style={{ marginBottom: 16 }}>
-          {bulkPreviewLoading ? (
-            <div style={{ padding: "24px 0", textAlign: "center" }}>
-              <Spin />
-            </div>
-          ) : bulkPreviewRows && bulkPreviewRows.length > 0 ? (
-            <Table<Price>
-              size="small"
-              rowKey="id"
-              columns={bulkPreviewColumns}
-              dataSource={bulkPreviewRows}
-              pagination={false}
-              scroll={{ y: 280 }}
-              locale={{ emptyText: <Empty description="Sin filas" /> }}
-              style={{ backgroundColor: "#1f2937" }}
-            />
-          ) : null}
+          {/* Mobile card list */}
+          <div className="pc-cardlist">
+            {prices.map((price) => {
+              const isSelected = selectedPriceIds.includes(price.id);
+              const pill = pillInfo(price.description);
+              return (
+                <div key={price.id} className={`pc-pcard${isSelected ? " is-sel" : ""}`}>
+                  <div className="pc-pcard__top">
+                    <div>
+                      <div className="pc-pcard__name">{price.product?.name ?? "—"}</div>
+                      <span className={pill.cls} style={{ marginTop: 6, display: "inline-flex" }}>
+                        {pill.label}
+                      </span>
+                    </div>
+                    <div
+                      className={`pc-check${isSelected ? " on" : ""}`}
+                      onClick={() => toggleRow(price.id)}
+                    >
+                      {isSelected && <Check size={12} />}
+                    </div>
+                  </div>
+                  <div className="pc-pcard__mid">
+                    <span className={`pc-price pc-pcard__price${flashId === price.id ? " flash" : ""}`}>
+                      {formatCurrency(price.value)}
+                    </span>
+                    <span className="pc-pcard__cat">{price.product?.category?.name ?? "—"}</span>
+                  </div>
+                  <div className="pc-pcard__bot">
+                    <span className="pc-vig">
+                      Vigente desde {new Date(price.createdAt).toLocaleDateString("es-AR")}
+                    </span>
+                    <button
+                      className="pc-btn pc-btn--ghost pc-btn--sm"
+                      onClick={() => openPop(price.id)}
+                    >
+                      Reemplazar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <Form form={bulkReplaceForm} layout="vertical" onFinish={handleBulkReplaceSubmit}>
-          <Form.Item
-            name="value"
-            label="Nuevo valor (aplica a todas las filas de la tabla)"
-            rules={[{ required: true, message: "Ingresá el nuevo precio" }]}
-          >
-            <InputNumber min={0} step={0.01} precision={4} placeholder="Ej. 2500" style={{ width: "100%" }} />
-          </Form.Item>
-        </Form>
-      </Modal>
+      )}
+
+      {/* Pagination */}
+      {meta && (
+        <Paginator
+          page={pagination.page}
+          totalPages={totalPages}
+          total={meta.total}
+          label="precios"
+          onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+        />
+      )}
+
+      {/* Mobile bottom sheet for replace */}
+      {sheetPrice && (
+        <>
+          <div className="pc-sheet-back" onClick={closePop} />
+          <div className="pc-sheet">
+            <div className="pc-sheet__title">Reemplazar precio</div>
+            <div className="pc-pop__l">
+              Nuevo precio ({pillInfo(sheetPrice.description).full})
+            </div>
+            <div className="pc-pop__money">
+              <input
+                value={popValue}
+                onChange={(e) => setPopValue(e.target.value)}
+                placeholder="0"
+                type="number"
+                min={0}
+              />
+            </div>
+            <div className="pc-pop__acts">
+              <button className="pc-btn pc-btn--ghost" onClick={closePop}>Cancelar</button>
+              <button
+                className="pc-btn pc-btn--primary"
+                onClick={() => void savePop(sheetPrice)}
+                disabled={submitting}
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Create/Edit Modal */}
+      {modalOpen && (
+        <div className="ha-modal-backdrop" onClick={() => setModalOpen(false)}>
+          <div className="ha-modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">{editingId ? "Editar Precio" : "Nuevo Precio"}</span>
+              <button className="ha-iconbtn" onClick={() => setModalOpen(false)} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body">
+              <div className="ha-field" style={{ marginBottom: 16 }}>
+                <label className="ha-label">Producto <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <select className="ha-input" value={fProductId} onChange={(e) => setFProductId(e.target.value)}>
+                  <option value="">Seleccioná un producto</option>
+                  {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="ha-field" style={{ marginBottom: 16 }}>
+                <label className="ha-label">Valor <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <input
+                  type="number"
+                  className="ha-input"
+                  min={0}
+                  step={0.01}
+                  placeholder="Valor del producto"
+                  value={fValue}
+                  onChange={(e) => setFValue(e.target.value)}
+                />
+              </div>
+              <div className="ha-field">
+                <label className="ha-label">Lista de precio</label>
+                <select
+                  className="ha-input"
+                  value={fDescription}
+                  onChange={(e) => setFDescription(e.target.value)}
+                >
+                  <option value="">Sin lista</option>
+                  {PRICE_TYPES.map((t) => (
+                    <option key={t} value={t}>{formatPriceListLabel(t)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
+              <button
+                className="ha-btn ha-btn--primary"
+                onClick={() => void handleSubmit()}
+                disabled={submitting}
+              >
+                {submitting ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete dialog */}
+      {deleteId && (
+        <ConfirmDialog
+          title="¿Eliminar precio?"
+          description="Esta acción no se puede deshacer."
+          onCancel={() => setDeleteId(null)}
+          onConfirm={() => void handleDelete(deleteId)}
+        />
+      )}
     </div>
   );
 }

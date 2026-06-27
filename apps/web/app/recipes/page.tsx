@@ -1,9 +1,8 @@
 "use client";
 
-import { AppLayout } from "@/components/app-layout";
-import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
+import { toast } from "@/lib/toast";
 import {
   ProductUnit,
   type CreateCostRequest,
@@ -12,26 +11,11 @@ import {
   type CreateRecipeItemRequest,
   type Product,
   type RecipeItem,
-  type UpdateRecipeItemRequest,
 } from "@/lib/types";
-import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Col,
-  Empty,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Row,
-  Select,
-  Space,
-  Spin,
-  Table,
-} from "antd";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
+import { Spinner } from "@/components/spinner";
+import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
@@ -42,23 +26,22 @@ const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
   { label: "Ml", value: ProductUnit.ML },
 ];
 
-const UNIT_SHORT_LABEL: Record<ProductUnit, string> = {
+const UNIT_SHORT: Record<ProductUnit, string> = {
   [ProductUnit.UNIT]: "un",
-  [ProductUnit.KG]: "kg",
-  [ProductUnit.G]: "gr",
-  [ProductUnit.L]: "l",
-  [ProductUnit.ML]: "ml",
+  [ProductUnit.KG]: "KG",
+  [ProductUnit.G]: "G",
+  [ProductUnit.L]: "L",
+  [ProductUnit.ML]: "ML",
 };
 
-/** Insumo por 1 kg de producto final (solo si el final está en masa: kg o gr). null = no aplica. */
-function ingredientAmountPerKgOfFinal(ingredientPerFinalUnit: number, finalUnit: ProductUnit): number | null {
-  if (finalUnit === ProductUnit.KG) return ingredientPerFinalUnit;
-  if (finalUnit === ProductUnit.G) return ingredientPerFinalUnit * 1000;
-  return null;
-}
+const BATCH_REF = 100;
+const QUICK_VALS = [10, 50, 100, 200];
 
-function formatRecipeAmount(n: number): string {
-  return n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+function fmtAmt(n: number): string {
+  return (Math.round(n * 10000) / 10000).toLocaleString("es-AR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  });
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -67,31 +50,36 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export default function RecipesPage() {
-  return (
-    <AppLayout>
-      <RecipesContent />
-    </AppLayout>
-  );
+  return <RecipesContent />;
 }
 
 function RecipesContent() {
-  const { message, modal } = App.useApp();
   const { selectedLineId } = useLineContext();
   const [recipes, setRecipes] = useState<RecipeItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form] = Form.useForm();
-  const [productForm] = Form.useForm();
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [mobTab, setMobTab] = useState<"ing" | "calc">("ing");
+  const [addOpen, setAddOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [calculatorAmount, setCalculatorAmount] = useState("");
+
+  // Add form
+  const [fIngredientId, setFIngredientId] = useState("");
+  const [fQty, setFQty] = useState("");
+  const [fBatch, setFBatch] = useState(String(BATCH_REF));
+
+  // Product create modal
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [productCreateTarget, setProductCreateTarget] = useState<"final" | "ingredient">("final");
-  const [calculatorAmount, setCalculatorAmount] = useState<number | null>(null);
-  const batchQuantity = Form.useWatch("batchQuantity", form);
-  const ingredientBatchQuantity = Form.useWatch("ingredientBatchQuantity", form);
+  const [pName, setPName] = useState("");
+  const [pUnit, setPUnit] = useState<ProductUnit>(ProductUnit.UNIT);
+  const [pStock, setPStock] = useState("");
+  const [pCostValue, setPCostValue] = useState("");
+  const [pPriceMayorista, setPPriceMayorista] = useState("");
+  const [pPriceMinorista, setPPriceMinorista] = useState("");
+  const [pPriceFabrica, setPPriceFabrica] = useState("");
 
   const fetchProducts = useCallback(async () => {
     const bId = selectedLineId ?? undefined;
@@ -109,576 +97,429 @@ function RecipesContent() {
   }, [selectedLineId]);
 
   const fetchRecipes = useCallback(async () => {
+    if (!selectedProductId) { setRecipes([]); return; }
     try {
-      if (!selectedProductId) {
-        setRecipes([]);
-        setLoadError(null);
-        return;
-      }
-      const limit = 100;
       setLoading(true);
-      setLoadError(null);
       const all: RecipeItem[] = [];
       let page = 1;
       while (true) {
-        const response = await apiClient.getRecipeItems(page, limit, selectedProductId);
-        all.push(...response.data);
-        if (response.meta.totalPages <= page) break;
+        const res = await apiClient.getRecipeItems(page, 100, selectedProductId);
+        all.push(...res.data);
+        if (res.meta.totalPages <= page) break;
         page += 1;
       }
       setRecipes(all);
     } catch (error) {
-      const msg = getErrorMessage(error, "Error al cargar recetas");
-      setLoadError(msg);
-      message.error(msg);
-      console.error(error);
+      toast.error(getErrorMessage(error, "Error al cargar recetas"));
     } finally {
       setLoading(false);
     }
-  }, [selectedProductId, message]);
-
-  useEffect(() => {
-    fetchRecipes();
-  }, [fetchRecipes]);
-
-  useEffect(() => {
-    setCalculatorAmount(null);
   }, [selectedProductId]);
 
+  useEffect(() => { void fetchRecipes(); }, [fetchRecipes]);
+  useEffect(() => { setCalculatorAmount(""); setAddOpen(false); }, [selectedProductId]);
   useEffect(() => {
-    fetchProducts().catch((e) => {
-      console.error(e);
-      message.error("Error al cargar productos para los selectores");
-    });
-  }, [fetchProducts, message]);
+    fetchProducts().catch(() => toast.error("Error al cargar productos"));
+  }, [fetchProducts]);
 
-  const ingredientOptions = useMemo(() => {
-    if (!selectedProductId) return [];
-    return products.filter((p) => p.id !== selectedProductId).map((p) => ({ label: p.name, value: p.id }));
-  }, [products, selectedProductId]);
-
-  const productOptions = useMemo(() => products.map((p) => ({ label: p.name, value: p.id })), [products]);
+  const ingredientOptions = useMemo(
+    () => (selectedProductId ? products.filter((p) => p.id !== selectedProductId) : []),
+    [products, selectedProductId],
+  );
   const selectedProduct = useMemo(
     () => (selectedProductId ? products.find((p) => p.id === selectedProductId) : undefined),
     [products, selectedProductId],
   );
-  const selectedIngredientId = Form.useWatch("ingredientId", form);
-  const selectedIngredient = useMemo(
-    () => (selectedIngredientId ? products.find((p) => p.id === selectedIngredientId) : undefined),
-    [products, selectedIngredientId],
-  );
 
-  const handleCreate = () => {
-    if (!selectedProductId) {
-      message.error("Elegí un producto final antes de agregar ingredientes");
-      return;
+  const handleAddIngredient = async () => {
+    if (!selectedProductId) return;
+    if (!fIngredientId) { toast.error("Elegí un ingrediente"); return; }
+    const qty = Number(fQty);
+    const batch = Number(fBatch) || BATCH_REF;
+    if (!qty || qty <= 0) { toast.error("Ingresá una cantidad mayor a 0"); return; }
+    const normalized = qty / batch;
+    setSubmitting(true);
+    try {
+      const data: CreateRecipeItemRequest = { productId: selectedProductId, ingredientId: fIngredientId, quantity: normalized };
+      await apiClient.createRecipeItem(data);
+      toast.success("Ingrediente agregado");
+      setAddOpen(false);
+      setFIngredientId(""); setFQty(""); setFBatch(String(BATCH_REF));
+      void fetchRecipes();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al agregar ingrediente"));
+    } finally {
+      setSubmitting(false);
     }
-    setEditingId(null);
-    form.resetFields();
-    setModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await apiClient.deleteRecipeItem(id);
+      toast.success("Ingrediente eliminado");
+      setDeleteId(null);
+      void fetchRecipes();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al eliminar"));
+      setDeleteId(null);
+    }
+  };
+
+  const handleCreateProductSubmit = async () => {
+    setSubmitting(true);
+    try {
+      if (!pName.trim()) { toast.error("El nombre es requerido"); return; }
+      const costValue = Number(pCostValue);
+      if (!Number.isFinite(costValue)) { toast.error("El costo es requerido"); return; }
+      const productData: CreateProductRequest = {
+        name: pName.trim(), unit: pUnit,
+        stock: pStock !== "" ? Number(pStock) : 0,
+        businessLineId: selectedLineId ?? "",
+      };
+      const created = await apiClient.createProduct(productData);
+      await apiClient.createCost({ productId: created.id, value: costValue } satisfies CreateCostRequest);
+      const priceFields: { val: string; description: "mayorista" | "minorista" | "fabrica" }[] = [
+        { val: pPriceMayorista, description: "mayorista" },
+        { val: pPriceMinorista, description: "minorista" },
+        { val: pPriceFabrica, description: "fabrica" },
+      ];
+      for (const pf of priceFields) {
+        const raw = Number(pf.val);
+        if (!pf.val || !Number.isFinite(raw)) continue;
+        await apiClient.createPrice({ productId: created.id, value: raw, description: pf.description } satisfies CreatePriceRequest);
+      }
+      await fetchProducts();
+      if (productCreateTarget === "ingredient") setFIngredientId(created.id);
+      else setSelectedProductId(created.id);
+      setProductModalOpen(false);
+      toast.success("Producto creado");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al crear producto"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const calcAmount = Number(calculatorAmount) || 0;
+  const finalUnit = selectedProduct ? UNIT_SHORT[selectedProduct.unit ?? ProductUnit.L] : "L";
+
+  const calculatorRows = useMemo(() => {
+    if (!calcAmount || !Number.isFinite(calcAmount) || calcAmount <= 0 || recipes.length === 0) return [];
+    return recipes.map((r) => {
+      const ing = r.ingredient;
+      const unit = UNIT_SHORT[ing?.unit ?? ProductUnit.KG];
+      const amount = r.quantity * calcAmount;
+      const gramsDetail = amount < 1 && amount > 0 ? ` (= ${Math.round(amount * 1000)} g)` : null;
+      return { key: r.id, name: ing?.name ?? "—", amount, unit, gramsDetail };
+    });
+  }, [recipes, calcAmount]);
+
+  const openAddForm = () => {
+    setFIngredientId(""); setFQty(""); setFBatch(String(BATCH_REF));
+    setAddOpen(true);
   };
 
   const openCreateProductModal = (target: "final" | "ingredient") => {
     setProductCreateTarget(target);
-    productForm.resetFields();
+    setPName(""); setPUnit(ProductUnit.UNIT); setPStock(""); setPCostValue("");
+    setPPriceMayorista(""); setPPriceMinorista(""); setPPriceFabrica("");
     setProductModalOpen(true);
   };
 
-  const handleEdit = (record: RecipeItem) => {
-    setEditingId(record.id);
-    form.setFieldsValue({
-      ingredientId: record.ingredientId,
-      batchQuantity: 1,
-      ingredientBatchQuantity: record.quantity,
-    });
-    setModalOpen(true);
-  };
-
-  const handleDelete = (id: string) => {
-    modal.confirm({
-      title: "Confirmar eliminación",
-      content: "¿Seguro que deseas eliminar este ítem de la receta?",
-      okText: "Sí",
-      cancelText: "No",
-      onOk: async () => {
-        try {
-          await apiClient.deleteRecipeItem(id);
-          message.success("Ítem de receta eliminado");
-          fetchRecipes();
-        } catch (error) {
-          message.error(getErrorMessage(error, "Error al eliminar"));
-        }
-      },
-    });
-  };
-
-  const handleSubmit = async (values: {
-    ingredientId: string;
-    batchQuantity?: number;
-    ingredientBatchQuantity?: number;
-  }) => {
-    setSubmitting(true);
-    try {
-      if (!selectedProductId) {
-        message.error("Seleccioná un producto final");
-        return;
-      }
-      if (values.ingredientId === selectedProductId) {
-        message.error("El producto elaborado y el ingrediente no pueden ser el mismo");
-        return;
-      }
-      const produced = Number(values.batchQuantity);
-      const used = Number(values.ingredientBatchQuantity);
-      if (!Number.isFinite(produced) || produced <= 0) {
-        message.error("La cantidad elaborada debe ser mayor que 0");
-        return;
-      }
-      if (!Number.isFinite(used) || used <= 0) {
-        message.error("La cantidad del ingrediente debe ser mayor que 0");
-        return;
-      }
-      const normalizedQuantity = used / produced;
-
-      if (!normalizedQuantity || normalizedQuantity <= 0) {
-        message.error("La cantidad es inválida");
-        return;
-      }
-
-      const data: CreateRecipeItemRequest = {
-        productId: selectedProductId,
-        ingredientId: values.ingredientId,
-        quantity: normalizedQuantity,
-      };
-
-      if (editingId) {
-        const patch: UpdateRecipeItemRequest = { quantity: normalizedQuantity };
-        await apiClient.updateRecipeItem(editingId, patch);
-        message.success("Ítem de receta actualizado");
-      } else {
-        await apiClient.createRecipeItem(data);
-        message.success("Ítem de receta creado");
-      }
-      setModalOpen(false);
-      fetchRecipes();
-    } catch (error) {
-      message.error(getErrorMessage(error, "Error al guardar ítem de receta"));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleCreateProductSubmit = async (values: {
-    name: string;
-    unit?: ProductUnit;
-    stock?: number;
-    costValue: number;
-    priceMayorista?: number;
-    priceMinorista?: number;
-    priceFabrica?: number;
-  }) => {
-    setSubmitting(true);
-    try {
-      const productData: CreateProductRequest = {
-        name: values.name,
-        unit: values.unit ?? ProductUnit.UNIT,
-        stock: values.stock != null && values.stock !== "" ? Number(values.stock) : 0,
-      };
-      const created = await apiClient.createProduct(productData);
-
-      const costData: CreateCostRequest = { productId: created.id, value: values.costValue };
-      await apiClient.createCost(costData);
-
-      const priceFields: { field: keyof typeof values; description: "mayorista" | "minorista" | "fabrica" }[] = [
-        { field: "priceMayorista", description: "mayorista" },
-        { field: "priceMinorista", description: "minorista" },
-        { field: "priceFabrica", description: "fabrica" },
-      ];
-
-      for (const pf of priceFields) {
-        const raw = values[pf.field];
-        if (typeof raw !== "number" || !Number.isFinite(raw)) continue;
-        const priceData: CreatePriceRequest = { productId: created.id, value: raw, description: pf.description };
-        await apiClient.createPrice(priceData);
-      }
-
-      await fetchProducts();
-      if (productCreateTarget === "ingredient") {
-        form.setFieldValue("ingredientId", created.id);
-      } else {
-        setSelectedProductId(created.id);
-      }
-      setProductModalOpen(false);
-      message.success("Producto creado y listo para usar en recetas");
-    } catch (error) {
-      message.error(getErrorMessage(error, "Error al crear producto"));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const calculatorRows = useMemo(() => {
-    const n = calculatorAmount;
-    if (n == null || !Number.isFinite(n) || n <= 0 || recipes.length === 0) return [];
-    return recipes.map((r) => {
-      const ing = r.ingredient;
-      const unit = ing?.unit ?? ProductUnit.UNIT;
-      return {
-        key: r.id,
-        name: ing?.name ?? "—",
-        amount: r.quantity * n,
-        unitLabel: UNIT_SHORT_LABEL[unit],
-      };
-    });
-  }, [recipes, calculatorAmount]);
-
-  const calculatorColumns = [
-    {
-      title: "Ingrediente",
-      dataIndex: "name",
-      key: "name",
-    },
-    {
-      title: "Cantidad a usar",
-      key: "need",
-      render: (_: unknown, row: { amount: number; unitLabel: string }) =>
-        `${formatRecipeAmount(row.amount)} ${row.unitLabel}`,
-    },
-  ];
-
-  const columns = [
-    {
-      title: "Producto (receta)",
-      dataIndex: ["product", "name"],
-      key: "product",
-      render: (_: string) => (selectedProduct ? selectedProduct.name : "-"),
-    },
-    {
-      title: "Ingrediente",
-      dataIndex: ["ingredient", "name"],
-      key: "ingredient",
-      render: (_: string, record: RecipeItem) =>
-        record.ingredient?.name
-          ? `${record.ingredient.name} (${UNIT_SHORT_LABEL[record.ingredient.unit ?? ProductUnit.UNIT]})`
-          : "-",
-    },
-    {
-      title: "Proporción",
-      dataIndex: "quantity",
-      key: "quantity",
-      render: (q: number, record: RecipeItem) => {
-        if (typeof q !== "number") return "-";
-        const final = selectedProduct;
-        const ing = record.ingredient;
-        if (!final || !ing) return formatRecipeAmount(q);
-        const ingU = UNIT_SHORT_LABEL[ing.unit ?? ProductUnit.UNIT];
-        const perKg = ingredientAmountPerKgOfFinal(q, final.unit ?? ProductUnit.UNIT);
-        if (perKg != null) {
-          return (
-            <span>
-              {formatRecipeAmount(perKg)} {ingU} / kg de final
-            </span>
-          );
-        }
-        return (
-          <span>
-            {formatRecipeAmount(q)} {ingU} por 1 {UNIT_SHORT_LABEL[final.unit ?? ProductUnit.UNIT]} de final
-          </span>
-        );
-      },
-    },
-    {
-      title: "Alta",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      render: (date: string | undefined) =>
-        date ? new Date(date).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "-",
-    },
-    {
-      title: "Acciones",
-      key: "actions",
-      width: 120,
-      render: (_: unknown, record: RecipeItem) => (
-        <Space>
-          <Button type="primary" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
-          <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
-        </Space>
-      ),
-    },
-  ];
-
   return (
     <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0, color: "#ffffff" }}>Recetas</h1>
-        <Button onClick={() => openCreateProductModal("final")} icon={<PlusOutlined />}>
-          Nuevo producto
-        </Button>
+      <h1 className="pc-pagetitle">Recetas</h1>
+
+      {/* Product selector card */}
+      <div className="rc-selbar">
+        <div className="rc-sellabel">Producto final</div>
+        <select
+          className="rc-fselect"
+          value={selectedProductId ?? ""}
+          onChange={(e) => setSelectedProductId(e.target.value || null)}
+        >
+          <option value="">Seleccionar un producto…</option>
+          {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {selectedProduct && (
+          <div className="rc-selsub">
+            Receta de {selectedProduct.name} · {recipes.length} ingrediente{recipes.length !== 1 ? "s" : ""}
+          </div>
+        )}
       </div>
 
-      {loadError && (
-        <Alert
-          type="error"
-          showIcon
-          style={{ marginBottom: 16 }}
-          message="No se pudieron cargar los ítems de receta"
-          description={loadError}
-        />
-      )}
-
-      <Card style={{ marginBottom: "16px", background: "#1f2937", borderColor: "#2d3748" }}>
-        <Row gutter={16} align="middle">
-          <Col xs={24} md={12} lg={10}>
-            <label style={{ color: "#9ca3af", display: "block", marginBottom: "8px" }}>Producto final (receta)</label>
-            <Select
-              allowClear
-              placeholder="Elegí el producto que querés fabricar"
-              options={productOptions}
-              value={selectedProductId}
-              onChange={(value) => setSelectedProductId(value)}
-              style={{ width: "100%" }}
-              showSearch
-              optionFilterProp="label"
-            />
-          </Col>
-          <Col xs={24} md={12} lg={14}>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 24 }}>
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} disabled={!selectedProductId}>
-                Agregar ingrediente
-              </Button>
-            </div>
-          </Col>
-        </Row>
-
-        <div style={{ marginTop: 14 }}>
-          <ScreenInfoPanel title="Cómo se lee la tabla de receta">
-            <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
-              Si el producto final está en <strong>kg</strong> o <strong>gr</strong>, la tabla muestra cuánto insumo
-              entra por <strong>cada 1 kg de final</strong>. Si no, se muestra por la unidad del final (unidad, litro,
-              etc.).
-            </span>
-          </ScreenInfoPanel>
-        </div>
-      </Card>
-
       {!selectedProductId ? (
-        <Empty description="Elegí un producto final para ver su receta" style={{ color: "#9ca3af", marginTop: 64 }} />
+        <EmptyState title="Seleccioná un producto para ver su receta" style={{ marginTop: 48 }} />
       ) : loading ? (
-        <Spin />
-      ) : recipes.length > 0 ? (
-        <>
-          <Table
-            columns={columns.filter((c) => c.key !== "product")}
-            dataSource={recipes}
-            rowKey="id"
-            style={{ backgroundColor: "#1f2937" }}
-          />
-          <Card
-            title="Calculadora de ingredientes"
-            style={{ marginTop: 20, background: "#1f2937", borderColor: "#2d3748" }}
-            styles={{ header: { borderColor: "#2d3748", color: "#ffffff" } }}
-          >
-            <ScreenInfoPanel
-              title="Cómo usar la calculadora de ingredientes"
-              style={{ marginBottom: calculatorRows.length > 0 ? 16 : 0 }}
-            >
-              <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
-                Tomá las proporciones de la receta de arriba. Indicá{" "}
-                <strong>cuánto vas a elaborar del producto final</strong> (en la misma unidad que tiene cargado ese
-                producto: {UNIT_SHORT_LABEL[selectedProduct?.unit ?? ProductUnit.UNIT]}). El listado es solo orientativo;
-                no modifica stock ni la receta guardada.
-              </span>
-            </ScreenInfoPanel>
-            <Space wrap align="center" style={{ marginBottom: calculatorRows.length > 0 ? 16 : 0 }}>
-              <span style={{ color: "#e5e7eb" }}>Quiero elaborar</span>
-              <InputNumber
-                min={0.0001}
-                step={0.01}
-                value={calculatorAmount ?? undefined}
-                onChange={(v) => setCalculatorAmount(typeof v === "number" && Number.isFinite(v) ? v : null)}
-                placeholder="Ej. 2,5"
-                style={{ minWidth: 120 }}
-              />
-              <span style={{ color: "#9ca3af" }}>
-                {UNIT_SHORT_LABEL[selectedProduct?.unit ?? ProductUnit.UNIT]} de «{selectedProduct?.name ?? "final"}»
-              </span>
-            </Space>
-            {calculatorRows.length > 0 ? (
-              <Table
-                size="small"
-                columns={calculatorColumns}
-                dataSource={calculatorRows}
-                pagination={false}
-                style={{ backgroundColor: "#1f2937" }}
-              />
-            ) : (
-              <Empty
-                description="Ingresá un número arriba para ver cuánto necesitás de cada ingrediente"
-                style={{ color: "#9ca3af", marginTop: 8 }}
-              />
-            )}
-          </Card>
-        </>
+        <Spinner />
       ) : (
-        <Empty
-          description={loadError ? "Reintentá cuando la API esté disponible" : "No hay ingredientes para esta receta"}
-          style={{ color: "#9ca3af" }}
-        />
+        <>
+          {/* Mobile tabs */}
+          <div className="rc-tabs">
+            <button className={"rc-tab" + (mobTab === "ing" ? " on" : "")} onClick={() => setMobTab("ing")}>Ingredientes</button>
+            <button className={"rc-tab" + (mobTab === "calc" ? " on" : "")} onClick={() => setMobTab("calc")}>Calculadora</button>
+          </div>
+
+          <div className="rc-cols">
+            {/* Left: ingredients */}
+            <div className={"rc-col--l rc-card" + (mobTab !== "ing" ? " mob-hidden" : "")}>
+              <div className="rc-card__head">
+                <span className="rc-card__title">
+                  Ingredientes · {selectedProduct?.name ?? ""}
+                </span>
+                <button className="rc-addbtn" onClick={openAddForm}>
+                  <Plus size={14} /> Agregar ingrediente
+                </button>
+              </div>
+
+              {recipes.length === 0 && !addOpen ? (
+                <EmptyState title="Sin ingredientes" subtitle="Agregá el primer ingrediente con el botón de arriba" style={{ padding: "32px 0" }} />
+              ) : (
+                <>
+                  {/* Desktop table */}
+                  <div className="ps-tablewrap">
+                    <table className="rc-table">
+                      <thead>
+                        <tr>
+                          <th>Ingrediente</th>
+                          <th style={{ textAlign: "right" }}>Cant./Batch</th>
+                          <th>Unidad</th>
+                          <th>Proporción</th>
+                          <th style={{ width: 48 }} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recipes.map((r) => {
+                          const ing = r.ingredient;
+                          const unit = UNIT_SHORT[ing?.unit ?? ProductUnit.KG];
+                          const cantPerBatch = r.quantity * BATCH_REF;
+                          return (
+                            <tr key={r.id}>
+                              <td>{ing?.name ?? "—"}</td>
+                              <td style={{ textAlign: "right" }}>
+                                <span className="rc-ing-amt">{fmtAmt(cantPerBatch)}</span>
+                              </td>
+                              <td><span className="rc-ing-unit">{unit}</span></td>
+                              <td>
+                                <span className="rc-ing-prop">
+                                  {fmtAmt(cantPerBatch)} / {BATCH_REF} {finalUnit}
+                                </span>
+                              </td>
+                              <td>
+                                <button
+                                  className="rc-xbtn"
+                                  onClick={() => setDeleteId(r.id)}
+                                  aria-label="Eliminar ingrediente"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile card list */}
+                  <div className="rc-cardlist ps-cardlist" style={{ padding: 0 }}>
+                    {recipes.map((r) => {
+                      const ing = r.ingredient;
+                      const unit = UNIT_SHORT[ing?.unit ?? ProductUnit.KG];
+                      const cantPerBatch = r.quantity * BATCH_REF;
+                      return (
+                        <div key={r.id} className="rc-ingcard">
+                          <div>
+                            <div className="rc-ingcard__n">{ing?.name ?? "—"}</div>
+                            <div style={{ fontSize: 12, color: "var(--ha-text-3)", marginTop: 2 }}>
+                              {fmtAmt(cantPerBatch)} / {BATCH_REF} {finalUnit}
+                            </div>
+                          </div>
+                          <div className="rc-ingcard__r">
+                            <span className="rc-ingcard__amt">{fmtAmt(cantPerBatch)} {unit}</span>
+                            <button
+                              className="rc-ingcard__x"
+                              onClick={() => setDeleteId(r.id)}
+                              aria-label="Eliminar"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Add ingredient inline form */}
+              {addOpen && (
+                <div className="rc-addform">
+                  <div className="rc-addrow">
+                    <div className="rc-ff" style={{ flex: 2, minWidth: 140 }}>
+                      <label>Ingrediente</label>
+                      <select className="rc-fsel2" style={{ width: "100%" }} value={fIngredientId} onChange={(e) => setFIngredientId(e.target.value)}>
+                        <option value="">Elegí un ingrediente</option>
+                        {ingredientOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="rc-ff" style={{ width: 90 }}>
+                      <label>Cant. ingr.</label>
+                      <input type="number" className="rc-finput" style={{ width: "100%" }} min={0.0001} step={0.001} placeholder="Ej: 22" value={fQty} onChange={(e) => setFQty(e.target.value)} />
+                    </div>
+                    <div className="rc-ff" style={{ width: 90 }}>
+                      <label>Cant. batch</label>
+                      <input type="number" className="rc-finput" style={{ width: "100%" }} min={0.0001} step={1} value={fBatch} onChange={(e) => setFBatch(e.target.value)} />
+                    </div>
+                    <button
+                      className="pc-btn pc-btn--primary"
+                      style={{ height: 40, alignSelf: "flex-end", flexShrink: 0 }}
+                      onClick={() => void handleAddIngredient()}
+                      disabled={submitting}
+                    >
+                      {submitting ? "Agregando…" : "Agregar"}
+                    </button>
+                    <button
+                      className="pc-btn pc-btn--ghost"
+                      style={{ height: 40, alignSelf: "flex-end", flexShrink: 0 }}
+                      onClick={() => setAddOpen(false)}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                  <p className="rc-addnote">
+                    La proporción se calcula como: ingrediente ÷ batch.{" "}
+                    <a onClick={() => openCreateProductModal("ingredient")}>+ Crear producto nuevo</a>
+                  </p>
+                </div>
+              )}
+
+              <div className="rc-note">
+                Batch de referencia: <b>{BATCH_REF} litros</b>
+              </div>
+            </div>
+
+            {/* Right: calculator */}
+            <div className={"rc-col--r rc-card" + (mobTab !== "calc" ? " mob-hidden" : "")}>
+              <div className="rc-calc">
+                <div className="rc-calc__title">Calculadora</div>
+                <div className="rc-calc__sub">Ingresá la cantidad a producir</div>
+
+                <label className="rc-calc__label">
+                  Cantidad a producir ({finalUnit})
+                </label>
+                <input
+                  type="number"
+                  className="rc-calc__input"
+                  min={0}
+                  step={1}
+                  placeholder="0"
+                  value={calculatorAmount}
+                  onChange={(e) => setCalculatorAmount(e.target.value)}
+                />
+                <div className="rc-quick">
+                  {QUICK_VALS.map((v) => (
+                    <button
+                      key={v}
+                      className={"rc-chip" + (calculatorAmount === String(v) ? " on" : "")}
+                      onClick={() => setCalculatorAmount(String(v))}
+                    >
+                      {v} {finalUnit}
+                    </button>
+                  ))}
+                </div>
+
+                {calculatorRows.length > 0 && (
+                  <>
+                    <div className="rc-sep" />
+                    <div className="rc-needs">Necesitás:</div>
+                    {calculatorRows.map((row) => (
+                      <div key={row.key} className="rc-resrow">
+                        <span className="rc-resrow__n">{row.name}</span>
+                        <span className="rc-resrow__v">
+                          {fmtAmt(row.amount)} {row.unit}
+                          {row.gramsDetail && <small>{row.gramsDetail}</small>}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="rc-infobox">
+                      Basado en un batch de referencia de {BATCH_REF} {finalUnit}.
+                    </div>
+                  </>
+                )}
+
+                {recipes.length === 0 && calcAmount > 0 && (
+                  <div className="ha-empty" style={{ padding: "24px 0" }}>
+                    <p className="ha-empty__s">Agregá ingredientes a la receta primero</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
-      <Modal
-        title={editingId ? "Editar ingrediente" : "Agregar ingrediente"}
-        open={modalOpen}
-        onOk={() => form.submit()}
-        onCancel={() => setModalOpen(false)}
-        okButtonProps={{ loading: submitting, disabled: submitting }}
-        width={480}
-      >
-        <ScreenInfoPanel
-          title="Cómo cargar las cantidades de la tanda"
-          style={{ marginBottom: 16 }}
-        >
-          <span style={{ color: "rgba(255, 255, 255, 0.7)" }}>
-            Receta de <strong>{selectedProduct?.name ?? "…"}</strong> (producto final). Para cada ingrediente cargás dos
-            cantidades que corresponden a <strong>la misma tanda o lote</strong>: una del final y otra del insumo. El
-            primero es siempre el <strong>{selectedProduct?.name ?? "producto final"}</strong>, no el ingrediente.
-          </span>
-        </ScreenInfoPanel>
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item
-            name="ingredientId"
-            label="Ingrediente"
-            rules={[{ required: true, message: "Elegí un ingrediente" }]}
-          >
-            <Select
-              placeholder="Ingrediente"
-              options={ingredientOptions}
-              showSearch
-              optionFilterProp="label"
-              disabled={!!editingId}
-            />
-          </Form.Item>
-          {!editingId && (
-            <Button type="link" style={{ paddingLeft: 0 }} onClick={() => openCreateProductModal("ingredient")}>
-              + Crear producto nuevo sin salir de recetas
-            </Button>
-          )}
-
-          <Row gutter={[12, 8]}>
-            <Col xs={24} sm={12}>
-              <div style={{ color: "#ffffff", fontWeight: 500, marginBottom: 4 }}>
-                Cuánto hacés de «{selectedProduct?.name ?? "producto final"}» (una tanda)
+      {/* Product create modal */}
+      {productModalOpen && (
+        <div className="ha-modal-backdrop" onClick={() => setProductModalOpen(false)} style={{ zIndex: 130 }}>
+          <div className="ha-modal" style={{ maxWidth: 560, zIndex: 131 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">Nuevo producto</span>
+              <button className="ha-iconbtn" onClick={() => setProductModalOpen(false)} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body" style={{ maxHeight: "60vh", overflowY: "auto" }}>
+              <div className="ha-field" style={{ marginBottom: 12 }}>
+                <label className="ha-label">Nombre <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <input className="ha-input" placeholder="Nombre del producto" value={pName} onChange={(e) => setPName(e.target.value)} />
               </div>
-              <div style={{ color: "#9ca3af", fontSize: 12, lineHeight: 1.45 }}>
-                Referencia del <strong>final</strong> en la unidad que definiiste para él (
-                {UNIT_SHORT_LABEL[selectedProduct?.unit ?? ProductUnit.UNIT]}).
+              <div className="ha-field" style={{ marginBottom: 12 }}>
+                <label className="ha-label">Unidad de medida</label>
+                <select className="ha-input" value={pUnit} onChange={(e) => setPUnit(e.target.value as ProductUnit)}>
+                  {PRODUCT_UNIT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
               </div>
-            </Col>
-            <Col xs={24} sm={12}>
-              <div style={{ color: "#ffffff", fontWeight: 500, marginBottom: 4 }}>
-                Cuánto de «{selectedIngredient?.name ?? "el ingrediente"}» en esa misma tanda
+              <div className="ha-field" style={{ marginBottom: 12 }}>
+                <label className="ha-label">Stock inicial (opcional)</label>
+                <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej: 10" value={pStock} onChange={(e) => setPStock(e.target.value)} />
               </div>
-              <div style={{ color: "#9ca3af", fontSize: 12, lineHeight: 1.45 }}>
-                Cantidad del insumo elegido arriba, en su unidad (
-                {selectedIngredient
-                  ? UNIT_SHORT_LABEL[selectedIngredient.unit ?? ProductUnit.UNIT]
-                  : UNIT_SHORT_LABEL[ProductUnit.UNIT]}
-                ).
+              <div className="ha-field" style={{ marginBottom: 12 }}>
+                <label className="ha-label">Costo <span style={{ color: "var(--ha-red)" }}>*</span></label>
+                <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej: 1200" value={pCostValue} onChange={(e) => setPCostValue(e.target.value)} />
               </div>
-            </Col>
-          </Row>
-          <Row gutter={[12, 8]} style={{ marginTop: 4 }}>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                name="batchQuantity"
-                rules={[
-                  { required: true, message: "Este dato es obligatorio" },
-                  { type: "number", min: 0.0001, message: "Tiene que ser mayor que 0" },
-                ]}
-                style={{ marginBottom: 0 }}
-              >
-                <InputNumber min={0.0001} step={0.01} placeholder="Ej: 1" style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                name="ingredientBatchQuantity"
-                rules={[
-                  { required: true, message: "Este dato es obligatorio" },
-                  { type: "number", min: 0.0001, message: "Tiene que ser mayor que 0" },
-                ]}
-                style={{ marginBottom: 0 }}
-              >
-                <InputNumber min={0.0001} step={0.01} placeholder="Ej: 0.7" style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <div style={{ color: "#9ca3af", marginTop: 14, marginBottom: 12, lineHeight: 1.5 }}>
-            {Number(batchQuantity) > 0 && Number(ingredientBatchQuantity) > 0 && selectedProduct && selectedIngredient
-              ? (() => {
-                  const ratio = Number(ingredientBatchQuantity) / Number(batchQuantity);
-                  const perKg = ingredientAmountPerKgOfFinal(ratio, selectedProduct.unit ?? ProductUnit.UNIT);
-                  const ingU = UNIT_SHORT_LABEL[selectedIngredient.unit ?? ProductUnit.UNIT];
-                  const nameIng = selectedIngredient.name ?? "ingrediente";
-                  const nameFin = selectedProduct.name ?? "final";
-                  if (perKg != null) {
-                    return `Por cada 1 kg de «${nameFin}» se usan ${formatRecipeAmount(perKg)} ${ingU} de «${nameIng}».`;
-                  }
-                  return `Por cada 1 ${UNIT_SHORT_LABEL[selectedProduct.unit ?? ProductUnit.UNIT]} de «${nameFin}» se usan ${formatRecipeAmount(ratio)} ${ingU} de «${nameIng}». (Para ver por kg, cargá el final en kg o gr.)`;
-                })()
-              : "Completá ambos números para ver la proporción (por kg de final si el final está en kg o gr)."}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div className="ha-field">
+                  <label className="ha-label">Precio mayorista (opcional)</label>
+                  <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej: 1500" value={pPriceMayorista} onChange={(e) => setPPriceMayorista(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Precio minorista (opcional)</label>
+                  <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej: 1800" value={pPriceMinorista} onChange={(e) => setPPriceMinorista(e.target.value)} />
+                </div>
+              </div>
+              <div className="ha-field">
+                <label className="ha-label">Precio fábrica (opcional)</label>
+                <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej: 1300" value={pPriceFabrica} onChange={(e) => setPPriceFabrica(e.target.value)} />
+              </div>
+            </div>
+            <div className="ha-modal__foot">
+              <button className="ha-btn ha-btn--secondary" onClick={() => setProductModalOpen(false)}>Cancelar</button>
+              <button className="ha-btn ha-btn--primary" onClick={() => void handleCreateProductSubmit()} disabled={submitting}>
+                {submitting ? "Creando…" : "Crear"}
+              </button>
+            </div>
           </div>
-        </Form>
-      </Modal>
+        </div>
+      )}
 
-      <Modal
-        title="Nuevo producto"
-        open={productModalOpen}
-        onOk={() => productForm.submit()}
-        onCancel={() => setProductModalOpen(false)}
-        okButtonProps={{ loading: submitting, disabled: submitting }}
-        width={560}
-        zIndex={1300}
-      >
-        <Form form={productForm} layout="vertical" onFinish={handleCreateProductSubmit}>
-          <Form.Item name="name" label="Nombre" rules={[{ required: true, message: "El nombre es requerido" }]}>
-            <Input placeholder="Nombre del producto" />
-          </Form.Item>
-
-          <Form.Item name="unit" label="Unidad de medida" initialValue={ProductUnit.UNIT}>
-            <Select placeholder="Seleccioná unidad" options={PRODUCT_UNIT_OPTIONS} />
-          </Form.Item>
-
-          <Form.Item name="stock" label="Stock inicial (opcional)">
-            <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 10 o 3,5" style={{ width: "100%" }} />
-          </Form.Item>
-
-          <Form.Item
-            name="costValue"
-            label="Costo (obligatorio)"
-            rules={[{ required: true, message: "El costo es requerido" }]}
-          >
-            <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1200" style={{ width: "100%" }} />
-          </Form.Item>
-
-          <Row gutter={12}>
-            <Col xs={24} sm={12}>
-              <Form.Item name="priceMayorista" label="Precio mayorista (opcional)">
-                <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1500" style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="priceMinorista" label="Precio minorista (opcional)">
-                <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1800" style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item name="priceFabrica" label="Precio fabrica (opcional)">
-            <InputNumber min={0} step={0.01} precision={4} placeholder="Ej: 1300" style={{ width: "100%" }} />
-          </Form.Item>
-        </Form>
-      </Modal>
+      {/* Delete confirmation dialog */}
+      {deleteId && (
+        <ConfirmDialog
+          title="¿Eliminar ingrediente?"
+          description="Esta acción no se puede deshacer."
+          onCancel={() => setDeleteId(null)}
+          onConfirm={() => void handleDelete(deleteId)}
+        />
+      )}
     </div>
   );
 }
