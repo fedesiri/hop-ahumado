@@ -234,6 +234,10 @@ function StockContent() {
       );
 
       if (type === "IN") {
+        if (!selectedLineId) {
+          toast.error("Seleccioná una línea de negocio antes de registrar una entrada.");
+          return;
+        }
         await apiClient.createExpense({ description: productsDescription, cashAmount: productsCashAmount, cardAmount: productsCardAmount, businessLineId: selectedLineId ?? "" });
         const validExtras = extraExpenseRows.filter((r) => Number(r.cash) > 0 || Number(r.card) > 0);
         for (const extra of validExtras) {
