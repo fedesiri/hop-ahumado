@@ -17,7 +17,7 @@ import {
 import { toast } from "@/lib/toast";
 import type { Price, Product } from "@/lib/types";
 import { ArrowRight, Copy, Search, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProductRow } from "./product-row";
 
 const STORAGE_KEYS = {
@@ -110,6 +110,9 @@ export function OrderCalculator({
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [mobTab, setMobTab] = useState<"products" | "summary">("products");
   const [mounted, setMounted] = useState(false);
+  const [comboInput, setComboInput] = useState("");
+  const [comboOpen, setComboOpen] = useState(false);
+  const comboRef = useRef<HTMLDivElement>(null);
 
   const productIds = useMemo(() => products.map((p) => p.id), [products]);
   const promoCategoryNames = useMemo(() => getPromoThresholdCategoryNames(), []);
@@ -157,6 +160,30 @@ export function OrderCalculator({
     if (mounted && persistToLocalStorage)
       localStorage.setItem(STORAGE_KEYS.quantities, JSON.stringify(quantities));
   }, [quantities, mounted, persistToLocalStorage]);
+
+  useEffect(() => {
+    const selected = customers.find((c) => c.id === selectedCustomerId);
+    setComboInput(selected?.name ?? "");
+  }, [selectedCustomerId, customers]);
+
+  useEffect(() => {
+    if (!comboOpen) return;
+    function onOutside(e: MouseEvent) {
+      if (comboRef.current && !comboRef.current.contains(e.target as Node)) {
+        setComboOpen(false);
+        const selected = customers.find((c) => c.id === selectedCustomerId);
+        setComboInput(selected?.name ?? "");
+      }
+    }
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [comboOpen, customers, selectedCustomerId]);
+
+  const filteredCustomers = useMemo(() => {
+    const term = comboInput.trim().toLowerCase();
+    if (!term) return customers;
+    return customers.filter((c) => c.name.toLowerCase().includes(term));
+  }, [customers, comboInput]);
 
   const hasItems = products.some((p) => (quantities[p.id] ?? 0) > 0);
 
@@ -352,7 +379,10 @@ export function OrderCalculator({
         <section className={`oc-panel${mobTab !== "summary" ? " oc-panel--hidden" : ""}`}>
           <div className="oc-panel-head">
             <div className="oc-panel-head__info">
-              <div className="oc-panel-title">Resumen</div>
+              <div className="oc-panel-title">
+                Resumen
+                <span className="oc-price-badge">{PRICE_TYPE_LABELS[priceType]}</span>
+              </div>
             </div>
             <button
               className="ha-iconbtn"
@@ -400,16 +430,41 @@ export function OrderCalculator({
           {/* Customer */}
           <div className="oc-sum-sect oc-sum-sect--bd">
             <label className="oc-sum-label">Cliente</label>
-            <select
-              className="oc-sum-sel"
-              value={selectedCustomerId ?? ""}
-              onChange={(e) => setSelectedCustomerId(e.target.value || null)}
-            >
-              <option value="">Sin cliente (anónima)</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <div className="oc-combo" ref={comboRef}>
+              <input
+                className="oc-combo__input"
+                placeholder="Sin cliente (anónima)"
+                value={comboInput}
+                onFocus={() => setComboOpen(true)}
+                onChange={(e) => {
+                  setComboInput(e.target.value);
+                  setComboOpen(true);
+                  if (!e.target.value) setSelectedCustomerId(null);
+                }}
+              />
+              {comboOpen && (
+                <div className="oc-combo__list">
+                  <button
+                    className="oc-combo__opt"
+                    onClick={() => { setSelectedCustomerId(null); setComboInput(""); setComboOpen(false); }}
+                  >
+                    Sin cliente (anónima)
+                  </button>
+                  {filteredCustomers.map((c) => (
+                    <button
+                      key={c.id}
+                      className={`oc-combo__opt${c.id === selectedCustomerId ? " is-sel" : ""}`}
+                      onClick={() => { setSelectedCustomerId(c.id); setComboInput(c.name); setComboOpen(false); }}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                  {filteredCustomers.length === 0 && (
+                    <div className="oc-combo__empty">Sin resultados</div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Stock warnings */}

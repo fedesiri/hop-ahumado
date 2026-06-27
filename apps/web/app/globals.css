@@ -495,6 +495,15 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .oc-sum-label{font-size:13px;font-weight:500;color:var(--ha-text-2);margin-bottom:6px;display:block}
 .oc-sum-sel{width:100%;height:44px;background:var(--ha-bg-raised);border:1px solid var(--ha-border-2);border-radius:8px;color:var(--ha-text);font-family:inherit;font-size:14px;padding:0 28px 0 13px;outline:none;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 11px center}
 .oc-sum-sel:focus{border-color:var(--ha-amber);box-shadow:0 0 0 3px var(--ha-amber-soft)}
+.oc-price-badge{margin-left:8px;padding:2px 8px;border-radius:999px;background:var(--ha-amber-soft);color:var(--ha-amber);font-size:11px;font-weight:600;vertical-align:middle;letter-spacing:.02em}
+.oc-combo{position:relative}
+.oc-combo__input{width:100%;height:44px;background:var(--ha-bg-raised);border:1px solid var(--ha-border-2);border-radius:8px;color:var(--ha-text);font-family:inherit;font-size:14px;padding:0 13px;outline:none;box-sizing:border-box}
+.oc-combo__input:focus{border-color:var(--ha-amber);box-shadow:0 0 0 3px var(--ha-amber-soft)}
+.oc-combo__list{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:50;background:var(--ha-bg-card);border:1px solid var(--ha-border-2);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.4);max-height:220px;overflow-y:auto}
+.oc-combo__opt{display:block;width:100%;padding:10px 14px;background:none;border:none;text-align:left;font-family:inherit;font-size:14px;color:var(--ha-text);cursor:pointer}
+.oc-combo__opt:hover{background:var(--ha-bg-hover)}
+.oc-combo__opt.is-sel{color:var(--ha-amber);font-weight:500}
+.oc-combo__empty{padding:10px 14px;font-size:13px;color:var(--ha-text-3)}
 .oc-stock-warn{display:flex;gap:8px;background:var(--ha-red-soft);border:1px solid rgba(224,82,82,0.35);border-radius:8px;padding:10px 14px;color:var(--ha-red);font-size:13px;line-height:1.4;margin:0 20px 12px}
 .oc-sum-totrow{display:flex;align-items:center;justify-content:space-between;font-size:13.5px;color:var(--ha-text-2);margin-bottom:8px}
 .oc-sum-totrow .mono{color:var(--ha-text);font-family:ui-monospace,monospace}
