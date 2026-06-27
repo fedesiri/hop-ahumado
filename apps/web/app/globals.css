@@ -988,10 +988,25 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .sm-pager__info{font-size:13px;color:var(--ha-text-2);padding:0 10px;white-space:nowrap}
 .sm-badge--off{background:var(--ha-bg-raised);color:var(--ha-text-3)}
 
-/* icon action buttons ul-act */
-.ul-actrow{display:flex;gap:6px;justify-content:flex-end}
-.ul-act{width:34px;height:34px;padding:0;display:inline-grid;place-items:center;border-radius:7px;border:1px solid var(--ha-border-2);background:transparent;color:var(--ha-text-2);cursor:pointer;flex:none}
-.ul-act:hover:not(:disabled){border-color:var(--ha-amber);color:var(--ha-text)}
-.ul-act--danger{border-color:rgba(224,82,82,0.35);color:var(--ha-red)}
-.ul-act--danger:hover:not(:disabled){border-color:var(--ha-red)}
-.ul-act:disabled{opacity:0.35;cursor:not-allowed}
+/* ubicaciones ub-* */
+.ub-newbtn{display:none}
+@container (min-width:768px){.ub-newbtn{display:inline-flex}}
+.ub-acts{display:flex;gap:7px;justify-content:flex-end}
+.ub-actbtn{display:grid;place-items:center;width:32px;height:32px;border-radius:6px;background:transparent;border:1px solid var(--ha-border-2);color:var(--ha-text-2);cursor:pointer;flex:none}
+.ub-actbtn:hover:not([disabled]){background:var(--ha-bg-hover);color:var(--ha-text)}
+.ub-actbtn--del{border-color:rgba(224,82,82,0.4);color:var(--ha-red)}
+.ub-actbtn--del:hover:not([disabled]){background:var(--ha-red-soft)}
+.ub-actbtn--off{opacity:.35;cursor:not-allowed}
+.ub-pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:500}
+.ub-pill--yes{background:var(--ha-green-soft);color:var(--ha-green)}
+.ub-pill--no{background:var(--ha-bg-raised);color:var(--ha-text-3)}
+.ub-prod{font-family:ui-monospace,monospace;color:var(--ha-amber);font-size:13px;font-variant-numeric:tabular-nums}
+.ub-cardlist{display:flex;flex-direction:column;gap:8px}
+@container (min-width:768px){.ub-cardlist{display:none}}
+.ub-loccard{background:var(--ha-bg-card);border:1px solid var(--ha-border);border-radius:10px;padding:14px 16px}
+.ub-loccard__top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ub-loccard__name{font-weight:600;font-size:14px;color:var(--ha-text)}
+.ub-loccard__mid{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.ub-loccard__date{font-size:12px;color:var(--ha-text-3);font-family:ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.ub-loccard__acts{display:flex;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--ha-border)}
+.ub-loccard__acts .ub-actbtn{flex:1;height:40px;width:auto}

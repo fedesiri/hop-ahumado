@@ -5,7 +5,7 @@ import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
 import type { StockBalanceRow, StockLocation } from "@/lib/types";
 import { toast } from "@/lib/toast";
-import { ArrowLeftRight, Eye, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeftRight, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 export default function StockLocationsPage() {
@@ -154,11 +154,17 @@ function StockLocationsContent() {
     }
   };
 
+  const stockCountLabel = (locId: string) => {
+    const count = stockCounts[locId] ?? null;
+    if (count === null) return null;
+    return `${count} producto${count !== 1 ? "s" : ""}`;
+  };
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <h1 className="pc-pagetitle" style={{ margin: 0 }}>Stock · Ubicaciones</h1>
-        <button className="pc-btn pc-btn--primary" onClick={openCreate}>
+        <button className="pc-btn pc-btn--primary ub-newbtn" onClick={openCreate}>
           + Nueva ubicación
         </button>
       </div>
@@ -176,74 +182,129 @@ function StockLocationsContent() {
           <p className="ha-empty__t">No hay ubicaciones de stock</p>
         </div>
       ) : (
-        <div className="pc-card">
-          <div style={{ overflowX: "auto" }}>
-            <table className="pc-table">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Por defecto</th>
-                  <th>Creada</th>
-                  <th>Productos con stock</th>
-                  <th style={{ textAlign: "right" }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {locations.map((loc) => {
-                  const count = stockCounts[loc.id] ?? null;
-                  const canDelete = count === 0;
-                  return (
-                    <tr key={loc.id}>
-                      <td style={{ fontWeight: 500 }}>{loc.name}</td>
-                      <td>
-                        <span className={`sm-badge ${loc.isDefault ? "sm-badge--in" : "sm-badge--off"}`}>
-                          {loc.isDefault ? "Sí" : "No"}
-                        </span>
-                      </td>
-                      <td className="pc-vig">{new Date(loc.createdAt).toLocaleDateString("es-AR")}</td>
-                      <td>
-                        {count === null ? (
-                          <span className="pc-vig">—</span>
-                        ) : (
-                          <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 13, color: count > 0 ? "var(--ha-amber)" : "var(--ha-text-3)" }}>
-                            {count} producto{count !== 1 ? "s" : ""}
+        <>
+          {/* Desktop table */}
+          <div className="pc-card">
+            <div className="pc-tablewrap" style={{ overflowX: "auto" }}>
+              <table className="pc-table">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Por defecto</th>
+                    <th>Creada</th>
+                    <th>Productos con stock</th>
+                    <th style={{ textAlign: "right" }}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {locations.map((loc) => {
+                    const count = stockCounts[loc.id] ?? null;
+                    const canDelete = count === 0;
+                    return (
+                      <tr key={loc.id}>
+                        <td style={{ fontWeight: 500 }}>{loc.name}</td>
+                        <td>
+                          <span className={`ub-pill ${loc.isDefault ? "ub-pill--yes" : "ub-pill--no"}`}>
+                            {loc.isDefault ? "Sí" : "No"}
                           </span>
-                        )}
-                      </td>
-                      <td>
-                        <div className="ul-actrow">
-                          <button className="ul-act" title="Ver stock" onClick={() => void openView(loc)}>
-                            <Eye size={15} />
-                          </button>
-                          <button className="ul-act" title="Editar" onClick={() => openEdit(loc)}>
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            className="ul-act"
-                            title="Traspasar todo el stock"
-                            disabled={locations.length < 2}
-                            onClick={() => openTransfer(loc)}
-                          >
-                            <ArrowLeftRight size={15} />
-                          </button>
-                          <button
-                            className={`ul-act${canDelete ? " ul-act--danger" : ""}`}
-                            title={canDelete ? "Eliminar" : "No se puede eliminar: tiene stock"}
-                            disabled={!canDelete}
-                            onClick={() => setConfirmDelete(loc)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="pc-vig">{new Date(loc.createdAt).toLocaleDateString("es-AR")}</td>
+                        <td>
+                          {count === null
+                            ? <span className="pc-vig">—</span>
+                            : <span className="ub-prod">{count} producto{count !== 1 ? "s" : ""}</span>}
+                        </td>
+                        <td>
+                          <div className="ub-acts">
+                            <button className="ub-actbtn" title="Ver stock" onClick={() => void openView(loc)}>
+                              <Eye size={14} />
+                            </button>
+                            <button className="ub-actbtn" title="Editar" onClick={() => openEdit(loc)}>
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              className="ub-actbtn"
+                              title="Traspasar todo el stock"
+                              disabled={locations.length < 2}
+                              onClick={() => openTransfer(loc)}
+                            >
+                              <ArrowLeftRight size={14} />
+                            </button>
+                            <button
+                              className={`ub-actbtn${canDelete ? " ub-actbtn--del" : " ub-actbtn--off"}`}
+                              title={canDelete ? "Eliminar" : "No se puede eliminar: tiene stock"}
+                              disabled={!canDelete}
+                              onClick={() => canDelete && setConfirmDelete(loc)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+
+          {/* Mobile cards */}
+          <div className="ub-cardlist">
+            {locations.map((loc) => {
+              const count = stockCounts[loc.id] ?? null;
+              const canDelete = count === 0;
+              const label = stockCountLabel(loc.id);
+              return (
+                <div key={loc.id} className="ub-loccard">
+                  <div className="ub-loccard__top">
+                    <span className="ub-loccard__name">{loc.name}</span>
+                    <span className={`ub-pill ${loc.isDefault ? "ub-pill--yes" : "ub-pill--no"}`}>
+                      {loc.isDefault ? "Sí" : "No"}
+                    </span>
+                  </div>
+                  <div className="ub-loccard__mid">
+                    {label !== null
+                      ? <span className="ub-prod">{label}</span>
+                      : <span className="ub-loccard__date">—</span>}
+                    <span className="ub-loccard__date">
+                      {new Date(loc.createdAt).toLocaleDateString("es-AR")}
+                    </span>
+                  </div>
+                  <div className="ub-loccard__acts">
+                    <button className="ub-actbtn" onClick={() => void openView(loc)} aria-label="Ver stock">
+                      <Eye size={16} />
+                    </button>
+                    <button className="ub-actbtn" onClick={() => openEdit(loc)} aria-label="Editar">
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      className="ub-actbtn"
+                      disabled={locations.length < 2}
+                      onClick={() => openTransfer(loc)}
+                      aria-label="Traspasar"
+                    >
+                      <ArrowLeftRight size={16} />
+                    </button>
+                    <button
+                      className={`ub-actbtn${canDelete ? " ub-actbtn--del" : " ub-actbtn--off"}`}
+                      disabled={!canDelete}
+                      onClick={() => canDelete && setConfirmDelete(loc)}
+                      aria-label="Eliminar"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
+
+      {/* Mobile FAB */}
+      <button className="ha-fab" onClick={openCreate} aria-label="Nueva ubicación">
+        <Plus size={24} />
+      </button>
 
       {/* Create / Edit Modal */}
       {(modalMode === "create" || modalMode === "edit") && (

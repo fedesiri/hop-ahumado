@@ -71,6 +71,9 @@ function ExpensesContent() {
   const totalCard = filtered.reduce((s, g) => s + g.cardAmount, 0);
   const totalAll = totalCash + totalCard;
 
+  // TODO: this fetches all records to support client-side filtering and KPI totals.
+  // Fix requires: (1) add search/dateFrom/dateTo params to GET /expenses backend endpoint,
+  // (2) add totals to the response meta, (3) switch to server-side pagination here.
   const fetchAllExpenses = useCallback(async () => {
     const bId = selectedLineId ?? undefined;
     const limit = 100;
