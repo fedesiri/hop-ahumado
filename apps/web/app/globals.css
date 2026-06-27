@@ -986,3 +986,12 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .sm-reason{font-style:italic;color:var(--ha-text-2);font-size:13px}
 .sm-pager{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:20px;flex-wrap:wrap}
 .sm-pager__info{font-size:13px;color:var(--ha-text-2);padding:0 10px;white-space:nowrap}
+.sm-badge--off{background:var(--ha-bg-raised);color:var(--ha-text-3)}
+
+/* icon action buttons ul-act */
+.ul-actrow{display:flex;gap:6px;justify-content:flex-end}
+.ul-act{width:34px;height:34px;padding:0;display:inline-grid;place-items:center;border-radius:7px;border:1px solid var(--ha-border-2);background:transparent;color:var(--ha-text-2);cursor:pointer;flex:none}
+.ul-act:hover:not(:disabled){border-color:var(--ha-amber);color:var(--ha-text)}
+.ul-act--danger{border-color:rgba(224,82,82,0.35);color:var(--ha-red)}
+.ul-act--danger:hover:not(:disabled){border-color:var(--ha-red)}
+.ul-act:disabled{opacity:0.35;cursor:not-allowed}
