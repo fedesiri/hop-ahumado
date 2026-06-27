@@ -54,6 +54,7 @@ function StockQuantityCell({ quantity, unit }: { quantity: number; unit: Product
           <span
             key={chip.key}
             style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
               padding: "4px 10px", borderRadius: 6, fontSize: 13, fontWeight: 600,
               fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
               background: primary ? "var(--ha-blue-soft)" : "var(--ha-bg-raised)",
@@ -61,6 +62,7 @@ function StockQuantityCell({ quantity, unit }: { quantity: number; unit: Product
               color: primary ? "var(--ha-blue)" : "var(--ha-text)",
             }}
           >
+            {chip.key === "boxes" && <Package size={12} />}
             {chip.label}
           </span>
         );
