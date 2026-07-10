@@ -395,7 +395,7 @@ function RecipesContent() {
               )}
 
               <div className="rc-note">
-                Batch de referencia: <b>{BATCH_REF} litros</b>
+                Batch de referencia: <b>{BATCH_REF} {finalUnit}</b>
               </div>
             </div>
 

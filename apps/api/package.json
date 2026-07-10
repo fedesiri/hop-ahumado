@@ -17,7 +17,8 @@
     "import:crm": "node scripts/import-crm-xlsx.js",
     "backfill:crm-profiles": "node scripts/backfill-customer-profiles-from-orders.js",
     "inspect:crm": "node scripts/inspect-crm-xlsx.js",
-    "inspect:xlsx": "node scripts/inspect-xlsx.js"
+    "inspect:xlsx": "node scripts/inspect-xlsx.js",
+    "seed:carnes": "node scripts/seed-carnes-ahumadas.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
