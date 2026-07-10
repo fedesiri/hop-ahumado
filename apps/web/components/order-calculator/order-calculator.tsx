@@ -193,9 +193,12 @@ export function OrderCalculator({
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
-    products.forEach((p) => { if (p.category?.name) cats.add(p.category.name); });
+    products.forEach((p) => {
+      const prices = pricesByProductId[p.id] ?? [];
+      if (p.category?.name && prices.length > 0) cats.add(p.category.name);
+    });
     return Array.from(cats).sort();
-  }, [products]);
+  }, [products, pricesByProductId]);
 
   const filteredProducts = useMemo(() => {
     let list = products;
@@ -472,6 +475,11 @@ export function OrderCalculator({
             <div className="oc-stock-warn">
               ⚠ {stockWarnings[0].name}: solo hay {stockWarnings[0].stock} unidades en stock.
               {stockWarnings.length > 1 && ` (+${stockWarnings.length - 1} más)`}
+              {stockWarnings.some((p) => p.stock === 0) && (
+                <span style={{ display: "block", fontSize: "0.85em", marginTop: 2, opacity: 0.85 }}>
+                  Los combos y productos con receta siempre muestran stock 0 — al confirmar se descuenta el stock de los ingredientes.
+                </span>
+              )}
             </div>
           )}
 

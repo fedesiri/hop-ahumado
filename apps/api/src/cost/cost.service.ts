@@ -13,9 +13,13 @@ export class CostService {
 
   async create(dto: CreateCostDto) {
     await this.validateProductExists(dto.productId);
-    return this.prisma.cost.create({
-      data: { productId: dto.productId, value: dto.value },
-      include: { product: true },
+    return this.prisma.$transaction(async (tx) => {
+      const cost = await tx.cost.create({
+        data: { productId: dto.productId, value: dto.value },
+        include: { product: true },
+      });
+      await this.syncFabricaPrice(tx, dto.productId, dto.value);
+      return cost;
     });
   }
 
@@ -70,7 +74,7 @@ export class CostService {
   }
 
   async update(id: string, dto: UpdateCostDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
     if (dto.productId !== undefined) {
       await this.validateProductExists(dto.productId);
     }
@@ -80,11 +84,14 @@ export class CostService {
     if (dto.deactivatedAt !== undefined) {
       data.deactivatedAt = dto.deactivatedAt === null ? null : new Date(dto.deactivatedAt);
     }
-    return this.prisma.cost.update({
-      where: { id },
-      data,
-      include: { product: true },
-    });
+    if (dto.value !== undefined) {
+      return this.prisma.$transaction(async (tx) => {
+        const cost = await tx.cost.update({ where: { id }, data, include: { product: true } });
+        await this.syncFabricaPrice(tx, existing.productId, dto.value!);
+        return cost;
+      });
+    }
+    return this.prisma.cost.update({ where: { id }, data, include: { product: true } });
   }
 
   async remove(id: string) {
@@ -134,6 +141,7 @@ export class CostService {
           data: { productId, value: dto.value },
           include: { product: { select: { id: true, name: true } } },
         });
+        await this.syncFabricaPrice(tx, productId, dto.value);
         created.push(row);
       }
 
@@ -159,11 +167,34 @@ export class CostService {
         data: { deactivatedAt: new Date() },
       });
 
-      return tx.cost.create({
+      const cost = await tx.cost.create({
         data: { productId: existing.productId, value: dto.value },
         include: { product: { select: { id: true, name: true } } },
       });
+      await this.syncFabricaPrice(tx, existing.productId, dto.value);
+      return cost;
     });
+  }
+
+  private async syncFabricaPrice(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    value: number,
+  ): Promise<void> {
+    const existing = await tx.price.findFirst({
+      where: {
+        productId,
+        deactivatedAt: null,
+        OR: [
+          { description: { equals: "fabrica", mode: "insensitive" } },
+          { description: { equals: "fábrica", mode: "insensitive" } },
+        ],
+      },
+    });
+    if (existing) {
+      await tx.price.update({ where: { id: existing.id }, data: { deactivatedAt: new Date() } });
+    }
+    await tx.price.create({ data: { productId, value, description: "fabrica" } });
   }
 
   private async validateProductExists(productId: string) {
