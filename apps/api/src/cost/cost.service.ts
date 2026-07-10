@@ -2,8 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { Cost, Prisma } from "@prisma/client";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
-import { CreateCostDto } from "./dto/create-cost.dto";
 import { BulkReplaceCostDto } from "./dto/bulk-replace-cost.dto";
+import { CreateCostDto } from "./dto/create-cost.dto";
 import { ReplaceCostDto } from "./dto/replace-cost.dto";
 import { UpdateCostDto } from "./dto/update-cost.dto";
 
@@ -176,11 +176,7 @@ export class CostService {
     });
   }
 
-  private async syncFabricaPrice(
-    tx: Prisma.TransactionClient,
-    productId: string,
-    value: number,
-  ): Promise<void> {
+  private async syncFabricaPrice(tx: Prisma.TransactionClient, productId: string, value: number): Promise<void> {
     const existing = await tx.price.findFirst({
       where: {
         productId,

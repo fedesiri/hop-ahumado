@@ -8,12 +8,7 @@ import {
   getPromoThresholdCategoryNames,
   isPromoGiftComboName,
 } from "@/lib/order-calculator/order-promo";
-import {
-  PRICE_TYPE_LABELS,
-  PRICE_TYPES,
-  getPriceForType,
-  type PriceType,
-} from "@/lib/order-calculator/price-types";
+import { PRICE_TYPES, PRICE_TYPE_LABELS, getPriceForType, type PriceType } from "@/lib/order-calculator/price-types";
 import { toast } from "@/lib/toast";
 import type { Price, Product } from "@/lib/types";
 import { ArrowRight, Copy, Search, Trash2, X } from "lucide-react";
@@ -51,12 +46,20 @@ function getInitialQuantities(productIds: string[], readFromStorage: boolean): R
       if (stored) {
         const parsed = JSON.parse(stored) as Record<string, number>;
         const out: Record<string, number> = {};
-        productIds.forEach((id) => { out[id] = typeof parsed[id] === "number" ? parsed[id] : 0; });
+        productIds.forEach((id) => {
+          out[id] = typeof parsed[id] === "number" ? parsed[id] : 0;
+        });
         return out;
       }
     } catch {}
   }
-  return productIds.reduce((acc, id) => { acc[id] = 0; return acc; }, {} as Record<string, number>);
+  return productIds.reduce(
+    (acc, id) => {
+      acc[id] = 0;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 }
 
 function getInitialPriceType(readFromStorage: boolean): PriceType {
@@ -123,14 +126,19 @@ export function OrderCalculator({
     [products, quantities, pricesByProductId, priceType, promoCategoryNames],
   );
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setQuantities((prev) => {
       const next = { ...prev };
       let changed = false;
       productIds.forEach((id) => {
-        if (next[id] === undefined) { next[id] = 0; changed = true; }
+        if (next[id] === undefined) {
+          next[id] = 0;
+          changed = true;
+        }
       });
       return changed ? next : prev;
     });
@@ -140,7 +148,9 @@ export function OrderCalculator({
     if (initialQuantitiesProp === undefined && initialCustomerIdProp === undefined) return;
     setQuantities((prev) => {
       const next = { ...prev };
-      productIds.forEach((id) => { next[id] = initialQuantitiesProp?.[id] ?? next[id] ?? 0; });
+      productIds.forEach((id) => {
+        next[id] = initialQuantitiesProp?.[id] ?? next[id] ?? 0;
+      });
       return next;
     });
     if (initialCustomerIdProp !== undefined) setSelectedCustomerId(initialCustomerIdProp);
@@ -157,8 +167,7 @@ export function OrderCalculator({
   }, [selectedCustomerId, mounted, persistToLocalStorage]);
 
   useEffect(() => {
-    if (mounted && persistToLocalStorage)
-      localStorage.setItem(STORAGE_KEYS.quantities, JSON.stringify(quantities));
+    if (mounted && persistToLocalStorage) localStorage.setItem(STORAGE_KEYS.quantities, JSON.stringify(quantities));
   }, [quantities, mounted, persistToLocalStorage]);
 
   useEffect(() => {
@@ -252,17 +261,31 @@ export function OrderCalculator({
     if (lines.length > 0) {
       parts.push("", "-------------------", `Total ${formatCurrency(total)}`);
     }
-    if (lines.length === 0) { toast.error("Agregá al menos un ítem para copiar"); return; }
+    if (lines.length === 0) {
+      toast.error("Agregá al menos un ítem para copiar");
+      return;
+    }
     navigator.clipboard
       .writeText(parts.join("\n"))
-      .then(() => { if (navigator.vibrate) navigator.vibrate(30); toast.success("Pedido copiado"); })
+      .then(() => {
+        if (navigator.vibrate) navigator.vibrate(30);
+        toast.success("Pedido copiado");
+      })
       .catch(() => toast.error("No se pudo copiar"));
   }, [products, quantities, pricesByProductId, priceType, total, customerNameForCopy, promoActive]);
 
   const handleClear = useCallback(() => {
     if (navigator.vibrate) navigator.vibrate(30);
     setSelectedCustomerId(null);
-    setQuantities(productIds.reduce((acc, id) => { acc[id] = 0; return acc; }, {} as Record<string, number>));
+    setQuantities(
+      productIds.reduce(
+        (acc, id) => {
+          acc[id] = 0;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
+    );
   }, [productIds]);
 
   const handleConfirmOrder = useCallback(() => {
@@ -280,10 +303,24 @@ export function OrderCalculator({
       items.push({ productId: p.id, quantity: qty, price: unitPrice });
     });
     onConfirmOrder(items, total, selectedCustomerId, priceType);
-  }, [onConfirmOrder, hasItems, products, quantities, pricesByProductId, priceType, total, selectedCustomerId, promoActive]);
+  }, [
+    onConfirmOrder,
+    hasItems,
+    products,
+    quantities,
+    pricesByProductId,
+    priceType,
+    total,
+    selectedCustomerId,
+    promoActive,
+  ]);
 
   if (!mounted) {
-    return <div className="ha-spin-wrap"><div className="ha-spin-el" /></div>;
+    return (
+      <div className="ha-spin-wrap">
+        <div className="ha-spin-el" />
+      </div>
+    );
   }
 
   return (
@@ -292,16 +329,10 @@ export function OrderCalculator({
 
       {/* Mobile tabs */}
       <div className="oc-tabs">
-        <button
-          className={`oc-tab${mobTab === "products" ? " is-active" : ""}`}
-          onClick={() => setMobTab("products")}
-        >
+        <button className={`oc-tab${mobTab === "products" ? " is-active" : ""}`} onClick={() => setMobTab("products")}>
           Productos
         </button>
-        <button
-          className={`oc-tab${mobTab === "summary" ? " is-active" : ""}`}
-          onClick={() => setMobTab("summary")}
-        >
+        <button className={`oc-tab${mobTab === "summary" ? " is-active" : ""}`} onClick={() => setMobTab("summary")}>
           Resumen <span className="oc-tab__badge">{summaryItems.length}</span>
         </button>
       </div>
@@ -318,11 +349,7 @@ export function OrderCalculator({
           <div className="oc-toolbar">
             <div className="oc-srchwrap">
               <Search size={16} />
-              <input
-                placeholder="Buscar producto…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+              <input placeholder="Buscar producto…" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             {categories.length > 0 && (
               <select
@@ -331,7 +358,11 @@ export function OrderCalculator({
                 onChange={(e) => setCategoryFilter(e.target.value)}
               >
                 <option value="all">Todas las categorías</option>
-                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
               </select>
             )}
             <select
@@ -340,7 +371,9 @@ export function OrderCalculator({
               onChange={(e) => setPriceType(e.target.value as PriceType)}
             >
               {PRICE_TYPES.map((t) => (
-                <option key={t} value={t}>{PRICE_TYPE_LABELS[t]}</option>
+                <option key={t} value={t}>
+                  {PRICE_TYPE_LABELS[t]}
+                </option>
               ))}
             </select>
           </div>
@@ -355,7 +388,8 @@ export function OrderCalculator({
                 if (prices.length === 0) return null;
                 const list = getPriceForType(prices, priceType);
                 const effective = effectiveUnitPriceForOrderLine(product, prices, priceType, promoActive);
-                const showPromo = promoActive && isPromoGiftComboName(product.name) && Math.abs(effective - list) > 0.02;
+                const showPromo =
+                  promoActive && isPromoGiftComboName(product.name) && Math.abs(effective - list) > 0.02;
                 return (
                   <ProductRow
                     key={product.id}
@@ -415,14 +449,12 @@ export function OrderCalculator({
                 <div key={item.productId} className="oc-sitem">
                   <div className="oc-sitem__info">
                     <div className="oc-sitem__name">{item.name}</div>
-                    <div className="oc-sitem__calc">{item.qty} × {formatCurrency(item.price)}</div>
+                    <div className="oc-sitem__calc">
+                      {item.qty} × {formatCurrency(item.price)}
+                    </div>
                   </div>
                   <div className="oc-sitem__sub">{formatCurrency(item.subtotal)}</div>
-                  <button
-                    className="oc-rmvbtn"
-                    onClick={() => updateQuantity(item.productId, 0)}
-                    aria-label="Eliminar"
-                  >
+                  <button className="oc-rmvbtn" onClick={() => updateQuantity(item.productId, 0)} aria-label="Eliminar">
                     <X size={14} />
                   </button>
                 </div>
@@ -449,7 +481,11 @@ export function OrderCalculator({
                 <div className="oc-combo__list">
                   <button
                     className="oc-combo__opt"
-                    onClick={() => { setSelectedCustomerId(null); setComboInput(""); setComboOpen(false); }}
+                    onClick={() => {
+                      setSelectedCustomerId(null);
+                      setComboInput("");
+                      setComboOpen(false);
+                    }}
                   >
                     Sin cliente (anónima)
                   </button>
@@ -457,14 +493,16 @@ export function OrderCalculator({
                     <button
                       key={c.id}
                       className={`oc-combo__opt${c.id === selectedCustomerId ? " is-sel" : ""}`}
-                      onClick={() => { setSelectedCustomerId(c.id); setComboInput(c.name); setComboOpen(false); }}
+                      onClick={() => {
+                        setSelectedCustomerId(c.id);
+                        setComboInput(c.name);
+                        setComboOpen(false);
+                      }}
                     >
                       {c.name}
                     </button>
                   ))}
-                  {filteredCustomers.length === 0 && (
-                    <div className="oc-combo__empty">Sin resultados</div>
-                  )}
+                  {filteredCustomers.length === 0 && <div className="oc-combo__empty">Sin resultados</div>}
                 </div>
               )}
             </div>
@@ -477,7 +515,8 @@ export function OrderCalculator({
               {stockWarnings.length > 1 && ` (+${stockWarnings.length - 1} más)`}
               {stockWarnings.some((p) => p.stock === 0) && (
                 <span style={{ display: "block", fontSize: "0.85em", marginTop: 2, opacity: 0.85 }}>
-                  Los combos y productos con receta siempre muestran stock 0 — al confirmar se descuenta el stock de los ingredientes.
+                  Los combos y productos con receta siempre muestran stock 0 — al confirmar se descuenta el stock de los
+                  ingredientes.
                 </span>
               )}
             </div>
@@ -497,11 +536,7 @@ export function OrderCalculator({
 
           {/* Confirm */}
           <div className="oc-sum-foot">
-            <button
-              className="oc-confirm-btn"
-              onClick={handleConfirmOrder}
-              disabled={!hasItems || !onConfirmOrder}
-            >
+            <button className="oc-confirm-btn" onClick={handleConfirmOrder} disabled={!hasItems || !onConfirmOrder}>
               {confirmButtonLabel ?? "Confirmar orden"} <ArrowRight size={17} />
             </button>
           </div>
