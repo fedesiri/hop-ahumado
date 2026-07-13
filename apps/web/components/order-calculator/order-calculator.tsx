@@ -10,7 +10,8 @@ import {
 } from "@/lib/order-calculator/order-promo";
 import { PRICE_TYPES, PRICE_TYPE_LABELS, getPriceForType, type PriceType } from "@/lib/order-calculator/price-types";
 import { toast } from "@/lib/toast";
-import type { Price, Product } from "@/lib/types";
+import { BusinessLine, type Price, type Product } from "@/lib/types";
+import { useLineContext } from "@/lib/line-context";
 import { ArrowRight, Copy, Search, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProductRow } from "./product-row";
@@ -94,6 +95,7 @@ export function OrderCalculator({
   confirmButtonLabel,
   persistToLocalStorage = true,
 }: OrderCalculatorProps) {
+  const { selectedLine, selectedLineId } = useLineContext();
   const [priceType, setPriceType] = useState<PriceType>(
     () => initialPriceTypeProp ?? getInitialPriceType(persistToLocalStorage),
   );
@@ -200,14 +202,19 @@ export function OrderCalculator({
     setQuantities((prev) => ({ ...prev, [productId]: qty }));
   }, []);
 
+  useEffect(() => {
+    setCategoryFilter(selectedLine === BusinessLine.BEER ? "Cerveza" : "all");
+  }, [selectedLine]);
+
   const categories = useMemo(() => {
     const cats = new Set<string>();
     products.forEach((p) => {
       const prices = pricesByProductId[p.id] ?? [];
-      if (p.category?.name && prices.length > 0) cats.add(p.category.name);
+      if (p.category?.name && prices.length > 0 && (!selectedLineId || p.businessLineId === selectedLineId))
+        cats.add(p.category.name);
     });
     return Array.from(cats).sort();
-  }, [products, pricesByProductId]);
+  }, [products, pricesByProductId, selectedLineId]);
 
   const filteredProducts = useMemo(() => {
     let list = products;
