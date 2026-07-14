@@ -496,6 +496,28 @@ function OrdersContent() {
                   <span className="ha-mono" style={{ color: "var(--ha-text)" }}>{formatCurrency(order.total ?? order.totalPrice ?? 0)}</span>
                   {order.deliveryDate && <span style={{ color: "var(--ha-text-3)" }}>Entrega: {new Date(order.deliveryDate).toLocaleDateString("es-AR")}</span>}
                 </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                  <button
+                    style={{
+                      width: 36, height: 22, borderRadius: 11, border: "none", cursor: "pointer", flexShrink: 0,
+                      background: order.isDelivered ? "var(--ha-green)" : "var(--ha-border-2)",
+                      transition: "background .2s", position: "relative",
+                      opacity: togglingDeliveryId === order.id ? 0.6 : 1,
+                    }}
+                    onClick={() => void handleToggleDelivered(order)}
+                    disabled={togglingDeliveryId === order.id}
+                    aria-label={order.isDelivered ? "Desmarcar entregada" : "Marcar entregada"}
+                  >
+                    <span style={{
+                      position: "absolute", top: 3, left: order.isDelivered ? 17 : 3,
+                      width: 16, height: 16, borderRadius: "50%", background: "#fff",
+                      transition: "left .2s",
+                    }} />
+                  </button>
+                  <span style={{ fontSize: 12, color: order.isDelivered ? "var(--ha-green)" : "var(--ha-text-3)" }}>
+                    {order.isDelivered ? "Entregada" : "No entregada"}
+                  </span>
+                </div>
                 <div className="ha-ordcard__actions">
                   <button onClick={() => void openViewModal(order.id)} className="ha-actbtn" title="Ver"><Eye size={15} /></button>
                   <button onClick={() => void handleCopyOrder(order)} className="ha-actbtn" title="Copiar"><Copy size={15} /></button>
