@@ -204,7 +204,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
 
   const openDevolverModal = () => {
     const pendingItems = (order.orderItems ?? []).filter((i) => i.price === null || i.price === undefined);
-    setDevolverItems(pendingItems.map((i) => ({ orderItemId: i.id, quantity: Number(i.quantity) })));
+    setDevolverItems(pendingItems.map((i) => ({ orderItemId: i.id, quantity: 0 })));
     setDevolverModalOpen(true);
   };
 
@@ -602,6 +602,82 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
                   </tbody>
                 </table>
               </div>
+              {/* Mobile cards */}
+              <div className="ha-mobile-only" style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+                {pendingOrderItems.map((oi) => {
+                  const ci = cobrarItems.find((c) => c.orderItemId === oi.id);
+                  const cobrarQty = ci?.quantitySold ?? Number(oi.quantity);
+                  const cobrarDisposition = ci?.unsoldDisposition ?? null;
+                  const cobrarPrice = ci?.price ?? null;
+                  const remaining = Number(oi.quantity) - cobrarQty;
+                  return (
+                    <div key={oi.id} style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+                      <div style={{ fontWeight: 600, color: "var(--ha-text)", fontSize: 14, marginBottom: 10 }}>{oi.product?.name ?? "—"}</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: remaining > 0 ? 10 : 0 }}>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--ha-text-3)" }}>
+                          Disponible
+                          <span style={{ fontSize: 14, color: "var(--ha-text)" }}>{formatQuantity(oi.quantity)}</span>
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--ha-text-3)" }}>
+                          Cant. vendida
+                          <input
+                            type="number"
+                            min={0}
+                            max={Number(oi.quantity)}
+                            step={1}
+                            className="ha-input"
+                            value={cobrarQty}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              setCobrarItems((prev) => prev.map((i) =>
+                                i.orderItemId === oi.id
+                                  ? { ...i, quantitySold: v, unsoldDisposition: v === Number(oi.quantity) ? null : i.unsoldDisposition }
+                                  : i,
+                              ));
+                            }}
+                          />
+                        </label>
+                      </div>
+                      {remaining > 0 && (
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--ha-text-3)", marginBottom: 10 }}>
+                          Remanente ({formatQuantity(remaining)}) — ¿qué hacemos?
+                          <select
+                            className="ha-input"
+                            value={cobrarDisposition ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value as "RETURN_TO_STOCK" | "KEEP_ON_CONSIGNMENT";
+                              setCobrarItems((prev) => prev.map((i) =>
+                                i.orderItemId === oi.id ? { ...i, unsoldDisposition: v } : i,
+                              ));
+                            }}
+                          >
+                            <option value="">¿Qué hacemos?</option>
+                            <option value="RETURN_TO_STOCK">Devolver al stock</option>
+                            <option value="KEEP_ON_CONSIGNMENT">Dejar en consignación</option>
+                          </select>
+                        </label>
+                      )}
+                      <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--ha-text-3)" }}>
+                        Precio unitario
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          className="ha-input"
+                          placeholder="0.00"
+                          value={cobrarPrice ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : Number(e.target.value);
+                            setCobrarItems((prev) => prev.map((i) =>
+                              i.orderItemId === oi.id ? { ...i, price: v } : i,
+                            ));
+                          }}
+                        />
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
               <div style={{ marginBottom: 16 }}>
                 <strong style={{ color: "var(--ha-text)" }}>Total: {formatCurrency(cobrarTotal)}</strong>
               </div>
@@ -663,7 +739,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
                   </thead>
                   <tbody>
                     {pendingOrderItems.map((oi) => {
-                      const devolverQty = devolverItems.find((d) => d.orderItemId === oi.id)?.quantity ?? Number(oi.quantity);
+                      const devolverQty = devolverItems.find((d) => d.orderItemId === oi.id)?.quantity ?? 0;
                       return (
                         <tr key={oi.id}>
                           <td>{oi.product?.name ?? "—"}</td>
@@ -690,6 +766,35 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
                     })}
                   </tbody>
                 </table>
+              </div>
+              {/* Mobile cards */}
+              <div className="ha-mobile-only" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                {pendingOrderItems.map((oi) => {
+                  const devolverQty = devolverItems.find((d) => d.orderItemId === oi.id)?.quantity ?? 0;
+                  return (
+                    <div key={oi.id} style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+                      <div style={{ fontWeight: 600, color: "var(--ha-text)", fontSize: 14, marginBottom: 8 }}>{oi.product?.name ?? "—"}</div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                        <span style={{ fontSize: 13, color: "var(--ha-text-3)" }}>En consignación: {formatQuantity(oi.quantity)}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={Number(oi.quantity)}
+                          step={1}
+                          className="ha-input"
+                          style={{ width: 90 }}
+                          value={devolverQty}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setDevolverItems((prev) => prev.map((d) =>
+                              d.orderItemId === oi.id ? { ...d, quantity: v } : d,
+                            ));
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div className="ha-modal__foot">
