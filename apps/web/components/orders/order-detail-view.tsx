@@ -300,6 +300,10 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
   const pendingOrderItems = orderItems.filter((i) => i.price === null || i.price === undefined);
   const hasPendingConsignmentUnits =
     order.isConsignment === true && !isPendingPricing && pendingOrderItems.length > 0;
+  // Valuar "a precio de hoy" siempre que la consignación tenga unidades sin cobrar,
+  // incluso si todavía no se cobró/pagó nada (estado Pendiente de precio).
+  const showTodayPricing =
+    order.isConsignment === true && !isCancelled && pendingOrderItems.length > 0;
   const isPaid =
     order.paymentStatus === OrderPaymentStatus.PAID ||
     order.paymentStatus === OrderPaymentStatus.OPEN_CONSIGNMENT;
@@ -343,7 +347,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
   // "Total a precio de hoy": mientras la consignación siga abierta, se valúan TODAS
   // las unidades de la orden (vendidas + en consignación) al precio activo de hoy.
   const todayTotal = (() => {
-    if (!hasPendingConsignmentUnits || !todayPrices) return null;
+    if (!showTodayPricing || !todayPrices) return null;
     const unitsByProduct = new Map<string, number>();
     for (const it of orderItems) {
       unitsByProduct.set(it.productId, (unitsByProduct.get(it.productId) ?? 0) + Number(it.quantity));
