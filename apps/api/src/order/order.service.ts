@@ -46,6 +46,8 @@ type OrderWithComputedFields = OrderWithRelations & {
   remainingAmount: number;
   paymentStatus: OrderPaymentStatus;
   isDelivered: boolean;
+  hasPendingConsignmentUnits: boolean;
+  pendingConsignmentUnits: number;
 };
 
 const ORDER_INCLUDE = {
@@ -253,15 +255,44 @@ export class OrderService {
         AND EXISTS (
           SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NULL
         )
+        AND NOT EXISTS (
+          SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NOT NULL
+        )
       )`;
     }
-    // Exclude PENDING_PRICING and CANCELLED orders from the remaining statuses.
+    if (status === OrderPaymentStatus.OPEN_CONSIGNMENT) {
+      // Consignación con parte cobrada y saldada, pero con unidades todavía sin precio.
+      return Prisma.sql`(
+        o."isConsignment" = true
+        AND o."cancelledAt" IS NULL
+        AND EXISTS (
+          SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NULL
+        )
+        AND EXISTS (
+          SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NOT NULL
+        )
+        AND (
+          ABS(
+            (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") -
+            (SELECT COALESCE(SUM(oi."quantity" * oi."price"::float8), 0) FROM "OrderItem" oi WHERE oi."orderId" = o."id")
+          ) < ${tol}
+          OR
+          (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") >
+          (SELECT COALESCE(SUM(oi."quantity" * oi."price"::float8), 0) FROM "OrderItem" oi WHERE oi."orderId" = o."id")
+        )
+      )`;
+    }
+    // Exclude fully-pending and CANCELLED orders from the remaining statuses.
+    // Una consignación con al menos un ítem cobrado ya no está "pendiente de precio".
     const notPendingPricing = Prisma.sql`(
       o."cancelledAt" IS NULL
       AND (
         o."isConsignment" = false
         OR NOT EXISTS (
           SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NULL
+        )
+        OR EXISTS (
+          SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NOT NULL
         )
       )
     )`;
@@ -274,6 +305,9 @@ export class OrderService {
     if (status === OrderPaymentStatus.PAID) {
       return Prisma.sql`(
         ${notPendingPricing}
+        AND NOT EXISTS (
+          SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o."id" AND oi."price" IS NULL
+        )
         AND (
           ABS(
             (SELECT COALESCE(SUM("amount"::float8), 0) FROM "Payment" WHERE "orderId" = o."id") -

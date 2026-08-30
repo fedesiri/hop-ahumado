@@ -24,6 +24,7 @@ const PAYMENT_STATUS_OPTIONS = [
   { value: OrderPaymentStatus.PARTIALLY_PAID, label: orderPaymentStatusLabel(OrderPaymentStatus.PARTIALLY_PAID) },
   { value: OrderPaymentStatus.PAID, label: orderPaymentStatusLabel(OrderPaymentStatus.PAID) },
   { value: OrderPaymentStatus.PENDING_PRICING, label: orderPaymentStatusLabel(OrderPaymentStatus.PENDING_PRICING) },
+  { value: OrderPaymentStatus.OPEN_CONSIGNMENT, label: orderPaymentStatusLabel(OrderPaymentStatus.OPEN_CONSIGNMENT) },
   { value: OrderPaymentStatus.CANCELLED, label: orderPaymentStatusLabel(OrderPaymentStatus.CANCELLED) },
 ];
 
@@ -229,6 +230,7 @@ function OrdersContent() {
       status === OrderPaymentStatus.PAID ? "ha-badge--paid" :
       status === OrderPaymentStatus.PARTIALLY_PAID ? "ha-badge--pending" :
       status === OrderPaymentStatus.PENDING_PRICING ? "ha-badge--warning" :
+      status === OrderPaymentStatus.OPEN_CONSIGNMENT ? "ha-badge--pricing" :
       status === OrderPaymentStatus.CANCELLED ? "ha-badge--draft" : "ha-badge--draft";
     return <span className={`ha-badge ${cls}`}>{orderPaymentStatusLabel(status)}</span>;
   };

@@ -28,6 +28,10 @@ export type OrderComputedFields = {
   remainingAmount: number;
   paymentStatus: OrderPaymentStatus;
   isDelivered: boolean;
+  /** Consignación: hay unidades sin precio fijado que siguen en consignación. */
+  hasPendingConsignmentUnits: boolean;
+  /** Consignación: total de unidades sin cobrar todavía. */
+  pendingConsignmentUnits: number;
 };
 
 function toNumber(value: DecimalLike): number {
@@ -36,8 +40,17 @@ function toNumber(value: DecimalLike): number {
 
 export function computeOrderFields(order: ComputableOrder): OrderComputedFields {
   const isDelivered = order.deliveredAt != null;
+  const isConsignment = order.isConsignment ?? false;
 
-  const isCancelled = (order.isConsignment ?? false) && order.cancelledAt != null;
+  const pendingConsignmentUnits = isConsignment
+    ? order.orderItems.reduce(
+        (sum, item) => (item.price == null ? sum + Number(item.quantity) : sum),
+        0,
+      )
+    : 0;
+  const hasPendingConsignmentUnits = pendingConsignmentUnits > 0;
+
+  const isCancelled = isConsignment && order.cancelledAt != null;
   if (isCancelled) {
     return {
       totalPrice: 0,
@@ -45,17 +58,23 @@ export function computeOrderFields(order: ComputableOrder): OrderComputedFields 
       remainingAmount: 0,
       paymentStatus: OrderPaymentStatus.CANCELLED,
       isDelivered,
+      hasPendingConsignmentUnits: false,
+      pendingConsignmentUnits: 0,
     };
   }
 
-  const hasPendingPricing = (order.isConsignment ?? false) && order.orderItems.some((i) => i.price == null);
-  if (hasPendingPricing) {
+  const hasPricedItems = order.orderItems.some((i) => i.price != null);
+  // Consignación sin ningún ítem con precio fijado: aún pendiente de cobro.
+  // Si ya hay ítems cobrados, se calcula sobre esos y el resto queda en consignación.
+  if (isConsignment && hasPendingConsignmentUnits && !hasPricedItems) {
     return {
       totalPrice: 0,
       paidAmount: 0,
       remainingAmount: 0,
       paymentStatus: OrderPaymentStatus.PENDING_PRICING,
       isDelivered,
+      hasPendingConsignmentUnits,
+      pendingConsignmentUnits,
     };
   }
 
@@ -73,12 +92,24 @@ export function computeOrderFields(order: ComputableOrder): OrderComputedFields 
     paymentStatus = OrderPaymentStatus.PAID;
   }
 
+  // La consignación no está "pagada" mientras queden unidades sin vender/cobrar,
+  // aunque lo ya vendido esté saldado por completo.
+  if (
+    isConsignment &&
+    hasPendingConsignmentUnits &&
+    paymentStatus === OrderPaymentStatus.PAID
+  ) {
+    paymentStatus = OrderPaymentStatus.OPEN_CONSIGNMENT;
+  }
+
   return {
     totalPrice,
     paidAmount,
     remainingAmount,
     paymentStatus,
     isDelivered,
+    hasPendingConsignmentUnits,
+    pendingConsignmentUnits,
   };
 }
 

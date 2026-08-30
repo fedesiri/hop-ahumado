@@ -35,6 +35,7 @@ const PAYMENT_STATUS_COLOR: Record<string, string> = {
   [OrderPaymentStatus.PAID]: "#4ade80",
   [OrderPaymentStatus.PARTIALLY_PAID]: "#fbbf24",
   [OrderPaymentStatus.PENDING_PRICING]: "#f97316",
+  [OrderPaymentStatus.OPEN_CONSIGNMENT]: "#a78bfa",
   [OrderPaymentStatus.CANCELLED]: "#f87171",
 };
 
@@ -75,6 +76,15 @@ function SectionDivider({ label }: { label: string }) {
   );
 }
 
+function EstadoConsignacion({ priced }: { priced: boolean }) {
+  const color = priced ? "#4ade80" : "#a78bfa";
+  return (
+    <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 5, fontSize: 12, fontWeight: 600, background: `${color}22`, color, border: `1px solid ${color}55`, whiteSpace: "nowrap" }}>
+      {priced ? "Vendido (abonado)" : "En consignación"}
+    </span>
+  );
+}
+
 export function OrderDetailView({ order, onOrderUpdated }: Props) {
   const [paymentAmount, setPaymentAmount] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
@@ -94,10 +104,39 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
   const [devolverItems, setDevolverItems] = useState<DevolverItem[]>([]);
   const [devolverLoading, setDevolverLoading] = useState(false);
 
+  // Precio activo de la lista de la orden, por producto. Se usa para valuar la
+  // consignación abierta "a precio de hoy" en la fila de totales.
+  const [todayPrices, setTodayPrices] = useState<Map<string, number> | null>(null);
+
   useEffect(() => {
     const r = Number(order.remainingAmount ?? 0);
     setPaymentAmount(r > 0 ? String(r) : "");
   }, [order.id, order.remainingAmount]);
+
+  useEffect(() => {
+    if (!order.isConsignment) {
+      setTodayPrices(null);
+      return;
+    }
+    let cancelled = false;
+    const listType =
+      (order.priceListType?.trim().toLowerCase() as "mayorista" | "minorista" | "fabrica" | undefined) ??
+      "mayorista";
+    (async () => {
+      try {
+        const prices = await fetchAllPages((page) =>
+          apiClient.getPrices(page, 100, undefined, true, undefined, listType),
+        );
+        if (cancelled) return;
+        setTodayPrices(new Map(prices.map((p) => [p.productId, Number(p.value)])));
+      } catch {
+        if (!cancelled) setTodayPrices(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [order.id, order.isConsignment, order.priceListType]);
 
   const openCobrarModal = async () => {
     const pendingItems = (order.orderItems ?? []).filter((i) => i.price === null || i.price === undefined);
@@ -176,7 +215,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
         }),
       });
       const amt = Number(cobrarPaymentAmount);
-      if (amt > 0 && updatedOrder.paymentStatus !== OrderPaymentStatus.PENDING_PRICING) {
+      if (amt > 0 && Number(updatedOrder.totalPrice ?? 0) > 0) {
         updatedOrder = await apiClient.createOrderPayment(order.id, {
           amount: amt,
           method: cobrarPaymentMethod,
@@ -184,8 +223,8 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       }
       onOrderUpdated(updatedOrder);
       setCobrarModalOpen(false);
-      const stillPending = updatedOrder.paymentStatus === OrderPaymentStatus.PENDING_PRICING;
-      toast.success(stillPending ? "Precios fijados. Los ítems restantes quedan en consignación." : "Consignación cobrada");
+      const stillPending = updatedOrder.hasPendingConsignmentUnits ?? false;
+      toast.success(stillPending ? "Cobro registrado. Quedan unidades en consignación." : "Consignación cobrada");
     } catch (error: unknown) {
       const msg = error && typeof error === "object" && "message" in error ? String((error as { message: string }).message) : "No se pudo registrar el cobro";
       toast.error(msg);
@@ -257,9 +296,72 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
 
   const isCancelled = order.paymentStatus === OrderPaymentStatus.CANCELLED;
   const isPendingPricing = order.isConsignment && order.paymentStatus === OrderPaymentStatus.PENDING_PRICING;
-  const pendingOrderItems = (order.orderItems ?? []).filter((i) => i.price === null || i.price === undefined);
-  const isPaid = order.paymentStatus === OrderPaymentStatus.PAID;
-  const remaining = Number(order.remainingAmount ?? 0);
+  const orderItems = order.orderItems ?? [];
+  const pendingOrderItems = orderItems.filter((i) => i.price === null || i.price === undefined);
+  const hasPendingConsignmentUnits =
+    order.isConsignment === true && !isPendingPricing && pendingOrderItems.length > 0;
+  const isPaid =
+    order.paymentStatus === OrderPaymentStatus.PAID ||
+    order.paymentStatus === OrderPaymentStatus.OPEN_CONSIGNMENT;
+
+  // Consignación: un producto puede quedar partido en una línea vendida (con precio)
+  // y otra que sigue en consignación (sin precio). Se ordenan agrupadas por producto,
+  // primero lo vendido y después lo que queda en consignación.
+  const consignmentItemRows = order.isConsignment
+    ? (() => {
+        const groups = new Map<string, typeof orderItems>();
+        for (const it of orderItems) {
+          const arr = groups.get(it.productId) ?? [];
+          arr.push(it);
+          groups.set(it.productId, arr);
+        }
+        const rows: (typeof orderItems)[number][] = [];
+        for (const group of groups.values()) {
+          rows.push(...[...group].sort((a, b) => (a.price == null ? 1 : 0) - (b.price == null ? 1 : 0)));
+        }
+        return rows;
+      })()
+    : null;
+  const consignmentSummary = order.isConsignment
+    ? orderItems.reduce(
+        (acc, it) => {
+          if (it.price != null) {
+            acc.soldUnits += Number(it.quantity);
+            acc.soldAmount += Number(it.price) * Number(it.quantity);
+          } else {
+            acc.pendingUnits += Number(it.quantity);
+          }
+          return acc;
+        },
+        { soldUnits: 0, soldAmount: 0, pendingUnits: 0 },
+      )
+    : null;
+  const itemsCount = order.isConsignment
+    ? new Set(orderItems.map((i) => i.productId)).size
+    : orderItems.length;
+
+  // "Total a precio de hoy": mientras la consignación siga abierta, se valúan TODAS
+  // las unidades de la orden (vendidas + en consignación) al precio activo de hoy.
+  const todayTotal = (() => {
+    if (!hasPendingConsignmentUnits || !todayPrices) return null;
+    const unitsByProduct = new Map<string, number>();
+    for (const it of orderItems) {
+      unitsByProduct.set(it.productId, (unitsByProduct.get(it.productId) ?? 0) + Number(it.quantity));
+    }
+    let sum = 0;
+    for (const [productId, units] of unitsByProduct) {
+      const price = todayPrices.get(productId);
+      if (price == null) return null; // falta algún precio: no arriesgamos un total incompleto
+      sum += price * units;
+    }
+    return sum;
+  })();
+  const usingTodayPrices = todayTotal != null;
+  const totalValue = todayTotal ?? Number(order.total ?? 0);
+  const paidValue = Number(order.paidAmount ?? 0);
+  const pendingValue = usingTodayPrices
+    ? Math.max((todayTotal as number) - paidValue, 0)
+    : Number(order.remainingAmount ?? 0);
 
   return (
     <div>
@@ -279,13 +381,16 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
         {/* KPI strip */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--ha-border)" }}>
           {([
-            { label: "Total", value: formatCurrency(order.total), color: undefined },
-            { label: "Pagado", value: formatCurrency(order.paidAmount), color: "#4ade80" },
-            { label: "Pendiente", value: formatCurrency(order.remainingAmount), color: remaining > 0 ? "#f97316" : undefined },
-          ] as const).map(({ label, value, color }) => (
+            { label: "Total", value: formatCurrency(totalValue), color: undefined, note: usingTodayPrices },
+            { label: "Pagado", value: formatCurrency(paidValue), color: "#4ade80", note: false },
+            { label: "Pendiente", value: formatCurrency(pendingValue), color: pendingValue > 0 ? "#f97316" : undefined, note: usingTodayPrices },
+          ] as const).map(({ label, value, color, note }) => (
             <div key={label} style={{ textAlign: "center", padding: "10px 8px", borderRadius: 8 }}>
               <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--ha-text-3)", fontWeight: 600, marginBottom: 5 }}>{label}</div>
               <div style={{ fontSize: 20, fontWeight: 800, color: color ?? "var(--ha-text)", fontFamily: "ui-monospace,monospace" }}>{value}</div>
+              {note && (
+                <div style={{ fontSize: 10, color: "var(--ha-text-3)", marginTop: 2 }}>a precio de hoy</div>
+              )}
             </div>
           ))}
         </div>
@@ -316,7 +421,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       {/* Items section with toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 0 12px" }}>
         <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--ha-text-3)", whiteSpace: "nowrap" }}>
-          Ítems ({(order.orderItems ?? []).length})
+          Ítems ({itemsCount})
         </span>
         <div style={{ flex: 1, height: 1, background: "var(--ha-border)" }} />
         <button
@@ -328,7 +433,99 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
           <ChevronDown size={15} style={{ transform: itemsExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s" }} />
         </button>
       </div>
-      {itemsExpanded && (
+      {itemsExpanded && order.isConsignment && (
+        <>
+          {/* Desktop table (consignación) */}
+          <div className="ha-table-wrap" style={{ marginBottom: 4 }}>
+            <table className="ha-table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Detalle</th>
+                  <th>Unidades</th>
+                  <th>Precio</th>
+                  <th>Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(consignmentItemRows ?? []).map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.product?.name ?? "—"}</td>
+                    <td><EstadoConsignacion priced={item.price != null} /></td>
+                    <td>{formatQuantity(item.quantity)}</td>
+                    <td>{item.price == null ? "—" : formatCurrency(item.price)}</td>
+                    <td>{item.price == null ? "—" : formatCurrency(Number(item.price) * Number(item.quantity))}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {consignmentSummary && (
+                <tfoot>
+                  <tr>
+                    <td style={{ padding: "0 16px", height: 44, fontWeight: 700, borderTop: "2px solid var(--ha-border)" }}>Abonado</td>
+                    <td style={{ borderTop: "2px solid var(--ha-border)" }} />
+                    <td style={{ padding: "0 16px", height: 44, fontWeight: 700, borderTop: "2px solid var(--ha-border)" }}>{formatQuantity(consignmentSummary.soldUnits)} u</td>
+                    <td style={{ borderTop: "2px solid var(--ha-border)" }} />
+                    <td style={{ padding: "0 16px", height: 44, fontWeight: 700, borderTop: "2px solid var(--ha-border)" }}>{formatCurrency(consignmentSummary.soldAmount)}</td>
+                  </tr>
+                  {consignmentSummary.pendingUnits > 0 && (
+                    <tr style={{ color: "var(--ha-text-3)" }}>
+                      <td style={{ padding: "0 16px", height: 40 }}>En consignación</td>
+                      <td />
+                      <td style={{ padding: "0 16px", height: 40 }}>{formatQuantity(consignmentSummary.pendingUnits)} u</td>
+                      <td />
+                      <td style={{ padding: "0 16px", height: 40 }}>—</td>
+                    </tr>
+                  )}
+                </tfoot>
+              )}
+            </table>
+          </div>
+          {/* Mobile cards (consignación) */}
+          <div className="ha-mobile-only" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 4 }}>
+            {orderItems.length === 0 ? (
+              <div style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)", color: "var(--ha-text-3)", fontSize: 14 }}>
+                Sin ítems
+              </div>
+            ) : (
+              <>
+                {(consignmentItemRows ?? []).map((item) => (
+                  <div key={item.id} style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontWeight: 600, color: "var(--ha-text)", fontSize: 14 }}>{item.product?.name ?? "—"}</span>
+                      <EstadoConsignacion priced={item.price != null} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 16px", fontSize: 13 }}>
+                      <span style={{ color: "var(--ha-text-3)" }}>Unidades</span>
+                      <span style={{ color: "var(--ha-text)" }}>{formatQuantity(item.quantity)}</span>
+                      <span style={{ color: "var(--ha-text-3)" }}>Precio</span>
+                      <span style={{ color: "var(--ha-text)" }}>{item.price == null ? "—" : formatCurrency(item.price)}</span>
+                      <span style={{ color: "var(--ha-text-3)" }}>Subtotal</span>
+                      <span style={{ color: "var(--ha-text)", fontWeight: 600 }}>{item.price == null ? "—" : formatCurrency(Number(item.price) * Number(item.quantity))}</span>
+                    </div>
+                  </div>
+                ))}
+                {consignmentSummary && (
+                  <div style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ fontWeight: 700, color: "var(--ha-text)", fontSize: 14 }}>Abonado</span>
+                      <span style={{ fontWeight: 700, color: "var(--ha-text)", fontSize: 14 }}>
+                        {formatQuantity(consignmentSummary.soldUnits)} u · {formatCurrency(consignmentSummary.soldAmount)}
+                      </span>
+                    </div>
+                    {consignmentSummary.pendingUnits > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4, color: "var(--ha-text-3)", fontSize: 13 }}>
+                        <span>En consignación</span>
+                        <span>{formatQuantity(consignmentSummary.pendingUnits)} u</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
+      {itemsExpanded && !order.isConsignment && (
         <>
           {/* Desktop table */}
           <div className="ha-table-wrap" style={{ marginBottom: 4 }}>
@@ -336,17 +533,15 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
               <thead>
                 <tr>
                   <th>Producto</th>
-                  {order.isConsignment && <th>Consignado</th>}
                   <th>Cantidad</th>
                   <th>Precio</th>
                   <th>Subtotal</th>
                 </tr>
               </thead>
               <tbody>
-                {(order.orderItems ?? []).map((item) => (
+                {orderItems.map((item) => (
                   <tr key={item.id}>
                     <td>{item.product?.name ?? "—"}</td>
-                    {order.isConsignment && <td>{item.originalQuantity != null ? formatQuantity(item.originalQuantity) : "—"}</td>}
                     <td>{formatQuantity(item.quantity)}</td>
                     <td>{item.price === null || item.price === undefined ? "—" : formatCurrency(item.price)}</td>
                     <td>{item.price === null || item.price === undefined ? "—" : formatCurrency(Number(item.price) * Number(item.quantity))}</td>
@@ -357,20 +552,14 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
           </div>
           {/* Mobile cards */}
           <div className="ha-mobile-only" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 4 }}>
-            {(order.orderItems ?? []).length === 0 ? (
+            {orderItems.length === 0 ? (
               <div style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)", color: "var(--ha-text-3)", fontSize: 14 }}>
                 Sin ítems
               </div>
-            ) : (order.orderItems ?? []).map((item) => (
+            ) : orderItems.map((item) => (
               <div key={item.id} style={{ padding: "12px 14px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
                 <div style={{ fontWeight: 600, color: "var(--ha-text)", fontSize: 14, marginBottom: 8 }}>{item.product?.name ?? "—"}</div>
                 <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 16px", fontSize: 13 }}>
-                  {order.isConsignment && (
-                    <>
-                      <span style={{ color: "var(--ha-text-3)" }}>Consignado</span>
-                      <span style={{ color: "var(--ha-text)" }}>{item.originalQuantity != null ? formatQuantity(item.originalQuantity) : "—"}</span>
-                    </>
-                  )}
                   <span style={{ color: "var(--ha-text-3)" }}>Cantidad</span>
                   <span style={{ color: "var(--ha-text)" }}>{formatQuantity(item.quantity)}</span>
                   <span style={{ color: "var(--ha-text-3)" }}>Precio</span>
@@ -386,7 +575,11 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
 
       <SectionDivider label="Pagos" />
 
-      {isPendingPricing ? (
+      {isCancelled ? (
+        <div style={{ marginBottom: 4, padding: "14px 16px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+          <p style={{ color: "var(--ha-text-3)", fontSize: 14 }}>Esta orden fue cancelada. No se pueden registrar pagos ni devoluciones.</p>
+        </div>
+      ) : isPendingPricing ? (
         <div style={{ marginBottom: 4, padding: "14px 16px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
           <p style={{ color: "var(--ha-text-3)", marginBottom: 12, fontSize: 14 }}>Esta orden está pendiente de cobro. Ingresá los precios del día para cada ítem y registrá el pago.</p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -394,43 +587,52 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
             <button className="ha-btn ha-btn--secondary" onClick={openDevolverModal}>Registrar devolución</button>
           </div>
         </div>
-      ) : isCancelled ? (
-        <div style={{ marginBottom: 4, padding: "14px 16px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
-          <p style={{ color: "var(--ha-text-3)", fontSize: 14 }}>Esta orden fue cancelada. No se pueden registrar pagos ni devoluciones.</p>
-        </div>
       ) : (
-        <div style={{ marginBottom: 4, padding: "14px 16px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <input
-              type="number"
-              min={0.01}
-              step={0.01}
-              className="ha-input"
-              style={{ width: 140 }}
-              placeholder="Monto"
-              value={paymentAmount}
-              onChange={(e) => setPaymentAmount(e.target.value)}
-              disabled={isPaid}
-            />
-            <select
-              className="ha-input"
-              style={{ width: 200 }}
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-              disabled={isPaid}
-            >
-              <option value={PaymentMethod.CASH}>Efectivo</option>
-              <option value={PaymentMethod.CARD}>Transferencia</option>
-            </select>
-            <button
-              className="ha-btn ha-btn--primary"
-              onClick={() => void handleAddPayment()}
-              disabled={isPaid || !paymentAmount || Number(paymentAmount) <= 0 || addingPayment}
-            >
-              {addingPayment ? <><Spinner /> Registrando…</> : "Registrar pago"}
-            </button>
+        <>
+          <div style={{ marginBottom: 4, padding: "14px 16px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                type="number"
+                min={0.01}
+                step={0.01}
+                className="ha-input"
+                style={{ width: 140 }}
+                placeholder="Monto"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                disabled={isPaid}
+              />
+              <select
+                className="ha-input"
+                style={{ width: 200 }}
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                disabled={isPaid}
+              >
+                <option value={PaymentMethod.CASH}>Efectivo</option>
+                <option value={PaymentMethod.CARD}>Transferencia</option>
+              </select>
+              <button
+                className="ha-btn ha-btn--primary"
+                onClick={() => void handleAddPayment()}
+                disabled={isPaid || !paymentAmount || Number(paymentAmount) <= 0 || addingPayment}
+              >
+                {addingPayment ? <><Spinner /> Registrando…</> : "Registrar pago"}
+              </button>
+            </div>
           </div>
-        </div>
+          {hasPendingConsignmentUnits && (
+            <div style={{ marginTop: 8, marginBottom: 4, padding: "14px 16px", borderRadius: 10, background: "var(--ha-bg-raised)", border: "1px solid var(--ha-border)" }}>
+              <p style={{ color: "var(--ha-text-3)", marginBottom: 12, fontSize: 14 }}>
+                Quedan {formatQuantity(order.pendingConsignmentUnits ?? 0)} unidades en consignación sin cobrar.
+              </p>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button className="ha-btn ha-btn--primary" onClick={() => void openCobrarModal()}>Cobrar consignación</button>
+                <button className="ha-btn ha-btn--secondary" onClick={openDevolverModal}>Registrar devolución</button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Desktop payments table */}

@@ -32,6 +32,8 @@ export enum OrderPaymentStatus {
   PARTIALLY_PAID = "PARTIALLY_PAID",
   PAID = "PAID",
   PENDING_PRICING = "PENDING_PRICING",
+  /** Consignación: lo vendido está pagado, pero quedan unidades en consignación sin cerrar. */
+  OPEN_CONSIGNMENT = "OPEN_CONSIGNMENT",
   CANCELLED = "CANCELLED",
 }
 
@@ -370,6 +372,10 @@ export interface Order {
   paymentStatus: OrderPaymentStatus;
   isDelivered: boolean;
   isConsignment?: boolean;
+  /** Consignación: hay unidades sin precio fijado que siguen en consignación. */
+  hasPendingConsignmentUnits?: boolean;
+  /** Consignación: total de unidades sin cobrar todavía. */
+  pendingConsignmentUnits?: number;
   /** Observaciones del pedido (opcional). */
   comment?: string | null;
   /** Lista de precios usada al crear el pedido (órdenes anteriores a este campo: ausente). */
