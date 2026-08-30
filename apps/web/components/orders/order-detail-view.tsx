@@ -10,6 +10,7 @@ import {
   PaymentMethod,
   type Order,
 } from "@/lib/types";
+import { fetchAllPages } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 
@@ -113,8 +114,8 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
     setCobrarPricesLoading(true);
     try {
       const listType = (order.priceListType?.trim().toLowerCase() as "mayorista" | "minorista" | "fabrica" | undefined) ?? "mayorista";
-      const pricesRes = await apiClient.getPrices(1, 500, undefined, true, undefined, listType);
-      const priceByProductId = new Map(pricesRes.data.map((p) => [p.productId, Number(p.value)]));
+      const prices = await fetchAllPages((page) => apiClient.getPrices(page, 100, undefined, true, undefined, listType));
+      const priceByProductId = new Map(prices.map((p) => [p.productId, Number(p.value)]));
       setCobrarItems(
         pendingItems.map((i) => ({
           orderItemId: i.id,
@@ -123,8 +124,9 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
           unsoldDisposition: null,
         })),
       );
-    } catch {
-      // precios no disponibles, el usuario los ingresa manualmente
+    } catch (error: unknown) {
+      const msg = error && typeof error === "object" && "message" in error ? String((error as { message: string }).message) : "No se pudieron cargar los precios";
+      toast.error(`${msg}. Ingresá los precios manualmente.`);
     } finally {
       setCobrarPricesLoading(false);
     }
