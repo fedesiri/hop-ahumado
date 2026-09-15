@@ -842,8 +842,31 @@ export class OrderService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: { orderItems: true },
+    });
+    if (!order) {
+      throw new NotFoundException(`Orden con id "${id}" no encontrada`);
+    }
     return this.prisma.$transaction(async (tx) => {
+      if (order.fulfillmentLocationId) {
+        for (const item of order.orderItems) {
+          const targets = await this.stockTargetsForOrderLine(tx, item.productId, item.quantity);
+          for (const t of targets) {
+            await this.inventory.applyBalanceDelta(tx, t.productId, order.fulfillmentLocationId, t.quantity);
+            await tx.stockMovement.create({
+              data: {
+                productId: t.productId,
+                quantity: t.quantity,
+                type: StockMovementType.IN,
+                reason: `Reversión por eliminación de orden ${id.slice(0, 8)}`,
+                locationId: order.fulfillmentLocationId,
+              },
+            });
+          }
+        }
+      }
       await tx.payment.deleteMany({ where: { orderId: id } });
       await tx.orderItem.deleteMany({ where: { orderId: id } });
       return tx.order.delete({ where: { id } });
