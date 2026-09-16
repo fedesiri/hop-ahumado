@@ -20,12 +20,15 @@ import { CustomerProfileModule } from "./customer-profile/customer-profile.modul
 import { CustomerModule } from "./customer/customer.module";
 import { DistributorSuggestedOrderModule } from "./distributor-suggested-order/distributor-suggested-order.module";
 import { ExpenseModule } from "./expense/expense.module";
+import { IngredientProfileModule } from "./ingredient-profile/ingredient-profile.module";
 import { InventoryModule } from "./inventory/inventory.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { OperationalParametersModule } from "./operational-parameters/operational-parameters.module";
 import { OrderModule } from "./order/order.module";
 import { PriceModule } from "./price/price.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductModule } from "./product/product.module";
+import { RecipeCostProfileModule } from "./recipe-cost-profile/recipe-cost-profile.module";
 import { RecipeItemModule } from "./recipe-item/recipe-item.module";
 import { StockLocationModule } from "./stock-location/stock-location.module";
 import { StockMovementModule } from "./stock-movement/stock-movement.module";
@@ -81,6 +84,9 @@ import { UserModule } from "./user/user.module";
     StockMovementModule,
     StockLocationModule,
     RecipeItemModule,
+    IngredientProfileModule,
+    OperationalParametersModule,
+    RecipeCostProfileModule,
     TreasuryModule,
     NotificationsModule,
   ],

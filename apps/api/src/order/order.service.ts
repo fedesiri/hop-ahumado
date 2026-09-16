@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { Order, Prisma, StockMovementType } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
+import type { PriceListType } from "../common/price-list-type";
 import { CustomerProfileService } from "../customer-profile/customer-profile.service";
 import { InventoryService } from "../inventory/inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -910,7 +911,7 @@ export class OrderService {
   private async validateOrderItemsTotalOrPromo(dto: {
     items: { productId: string; quantity: number; price?: number }[];
     total: number;
-    priceListType?: "mayorista" | "minorista" | "fabrica";
+    priceListType?: PriceListType;
   }) {
     if (dto.priceListType) {
       const ids = [...new Set(dto.items.map((i) => i.productId))];

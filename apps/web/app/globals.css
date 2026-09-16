@@ -927,6 +927,7 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .pc-pill--may{background:var(--ha-blue-soft);color:var(--ha-blue)}
 .pc-pill--min{background:var(--ha-purple-soft);color:var(--ha-purple)}
 .pc-pill--fab{background:var(--ha-amber-soft);color:var(--ha-amber)}
+.pc-pill--cat{background:var(--ha-green-soft);color:var(--ha-green)}
 .pc-price{font-family:ui-monospace,monospace;font-size:14px;font-weight:500;color:var(--ha-text)}
 @keyframes pc-flash{0%{background:var(--ha-amber-soft);color:var(--ha-amber)}100%{background:transparent;color:inherit}}
 .pc-price.flash{animation:pc-flash 1s ease}

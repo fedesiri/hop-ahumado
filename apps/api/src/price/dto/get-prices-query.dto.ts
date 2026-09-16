@@ -1,7 +1,6 @@
 import { IsIn, IsOptional, IsString, IsUUID } from "class-validator";
 import { PaginationQueryDto } from "../../common/pagination";
-
-const PRICE_LIST_TYPES = ["mayorista", "minorista", "fabrica"] as const;
+import { PRICE_LIST_TYPES } from "../../common/price-list-type";
 
 export class GetPricesQueryDto extends PaginationQueryDto {
   @IsOptional()
@@ -17,7 +16,7 @@ export class GetPricesQueryDto extends PaginationQueryDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(PRICE_LIST_TYPES, { message: "listType debe ser mayorista, minorista o fabrica" })
+  @IsIn(PRICE_LIST_TYPES, { message: `listType debe ser una de: ${PRICE_LIST_TYPES.join(", ")}` })
   listType?: string;
 
   @IsOptional()

@@ -8,14 +8,15 @@ datasource db {
 }
 
 model BusinessLine {
-  id         String            @id @default(uuid())
-  name       String
-  slug       String            @unique
-  createdAt  DateTime          @default(now())
-  categories Category[]
-  expenses   Expense[]
-  products   Product[]
-  baselines  TreasuryBaseline?
+  id                    String                 @id @default(uuid())
+  name                  String
+  slug                  String                 @unique
+  createdAt             DateTime               @default(now())
+  categories            Category[]
+  expenses              Expense[]
+  products              Product[]
+  baselines             TreasuryBaseline?
+  operationalParameters OperationalParameters?
 }
 
 model User {
@@ -137,28 +138,117 @@ model StockBalance {
 }
 
 model Product {
-  id               String          @id @default(uuid())
-  name             String
-  description      String?
-  categoryId       String?
-  sku              String?         @unique
-  barcode          String?
-  stock            Float           @default(0)
-  deactivationDate DateTime?
-  createdAt        DateTime        @default(now())
-  unit             ProductUnit     @default(UNIT)
-  businessLineId   String
-  costs            Cost[]
-  orderItems       OrderItem[]
-  prices           Price[]
-  businessLine     BusinessLine    @relation(fields: [businessLineId], references: [id])
-  category         Category?       @relation(fields: [categoryId], references: [id])
-  usedInRecipes    RecipeItem[]    @relation("recipe_ingredient")
-  recipeItems      RecipeItem[]    @relation("recipe_product")
-  stockBalances    StockBalance[]
-  stockMovements   StockMovement[]
+  id                     String              @id @default(uuid())
+  name                   String
+  description            String?
+  categoryId             String?
+  sku                    String?             @unique
+  barcode                String?
+  stock                  Float               @default(0)
+  deactivationDate       DateTime?
+  createdAt              DateTime            @default(now())
+  unit                   ProductUnit         @default(UNIT)
+  businessLineId         String
+  costs                  Cost[]
+  orderItems             OrderItem[]
+  prices                 Price[]
+  businessLine           BusinessLine        @relation(fields: [businessLineId], references: [id])
+  category               Category?           @relation(fields: [categoryId], references: [id])
+  usedInRecipes          RecipeItem[]        @relation("recipe_ingredient")
+  recipeItems            RecipeItem[]        @relation("recipe_product")
+  stockBalances          StockBalance[]
+  stockMovements         StockMovement[]
+  ingredientProfile      IngredientProfile?
+  recipeCostProfile      RecipeCostProfile?  @relation("recipe_cost_profile")
+  usedAsMainIngredientIn RecipeCostProfile[] @relation("recipe_main_ingredient")
 
   @@index([businessLineId])
+}
+
+model IngredientProfile {
+  id               String   @id @default(uuid())
+  productId        String   @unique
+  purchaseQuantity Float?
+  purchasePrice    Decimal?
+  supplier         String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  product          Product  @relation(fields: [productId], references: [id])
+}
+
+model RecipeCostProfile {
+  id                 String     @id @default(uuid())
+  productId          String     @unique
+  recipeType         RecipeType
+  saleUnitLabel      String
+  unitsPerPack       Float?
+  packName           String?
+  mainIngredientId   String?
+  mainIngredientQty  Float?
+  cookingLossPct     Float      @default(0)
+  kgPerSaleUnit      Float?
+  yieldManual        Float?
+  wastePct           Float      @default(0)
+  laborHoursPerBatch Float      @default(0)
+  marginRetailPct    Float?
+  marginWholesalePct Float?
+  marginCateringPct  Float?
+  active             Boolean    @default(true)
+  notes              String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  product            Product    @relation("recipe_cost_profile", fields: [productId], references: [id])
+  mainIngredient     Product?   @relation("recipe_main_ingredient", fields: [mainIngredientId], references: [id])
+}
+
+enum RecipeType {
+  PREPARACION_BASE
+  PRODUCTO_FINAL
+}
+
+model OperationalParameters {
+  id                    String               @id @default(uuid())
+  businessLineId        String               @unique
+  workDaysPerMonth      Float
+  hoursPerShift         Float
+  capacityHoursPerMonth Float
+  notes                 String?
+  updatedAt             DateTime             @updatedAt
+  businessLine          BusinessLine         @relation(fields: [businessLineId], references: [id])
+  partners              OperationalPartner[]
+  fixedCosts            FixedCostItem[]
+  channelCommissions    ChannelCommission[]
+}
+
+model OperationalPartner {
+  id            String                @id @default(uuid())
+  parametersId  String
+  name          String
+  monthlySalary Decimal
+  active        Boolean               @default(true)
+  parameters    OperationalParameters @relation(fields: [parametersId], references: [id])
+}
+
+model FixedCostItem {
+  id           String                @id @default(uuid())
+  parametersId String
+  concept      String
+  monthlyCost  Decimal
+  active       Boolean               @default(true)
+  notes        String?
+  parameters   OperationalParameters @relation(fields: [parametersId], references: [id])
+}
+
+model ChannelCommission {
+  id            String                @id @default(uuid())
+  parametersId  String
+  channel       String
+  commissionPct Float                 @default(0)
+  notes         String?
+  parameters    OperationalParameters @relation(fields: [parametersId], references: [id])
+
+  @@unique([parametersId, channel])
 }
 
 model Price {

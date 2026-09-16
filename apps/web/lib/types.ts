@@ -1,5 +1,7 @@
 // Common types for API responses and entities
 
+import type { PriceType } from "./order-calculator/price-types";
+
 export interface PaginationMeta {
   total: number;
   page: number;
@@ -337,6 +339,212 @@ export interface RecipeItem {
   ingredient?: Product;
 }
 
+// --- Motor de costeo Alumo (ingredientes, recetas, parámetros operativos) ---
+
+export type IngredientEstado = "ACTIVO" | "SIN_PRECIO" | "SIN_USO" | "SIN_PRECIO_SIN_USO";
+
+export interface IngredientProfileRow {
+  productId: string;
+  name: string;
+  unit: ProductUnit;
+  categoryId: string | null;
+  categoryName: string | null;
+  deactivationDate: string | null;
+  unitCost: number | null;
+  purchaseQuantity: number | null;
+  purchasePrice: number | null;
+  supplier: string | null;
+  notes: string | null;
+  estado: IngredientEstado;
+}
+
+export interface UpsertIngredientProfileRequest {
+  purchaseQuantity?: number;
+  purchasePrice?: number;
+  supplier?: string;
+  notes?: string;
+}
+
+export enum RecipeType {
+  PREPARACION_BASE = "PREPARACION_BASE",
+  PRODUCTO_FINAL = "PRODUCTO_FINAL",
+}
+
+export interface RecipeCostProfile {
+  id: string;
+  productId: string;
+  recipeType: RecipeType;
+  saleUnitLabel: string;
+  unitsPerPack: number | null;
+  packName: string | null;
+  mainIngredientId: string | null;
+  mainIngredientQty: number | null;
+  cookingLossPct: number;
+  kgPerSaleUnit: number | null;
+  yieldManual: number | null;
+  wastePct: number;
+  laborHoursPerBatch: number;
+  marginRetailPct: number | null;
+  marginWholesalePct: number | null;
+  marginCateringPct: number | null;
+  active: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  product?: Product;
+  mainIngredient?: { id: string; name: string; unit: ProductUnit } | null;
+  costPerUnit?: number;
+  alerts?: string[];
+}
+
+export interface CreateRecipeCostProfileRequest {
+  productId: string;
+  recipeType: RecipeType;
+  saleUnitLabel: string;
+  unitsPerPack?: number;
+  packName?: string;
+  mainIngredientId?: string;
+  mainIngredientQty?: number;
+  cookingLossPct?: number;
+  kgPerSaleUnit?: number;
+  yieldManual?: number;
+  wastePct?: number;
+  laborHoursPerBatch?: number;
+  marginRetailPct?: number | null;
+  marginWholesalePct?: number | null;
+  marginCateringPct?: number | null;
+  active?: boolean;
+  notes?: string;
+}
+
+export type UpdateRecipeCostProfileRequest = Partial<Omit<CreateRecipeCostProfileRequest, "productId">>;
+
+export interface RecipeCosting {
+  productId: string;
+  name: string;
+  materialCost: number;
+  costWithWaste: number;
+  laborCost: number;
+  overheadCost: number;
+  costPerUnit: number;
+  rindeCalculado: number | null;
+  rindeUsado: number;
+  perBatch: {
+    materialCost: number;
+    costWithWaste: number;
+    laborCost: number;
+    overheadCost: number;
+    totalCost: number;
+  };
+  alerts: string[];
+}
+
+export interface RecipeChannelPricing {
+  channel: PriceType;
+  marginPct: number | null;
+  commissionPct: number;
+  calculatedPrice: number | null;
+  overridePrice: number | null;
+  finalPrice: number | null;
+}
+
+export interface RecipePricing {
+  productId: string;
+  costPerUnit: number;
+  channels: RecipeChannelPricing[];
+}
+
+export interface OperationalPartner {
+  id: string;
+  parametersId: string;
+  name: string;
+  monthlySalary: number;
+  active: boolean;
+}
+
+export interface CreatePartnerRequest {
+  businessLineId: string;
+  name: string;
+  monthlySalary: number;
+  active?: boolean;
+}
+
+export interface UpdatePartnerRequest {
+  name?: string;
+  monthlySalary?: number;
+  active?: boolean;
+}
+
+export interface FixedCostItem {
+  id: string;
+  parametersId: string;
+  concept: string;
+  monthlyCost: number;
+  active: boolean;
+  notes: string | null;
+}
+
+export interface CreateFixedCostItemRequest {
+  businessLineId: string;
+  concept: string;
+  monthlyCost: number;
+  active?: boolean;
+  notes?: string;
+}
+
+export interface UpdateFixedCostItemRequest {
+  concept?: string;
+  monthlyCost?: number;
+  active?: boolean;
+  notes?: string;
+}
+
+export interface ChannelCommission {
+  id: string;
+  parametersId: string;
+  channel: string;
+  commissionPct: number;
+  notes: string | null;
+}
+
+export interface UpsertChannelCommissionRequest {
+  businessLineId: string;
+  channel: PriceType;
+  commissionPct: number;
+  notes?: string;
+}
+
+export interface OperationalRates {
+  capacityHoursPerMonth: number;
+  totalActiveSalaries: number;
+  totalActiveFixedCosts: number;
+  laborRatePerHour: number;
+  fixedCostRatePerHour: number;
+  totalOperativeRatePerHour: number;
+  monthlyStructureTotal: number;
+}
+
+export interface OperationalParameters {
+  businessLineId: string;
+  workDaysPerMonth: number;
+  hoursPerShift: number;
+  capacityHoursPerMonth: number;
+  notes: string | null;
+  updatedAt: string;
+  partners: OperationalPartner[];
+  fixedCosts: FixedCostItem[];
+  channelCommissions: ChannelCommission[];
+  rates: OperationalRates;
+}
+
+export interface UpsertOperationalParametersRequest {
+  businessLineId: string;
+  workDaysPerMonth?: number;
+  hoursPerShift?: number;
+  capacityHoursPerMonth?: number;
+  notes?: string;
+}
+
 export interface OrderItem {
   id: string;
   orderId: string;
@@ -632,7 +840,7 @@ export interface CreateOrderRequest {
   fulfillmentLocationId?: string;
   total: number;
   /** Si se envía, el API valida precios con la promo por umbral (combos regalo). */
-  priceListType?: "mayorista" | "minorista" | "fabrica";
+  priceListType?: PriceType;
   /** Comentario u observaciones del pedido (opcional). */
   comment?: string;
   isConsignment?: boolean;
@@ -660,7 +868,7 @@ export interface UpdateOrderRequest {
   fulfillmentLocationId?: string;
   /** Si se envían, deben ir juntos con total; reemplaza líneas y ajusta stock. */
   total?: number;
-  priceListType?: "mayorista" | "minorista" | "fabrica";
+  priceListType?: PriceType;
   comment?: string;
   items?: CreateOrderItemRequest[];
 }

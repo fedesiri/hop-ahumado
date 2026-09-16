@@ -1,4 +1,5 @@
 import { getAuthHeaders } from "@/lib/auth-fetch";
+import type { PriceType } from "@/lib/order-calculator/price-types";
 import type {
   BusinessLineEntity,
   Category,
@@ -11,10 +12,13 @@ import type {
   CreateCustomerProfileRequest,
   CreateCustomerRequest,
   CreateExpenseRequest,
+  CreateFixedCostItemRequest,
   CreateOrderPaymentRequest,
   CreateOrderRequest,
+  CreatePartnerRequest,
   CreatePriceRequest,
   CreateProductRequest,
+  CreateRecipeCostProfileRequest,
   CreateRecipeItemRequest,
   CreateStockLocationRequest,
   CreateStockMovementRequest,
@@ -28,14 +32,19 @@ import type {
   DistributorSuggestedOrderResponse,
   Expense,
   HealthResponse,
+  IngredientProfileRow,
   NotificationsListResponse,
+  OperationalParameters,
   Order,
   BulkReplacePriceRequest,
   BulkReplacePriceResponse,
   PaginatedResponse,
   Price,
   Product,
+  RecipeCosting,
+  RecipeCostProfile,
   RecipeItem,
+  RecipePricing,
   BulkReplaceCostRequest,
   BulkReplaceCostResponse,
   ReplaceCostRequest,
@@ -52,14 +61,20 @@ import type {
   UpdateCustomerOpportunityRequest,
   UpdateCustomerProfileRequest,
   UpdateCustomerRequest,
+  UpdateFixedCostItemRequest,
   UpdateOrderPaymentRequest,
   UpdateOrderRequest,
+  UpdatePartnerRequest,
   UpdatePriceRequest,
   UpdateProductRequest,
+  UpdateRecipeCostProfileRequest,
   UpdateRecipeItemRequest,
   UpdateStockLocationRequest,
   UpdateTreasuryBaselineRequest,
   UpdateUserRequest,
+  UpsertChannelCommissionRequest,
+  UpsertIngredientProfileRequest,
+  UpsertOperationalParametersRequest,
   User,
   SetConsignmentPricesRequest,
   ReturnConsignmentRequest,
@@ -398,7 +413,7 @@ export class ApiClient {
     productId?: string,
     activeOnly = false,
     search?: string,
-    listType?: "mayorista" | "minorista" | "fabrica",
+    listType?: PriceType,
     businessLineId?: string,
   ): Promise<PaginatedResponse<Price>> {
     return this.request(
@@ -630,6 +645,142 @@ export class ApiClient {
 
   async deleteRecipeItem(id: string): Promise<void> {
     return this.request(`/recipe-items/${id}`, { method: "DELETE" });
+  }
+
+  // Ingredient profiles (Alumo)
+  async getIngredientProfiles(
+    page = 1,
+    limit = 10,
+    businessLineId?: string,
+    search?: string,
+    categoryId?: string,
+    includeDeactivated = false,
+  ): Promise<PaginatedResponse<IngredientProfileRow>> {
+    return this.request(
+      `/ingredient-profiles${this.buildParams({
+        page,
+        limit,
+        businessLineId,
+        search: search?.trim() ? search.trim() : undefined,
+        categoryId,
+        includeDeactivated: includeDeactivated ? "true" : undefined,
+      })}`,
+    );
+  }
+
+  async getIngredientProfile(productId: string): Promise<IngredientProfileRow> {
+    return this.request(`/ingredient-profiles/${productId}`);
+  }
+
+  async upsertIngredientProfile(productId: string, data: UpsertIngredientProfileRequest): Promise<IngredientProfileRow> {
+    return this.request(`/ingredient-profiles/${productId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Recipe cost profiles (Alumo)
+  async getRecipeCostProfiles(
+    page = 1,
+    limit = 10,
+    businessLineId?: string,
+    search?: string,
+    includeDeactivated = false,
+  ): Promise<PaginatedResponse<RecipeCostProfile>> {
+    return this.request(
+      `/recipe-cost-profiles${this.buildParams({
+        page,
+        limit,
+        businessLineId,
+        search: search?.trim() ? search.trim() : undefined,
+        includeDeactivated: includeDeactivated ? "true" : undefined,
+      })}`,
+    );
+  }
+
+  async getRecipeCostProfile(productId: string): Promise<RecipeCostProfile> {
+    return this.request(`/recipe-cost-profiles/${productId}`);
+  }
+
+  async createRecipeCostProfile(data: CreateRecipeCostProfileRequest): Promise<RecipeCostProfile> {
+    return this.request("/recipe-cost-profiles", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRecipeCostProfile(productId: string, data: UpdateRecipeCostProfileRequest): Promise<RecipeCostProfile> {
+    return this.request(`/recipe-cost-profiles/${productId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRecipeCostProfile(productId: string): Promise<{ success: boolean }> {
+    return this.request(`/recipe-cost-profiles/${productId}`, { method: "DELETE" });
+  }
+
+  async getRecipeCosting(productId: string): Promise<RecipeCosting> {
+    return this.request(`/recipe-cost-profiles/${productId}/costing`);
+  }
+
+  async getRecipePricing(productId: string): Promise<RecipePricing> {
+    return this.request(`/recipe-cost-profiles/${productId}/pricing`);
+  }
+
+  // Operational parameters (Alumo)
+  async getOperationalParameters(businessLineId: string): Promise<OperationalParameters> {
+    return this.request(`/operational-parameters${this.buildParams({ businessLineId })}`);
+  }
+
+  async updateOperationalParameters(data: UpsertOperationalParametersRequest): Promise<OperationalParameters> {
+    return this.request("/operational-parameters", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async addOperationalPartner(data: CreatePartnerRequest): Promise<OperationalParameters> {
+    return this.request("/operational-parameters/partners", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateOperationalPartner(id: string, data: UpdatePartnerRequest): Promise<OperationalParameters> {
+    return this.request(`/operational-parameters/partners/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeOperationalPartner(id: string): Promise<OperationalParameters> {
+    return this.request(`/operational-parameters/partners/${id}`, { method: "DELETE" });
+  }
+
+  async addFixedCostItem(data: CreateFixedCostItemRequest): Promise<OperationalParameters> {
+    return this.request("/operational-parameters/fixed-costs", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateFixedCostItem(id: string, data: UpdateFixedCostItemRequest): Promise<OperationalParameters> {
+    return this.request(`/operational-parameters/fixed-costs/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeFixedCostItem(id: string): Promise<OperationalParameters> {
+    return this.request(`/operational-parameters/fixed-costs/${id}`, { method: "DELETE" });
+  }
+
+  async upsertChannelCommission(data: UpsertChannelCommissionRequest): Promise<OperationalParameters> {
+    return this.request("/operational-parameters/channel-commissions", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
   }
 
   // Orders

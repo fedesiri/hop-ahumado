@@ -2,7 +2,7 @@
 
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
-import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
+import { orderPriceListDisplayLabel, parsePriceListType } from "@/lib/order-calculator/price-types";
 import { orderPaymentStatusLabel } from "@/lib/order-labels";
 import { toast } from "@/lib/toast";
 import {
@@ -119,9 +119,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
       return;
     }
     let cancelled = false;
-    const listType =
-      (order.priceListType?.trim().toLowerCase() as "mayorista" | "minorista" | "fabrica" | undefined) ??
-      "mayorista";
+    const listType = parsePriceListType(order.priceListType) ?? "mayorista";
     (async () => {
       try {
         const prices = await fetchAllPages((page) =>
@@ -152,7 +150,7 @@ export function OrderDetailView({ order, onOrderUpdated }: Props) {
     setCobrarModalOpen(true);
     setCobrarPricesLoading(true);
     try {
-      const listType = (order.priceListType?.trim().toLowerCase() as "mayorista" | "minorista" | "fabrica" | undefined) ?? "mayorista";
+      const listType = parsePriceListType(order.priceListType) ?? "mayorista";
       const prices = await fetchAllPages((page) => apiClient.getPrices(page, 100, undefined, true, undefined, listType));
       const priceByProductId = new Map(prices.map((p) => [p.productId, Number(p.value)]));
       setCobrarItems(

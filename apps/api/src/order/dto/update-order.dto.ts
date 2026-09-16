@@ -13,6 +13,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from "class-validator";
+import { PRICE_LIST_TYPES, type PriceListType } from "../../common/price-list-type";
 import { CreateOrderItemDto } from "./create-order-item.dto";
 
 export class UpdateOrderDto {
@@ -57,8 +58,8 @@ export class UpdateOrderDto {
 
   /** Lista usada al armar el pedido; se puede enviar solo o junto con ítems. */
   @IsOptional()
-  @IsIn(["mayorista", "minorista", "fabrica"], { message: "priceListType debe ser mayorista, minorista o fabrica" })
-  priceListType?: "mayorista" | "minorista" | "fabrica";
+  @IsIn(PRICE_LIST_TYPES, { message: `priceListType debe ser una de: ${PRICE_LIST_TYPES.join(", ")}` })
+  priceListType?: PriceListType;
 
   @IsOptional()
   @IsString()

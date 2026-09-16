@@ -55,7 +55,7 @@ export class PriceService {
     }
 
     const lt = listType?.trim().toLowerCase();
-    if (lt === "mayorista" || lt === "minorista") {
+    if (lt === "mayorista" || lt === "minorista" || lt === "catering") {
       andParts.push({ description: { equals: lt, mode: "insensitive" } });
     } else if (lt === "fabrica") {
       andParts.push({

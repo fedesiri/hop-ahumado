@@ -3,14 +3,15 @@
  * pueden coincidir con estos valores para mostrar mayorista/minorista/fábrica.
  */
 
-export type PriceType = "mayorista" | "minorista" | "fabrica";
+export type PriceType = "mayorista" | "minorista" | "fabrica" | "catering";
 
-export const PRICE_TYPES: PriceType[] = ["mayorista", "minorista", "fabrica"];
+export const PRICE_TYPES: PriceType[] = ["mayorista", "minorista", "fabrica", "catering"];
 
 export const PRICE_TYPE_LABELS: Record<PriceType, string> = {
   mayorista: "Mayorista",
   minorista: "Minorista",
   fabrica: "Fábrica",
+  catering: "Catering",
 };
 
 /** Precio con description opcional (como viene de la API; value puede venir como number o string) */
@@ -73,7 +74,7 @@ export function inferPriceTypeFromOrderLines(
 ): PriceType {
   if (!items.length) return "mayorista";
 
-  const votes: Record<PriceType, number> = { mayorista: 0, minorista: 0, fabrica: 0 };
+  const votes: Record<PriceType, number> = { mayorista: 0, minorista: 0, fabrica: 0, catering: 0 };
 
   for (const item of items) {
     const prices = pricesByProductId[item.productId] ?? [];
@@ -98,7 +99,7 @@ export function inferPriceTypeFromOrderLines(
     }
   }
 
-  const totalVotes = votes.mayorista + votes.minorista + votes.fabrica;
+  const totalVotes = votes.mayorista + votes.minorista + votes.fabrica + votes.catering;
   if (totalVotes === 0) return "mayorista";
 
   let winner: PriceType = "mayorista";
@@ -114,7 +115,7 @@ export function inferPriceTypeFromOrderLines(
 
 /** Valor guardado en `Order.priceListType` (API / Prisma). */
 export function parsePriceListType(raw: string | null | undefined): PriceType | undefined {
-  if (raw === "mayorista" || raw === "minorista" || raw === "fabrica") return raw;
+  if (raw === "mayorista" || raw === "minorista" || raw === "fabrica" || raw === "catering") return raw;
   return undefined;
 }
 

@@ -27,7 +27,8 @@ export function isPromoGiftComboName(name: string): boolean {
 }
 
 function promoUnitForGiftName(name: string, priceType: PriceType): number | null {
-  if (priceType === "fabrica") return null;
+  // Fábrica y catering no llevan promo por umbral: son canales de costo/evento, no de venta al público.
+  if (priceType === "fabrica" || priceType === "catering") return null;
   const key = normalizeGiftComboName(name);
   const copa = ORDER_PROMO_CONFIG.promoUnitMayoristaMinoristaEstucheCopa;
   const vaso = ORDER_PROMO_CONFIG.promoUnitMayoristaMinoristaEstucheVaso;
@@ -37,7 +38,7 @@ function promoUnitForGiftName(name: string, priceType: PriceType): number | null
   };
   const row = table[key];
   if (!row) return null;
-  return row[priceType];
+  return row[priceType as "mayorista" | "minorista"];
 }
 
 /** Si el producto aporta al subtotal que se compara con el umbral (siempre con precio de lista). */
@@ -73,7 +74,7 @@ export function computePromoThresholdSubtotal(
 }
 
 export function promoThresholdApplies(priceType: PriceType, thresholdSubtotal: number): boolean {
-  if (priceType === "fabrica") return false;
+  if (priceType === "fabrica" || priceType === "catering") return false;
   return thresholdSubtotal > ORDER_PROMO_CONFIG.thresholdArs;
 }
 

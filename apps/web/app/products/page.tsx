@@ -4,7 +4,7 @@ import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
-import { normalizePriceListKey } from "@/lib/order-calculator/price-types";
+import { normalizePriceListKey, type PriceType } from "@/lib/order-calculator/price-types";
 import {
   ProductUnit,
   type Category,
@@ -44,6 +44,7 @@ type PriceMap = Record<string, {
   mayorista?: number;
   minorista?: number;
   fabrica?: number;
+  catering?: number;
 }>;
 
 export default function ProductsPage() {
@@ -97,6 +98,7 @@ function ProductsContent() {
   const [fpriceMayorista, setFpriceMayorista] = useState("");
   const [fpriceMinorista, setFpriceMinorista] = useState("");
   const [fpriceFabrica, setFpriceFabrica] = useState("");
+  const [fpriceCatering, setFpriceCatering] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const activeFilterCount = (categoryFilter ? 1 : 0) + (showDeactivated ? 1 : 0) + (search ? 1 : 0);
@@ -171,6 +173,7 @@ function ProductsContent() {
         if (t === "mayorista") map[price.productId].mayorista = price.value;
         else if (t === "minorista") map[price.productId].minorista = price.value;
         else if (t === "fabrica") map[price.productId].fabrica = price.value;
+        else if (t === "catering") map[price.productId].catering = price.value;
       }
       setPriceMap(map);
     } catch (err) {
@@ -197,7 +200,7 @@ function ProductsContent() {
   const resetForm = () => {
     setFname(""); setFunit(ProductUnit.UNIT); setFcategoryId("");
     setFsku(""); setFbarcode(""); setFdescription(""); setFnameErr(false);
-    setFstock(""); setFcostValue(""); setFpriceMayorista(""); setFpriceMinorista(""); setFpriceFabrica("");
+    setFstock(""); setFcostValue(""); setFpriceMayorista(""); setFpriceMinorista(""); setFpriceFabrica(""); setFpriceCatering("");
   };
 
   const openCreate = () => {
@@ -217,7 +220,7 @@ function ProductsContent() {
     setFdescription(record.description ?? "");
     setFnameErr(false);
     setFstock(String(record.stock ?? ""));
-    setFcostValue(""); setFpriceMayorista(""); setFpriceMinorista(""); setFpriceFabrica("");
+    setFcostValue(""); setFpriceMayorista(""); setFpriceMinorista(""); setFpriceFabrica(""); setFpriceCatering("");
     setDrawerOpen(true);
   };
 
@@ -256,10 +259,11 @@ function ProductsContent() {
           await apiClient.createCost(costData);
         }
 
-        const priceFields: { val: string; description: "mayorista" | "minorista" | "fabrica" }[] = [
+        const priceFields: { val: string; description: PriceType }[] = [
           { val: fpriceMayorista, description: "mayorista" },
           { val: fpriceMinorista, description: "minorista" },
           { val: fpriceFabrica, description: "fabrica" },
+          { val: fpriceCatering, description: "catering" },
         ];
         for (const pf of priceFields) {
           const raw = pf.val ? Number(pf.val) : undefined;
@@ -437,6 +441,7 @@ function ProductsContent() {
                   <th>Mayorista</th>
                   <th>Minorista</th>
                   <th>Fábrica</th>
+                  <th>Catering</th>
                   <th>Estado</th>
                   <th style={{ textAlign: "right" }}>Acciones</th>
                 </tr>
@@ -460,6 +465,7 @@ function ProductsContent() {
                       <td style={{ color: "var(--ha-text-2)" }}>{p(prices.mayorista)}</td>
                       <td style={{ color: "var(--ha-text-2)" }}>{p(prices.minorista)}</td>
                       <td style={{ color: "var(--ha-text-2)" }}>{p(prices.fabrica)}</td>
+                      <td style={{ color: "var(--ha-text-2)" }}>{p(prices.catering)}</td>
                       <td>
                         <span style={{
                           display: "inline-flex", alignItems: "center", padding: "2px 10px",
@@ -706,7 +712,7 @@ function ProductsContent() {
                         <label className="ha-label">Costo por unidad</label>
                         <input type="number" className="ha-input" placeholder="Ej: 1200" min={0} step={0.01} value={fcostValue} onChange={(e) => setFcostValue(e.target.value)} />
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
                         <div className="ha-field">
                           <label className="ha-label">Mayorista</label>
                           <input type="number" className="ha-input" placeholder="Precio" min={0} step={0.01} value={fpriceMayorista} onChange={(e) => setFpriceMayorista(e.target.value)} />
@@ -718,6 +724,10 @@ function ProductsContent() {
                         <div className="ha-field">
                           <label className="ha-label">Fábrica</label>
                           <input type="number" className="ha-input" placeholder="Precio" min={0} step={0.01} value={fpriceFabrica} onChange={(e) => setFpriceFabrica(e.target.value)} />
+                        </div>
+                        <div className="ha-field">
+                          <label className="ha-label">Catering</label>
+                          <input type="number" className="ha-input" placeholder="Precio" min={0} step={0.01} value={fpriceCatering} onChange={(e) => setFpriceCatering(e.target.value)} />
                         </div>
                       </div>
                     </div>

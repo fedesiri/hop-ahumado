@@ -1,8 +1,9 @@
 import { BadRequestException } from "@nestjs/common";
 import { Decimal } from "@prisma/client/runtime/library";
+import type { PriceListType } from "../common/price-list-type";
 import { ORDER_PROMO_CONFIG } from "./order-promo-config";
 
-export type PriceListType = "mayorista" | "minorista" | "fabrica";
+export type { PriceListType };
 
 type PriceRow = { value: Decimal | number | string; description?: string | null; createdAt?: Date | null };
 
@@ -58,7 +59,8 @@ export function isPromoGiftComboName(name: string): boolean {
 }
 
 function promoUnitForGiftName(name: string, priceType: PriceListType): number | null {
-  if (priceType === "fabrica") return null;
+  // Fábrica y catering no llevan promo por umbral: son canales de costo/evento, no de venta al público.
+  if (priceType === "fabrica" || priceType === "catering") return null;
   const key = normalizeGiftComboName(name);
   const copa = ORDER_PROMO_CONFIG.promoUnitMayoristaMinoristaEstucheCopa;
   const vaso = ORDER_PROMO_CONFIG.promoUnitMayoristaMinoristaEstucheVaso;
@@ -68,7 +70,7 @@ function promoUnitForGiftName(name: string, priceType: PriceListType): number | 
   };
   const row = table[key];
   if (!row) return null;
-  return row[priceType];
+  return row[priceType as "mayorista" | "minorista"];
 }
 
 export function countsTowardPromoThreshold(
@@ -85,7 +87,7 @@ export function countsTowardPromoThreshold(
 }
 
 export function promoThresholdApplies(priceType: PriceListType, thresholdSubtotal: number): boolean {
-  if (priceType === "fabrica") return false;
+  if (priceType === "fabrica" || priceType === "catering") return false;
   return thresholdSubtotal > ORDER_PROMO_CONFIG.thresholdArs;
 }
 

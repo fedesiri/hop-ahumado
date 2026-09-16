@@ -19,6 +19,7 @@
     "inspect:crm": "node scripts/inspect-crm-xlsx.js",
     "inspect:xlsx": "node scripts/inspect-xlsx.js",
     "seed:carnes": "node scripts/seed-carnes-ahumadas.js",
+    "seed:alumo-v6": "node scripts/seed-alumo-v6.js",
     "import:alumo-historico": "node scripts/import-alumo-historico.js"
   },
   "dependencies": {

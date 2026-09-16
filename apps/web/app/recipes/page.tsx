@@ -1,22 +1,46 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
+import { PRICE_TYPE_LABELS, type PriceType } from "@/lib/order-calculator/price-types";
 import { toast } from "@/lib/toast";
 import {
   ProductUnit,
+  RecipeType,
   type CreateCostRequest,
   type CreatePriceRequest,
   type CreateProductRequest,
+  type CreateRecipeCostProfileRequest,
   type CreateRecipeItemRequest,
   type Product,
+  type RecipeCosting,
+  type RecipeCostProfile,
   type RecipeItem,
+  type RecipePricing,
+  type UpdateRecipeCostProfileRequest,
 } from "@/lib/types";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Spinner } from "@/components/spinner";
 import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+const RECIPE_TYPE_LABELS: Record<RecipeType, string> = {
+  [RecipeType.PREPARACION_BASE]: "Preparación base",
+  [RecipeType.PRODUCTO_FINAL]: "Producto final",
+};
+
+function pctToInput(v: number | null | undefined): string {
+  return v == null ? "" : String(Math.round(v * 1000) / 10);
+}
+
+function inputToPct(s: string): number | null {
+  const trimmed = s.trim();
+  if (!trimmed) return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n / 100 : null;
+}
 
 const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
   { label: "Unidad", value: ProductUnit.UNIT },
@@ -65,6 +89,16 @@ function RecipesContent() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [calculatorAmount, setCalculatorAmount] = useState("");
 
+  // Costeo de receta (perfil + motor de cálculo)
+  const [profile, setProfile] = useState<RecipeCostProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [costing, setCosting] = useState<RecipeCosting | null>(null);
+  const [pricing, setPricing] = useState<RecipePricing | null>(null);
+  const [profileForm, setProfileForm] = useState<UpdateRecipeCostProfileRequest>({});
+  const [overrideDrafts, setOverrideDrafts] = useState<Record<string, string>>({});
+  const [allProfiles, setAllProfiles] = useState<RecipeCostProfile[]>([]);
+
   // Add form
   const [fIngredientId, setFIngredientId] = useState("");
   const [fQty, setFQty] = useState("");
@@ -80,6 +114,7 @@ function RecipesContent() {
   const [pPriceMayorista, setPPriceMayorista] = useState("");
   const [pPriceMinorista, setPPriceMinorista] = useState("");
   const [pPriceFabrica, setPPriceFabrica] = useState("");
+  const [pPriceCatering, setPPriceCatering] = useState("");
 
   const fetchProducts = useCallback(async () => {
     const bId = selectedLineId ?? undefined;
@@ -121,6 +156,68 @@ function RecipesContent() {
   useEffect(() => {
     fetchProducts().catch(() => toast.error("Error al cargar productos"));
   }, [fetchProducts]);
+
+  const fetchCostingAndPricing = useCallback(async (productId: string) => {
+    try {
+      const [c, p] = await Promise.all([apiClient.getRecipeCosting(productId), apiClient.getRecipePricing(productId)]);
+      setCosting(c);
+      setPricing(p);
+    } catch {
+      setCosting(null);
+      setPricing(null);
+    }
+  }, []);
+
+  const fetchProfile = useCallback(async () => {
+    if (!selectedProductId) {
+      setProfile(null); setCosting(null); setPricing(null); setProfileForm({});
+      return;
+    }
+    setProfileLoading(true);
+    try {
+      const p = await apiClient.getRecipeCostProfile(selectedProductId);
+      setProfile(p);
+      setProfileForm({
+        recipeType: p.recipeType,
+        saleUnitLabel: p.saleUnitLabel,
+        unitsPerPack: p.unitsPerPack ?? undefined,
+        packName: p.packName ?? undefined,
+        mainIngredientId: p.mainIngredientId ?? undefined,
+        mainIngredientQty: p.mainIngredientQty ?? undefined,
+        cookingLossPct: p.cookingLossPct,
+        kgPerSaleUnit: p.kgPerSaleUnit ?? undefined,
+        yieldManual: p.yieldManual ?? undefined,
+        wastePct: p.wastePct,
+        laborHoursPerBatch: p.laborHoursPerBatch,
+        marginRetailPct: p.marginRetailPct,
+        marginWholesalePct: p.marginWholesalePct,
+        marginCateringPct: p.marginCateringPct,
+        active: p.active,
+        notes: p.notes ?? undefined,
+      });
+      void fetchCostingAndPricing(selectedProductId);
+    } catch {
+      setProfile(null);
+      setCosting(null);
+      setPricing(null);
+      setProfileForm({ recipeType: RecipeType.PRODUCTO_FINAL, saleUnitLabel: "unidad", cookingLossPct: 0, wastePct: 0, laborHoursPerBatch: 0 });
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [selectedProductId, fetchCostingAndPricing]);
+
+  useEffect(() => { void fetchProfile(); }, [fetchProfile]);
+
+  const fetchAllProfiles = useCallback(async () => {
+    try {
+      const res = await apiClient.getRecipeCostProfiles(1, 100, selectedLineId ?? undefined);
+      setAllProfiles(res.data);
+    } catch {
+      // silent
+    }
+  }, [selectedLineId]);
+
+  useEffect(() => { void fetchAllProfiles(); }, [fetchAllProfiles]);
 
   const ingredientOptions = useMemo(
     () => (selectedProductId ? products.filter((p) => p.id !== selectedProductId) : []),
@@ -178,10 +275,11 @@ function RecipesContent() {
       };
       const created = await apiClient.createProduct(productData);
       await apiClient.createCost({ productId: created.id, value: costValue } satisfies CreateCostRequest);
-      const priceFields: { val: string; description: "mayorista" | "minorista" | "fabrica" }[] = [
+      const priceFields: { val: string; description: PriceType }[] = [
         { val: pPriceMayorista, description: "mayorista" },
         { val: pPriceMinorista, description: "minorista" },
         { val: pPriceFabrica, description: "fabrica" },
+        { val: pPriceCatering, description: "catering" },
       ];
       for (const pf of priceFields) {
         const raw = Number(pf.val);
@@ -197,6 +295,47 @@ function RecipesContent() {
       toast.error(getErrorMessage(error, "Error al crear producto"));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const saveProfile = async () => {
+    if (!selectedProductId) return;
+    if (!profileForm.saleUnitLabel?.trim()) { toast.error("La unidad de venta es obligatoria"); return; }
+    setProfileSaving(true);
+    try {
+      if (profile) {
+        await apiClient.updateRecipeCostProfile(selectedProductId, profileForm);
+      } else {
+        const data: CreateRecipeCostProfileRequest = {
+          ...profileForm,
+          productId: selectedProductId,
+          recipeType: profileForm.recipeType ?? RecipeType.PRODUCTO_FINAL,
+          saleUnitLabel: profileForm.saleUnitLabel,
+        };
+        await apiClient.createRecipeCostProfile(data);
+      }
+      toast.success("Perfil de receta guardado");
+      await fetchProfile();
+      void fetchAllProfiles();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al guardar el perfil de receta"));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const saveOverride = async (channel: PriceType) => {
+    if (!selectedProductId) return;
+    const raw = overrideDrafts[channel];
+    const value = Number(raw);
+    if (!raw || !Number.isFinite(value) || value < 0) { toast.error("Ingresá un precio válido"); return; }
+    try {
+      await apiClient.createPrice({ productId: selectedProductId, value, description: channel });
+      toast.success("Precio actualizado");
+      setOverrideDrafts((prev) => ({ ...prev, [channel]: "" }));
+      void fetchCostingAndPricing(selectedProductId);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al actualizar el precio"));
     }
   };
 
@@ -222,7 +361,7 @@ function RecipesContent() {
   const openCreateProductModal = (target: "final" | "ingredient") => {
     setProductCreateTarget(target);
     setPName(""); setPUnit(ProductUnit.UNIT); setPStock(""); setPCostValue("");
-    setPPriceMayorista(""); setPPriceMinorista(""); setPPriceFabrica("");
+    setPPriceMayorista(""); setPPriceMinorista(""); setPPriceFabrica(""); setPPriceCatering("");
     setProductModalOpen(true);
   };
 
@@ -456,7 +595,225 @@ function RecipesContent() {
               </div>
             </div>
           </div>
+
+          {/* Costeo de receta */}
+          <div className="rc-card" style={{ marginTop: 16, padding: 20 }}>
+            <div className="rc-card__head">
+              <span className="rc-card__title">Costeo de receta · {selectedProduct?.name ?? ""}</span>
+            </div>
+
+            {profileLoading ? (
+              <Spinner />
+            ) : (
+              <>
+                <div className="ha-formgrid" style={{ marginTop: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div className="ha-field">
+                      <label className="ha-label">Tipo</label>
+                      <select
+                        className="ha-input ha-select"
+                        value={profileForm.recipeType ?? RecipeType.PRODUCTO_FINAL}
+                        onChange={(e) => setProfileForm((p) => ({ ...p, recipeType: e.target.value as RecipeType }))}
+                      >
+                        {Object.values(RecipeType).map((t) => <option key={t} value={t}>{RECIPE_TYPE_LABELS[t]}</option>)}
+                      </select>
+                    </div>
+                    <div className="ha-field">
+                      <label className="ha-label">Unidad de venta</label>
+                      <input className="ha-input" placeholder="kg, unidad, porción 300 g…" value={profileForm.saleUnitLabel ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, saleUnitLabel: e.target.value }))} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div className="ha-field">
+                      <label className="ha-label">Unidades por pack</label>
+                      <input type="number" className="ha-input" min={0} step={1} value={profileForm.unitsPerPack ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, unitsPerPack: e.target.value ? Number(e.target.value) : undefined }))} />
+                    </div>
+                    <div className="ha-field">
+                      <label className="ha-label">Nombre del pack</label>
+                      <input className="ha-input" placeholder="docena, combo, bandeja…" value={profileForm.packName ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, packName: e.target.value }))} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div className="ha-field">
+                      <label className="ha-label">Insumo principal (para rinde)</label>
+                      <select className="ha-input ha-select" value={profileForm.mainIngredientId ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, mainIngredientId: e.target.value || undefined }))}>
+                        <option value="">Sin insumo principal</option>
+                        {ingredientOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="ha-field">
+                      <label className="ha-label">Kg insumo principal</label>
+                      <input type="number" className="ha-input" min={0} step={0.01} value={profileForm.mainIngredientQty ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, mainIngredientQty: e.target.value ? Number(e.target.value) : undefined }))} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                    <div className="ha-field">
+                      <label className="ha-label">Merma cocción %</label>
+                      <input type="number" className="ha-input" min={0} max={100} step={0.1} value={pctToInput(profileForm.cookingLossPct)} onChange={(e) => setProfileForm((p) => ({ ...p, cookingLossPct: inputToPct(e.target.value) ?? 0 }))} />
+                    </div>
+                    <div className="ha-field">
+                      <label className="ha-label">Kg por unidad de venta</label>
+                      <input type="number" className="ha-input" min={0} step={0.001} value={profileForm.kgPerSaleUnit ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, kgPerSaleUnit: e.target.value ? Number(e.target.value) : undefined }))} />
+                    </div>
+                    <div className="ha-field">
+                      <label className="ha-label">Rinde manual</label>
+                      <input type="number" className="ha-input" min={0} step={0.01} value={profileForm.yieldManual ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, yieldManual: e.target.value ? Number(e.target.value) : undefined }))} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div className="ha-field">
+                      <label className="ha-label">Desperdicio %</label>
+                      <input type="number" className="ha-input" min={0} max={100} step={0.1} value={pctToInput(profileForm.wastePct)} onChange={(e) => setProfileForm((p) => ({ ...p, wastePct: inputToPct(e.target.value) ?? 0 }))} />
+                    </div>
+                    <div className="ha-field">
+                      <label className="ha-label">Horas-hombre / tanda</label>
+                      <input type="number" className="ha-input" min={0} step={0.1} value={profileForm.laborHoursPerBatch ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, laborHoursPerBatch: e.target.value ? Number(e.target.value) : 0 }))} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                    <div className="ha-field">
+                      <label className="ha-label">Margen minorista % (vacío = no se vende)</label>
+                      <input type="number" className="ha-input" min={0} max={100} step={0.1} value={pctToInput(profileForm.marginRetailPct)} onChange={(e) => setProfileForm((p) => ({ ...p, marginRetailPct: inputToPct(e.target.value) }))} />
+                    </div>
+                    <div className="ha-field">
+                      <label className="ha-label">Margen mayorista % (vacío = no se vende)</label>
+                      <input type="number" className="ha-input" min={0} max={100} step={0.1} value={pctToInput(profileForm.marginWholesalePct)} onChange={(e) => setProfileForm((p) => ({ ...p, marginWholesalePct: inputToPct(e.target.value) }))} />
+                    </div>
+                    <div className="ha-field">
+                      <label className="ha-label">Margen catering % (vacío = no se vende)</label>
+                      <input type="number" className="ha-input" min={0} max={100} step={0.1} value={pctToInput(profileForm.marginCateringPct)} onChange={(e) => setProfileForm((p) => ({ ...p, marginCateringPct: inputToPct(e.target.value) }))} />
+                    </div>
+                  </div>
+
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--ha-text-2)" }}>
+                    <input type="checkbox" checked={profileForm.active ?? true} onChange={(e) => setProfileForm((p) => ({ ...p, active: e.target.checked }))} />
+                    Activo
+                  </label>
+
+                  <div className="ha-field">
+                    <label className="ha-label">Notas</label>
+                    <textarea className="ha-textarea" rows={2} value={profileForm.notes ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, notes: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+                  <button className="ha-btn ha-btn--primary" onClick={() => void saveProfile()} disabled={profileSaving}>
+                    {profileSaving ? "Guardando…" : profile ? "Guardar cambios" : "Crear perfil de costeo"}
+                  </button>
+                </div>
+
+                {costing && (
+                  <>
+                    <div className="rc-sep" style={{ margin: "16px 0" }} />
+                    <div className="rc-card__title" style={{ marginBottom: 10 }}>Resultado del costeo</div>
+                    {costing.alerts.length > 0 && (
+                      <div className="ha-empty" style={{ padding: 12, marginBottom: 12, textAlign: "left", background: "var(--ha-red-soft)", borderRadius: 8 }}>
+                        {costing.alerts.map((a, i) => <div key={i} style={{ color: "var(--ha-red)", fontSize: 13 }}>⚠️ {a}</div>)}
+                      </div>
+                    )}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+                      <div className="rc-resrow"><span className="rc-resrow__n">Materia prima</span><span className="rc-resrow__v">{formatCurrency(costing.materialCost)}</span></div>
+                      <div className="rc-resrow"><span className="rc-resrow__n">Con desperdicio</span><span className="rc-resrow__v">{formatCurrency(costing.costWithWaste)}</span></div>
+                      <div className="rc-resrow"><span className="rc-resrow__n">Mano de obra</span><span className="rc-resrow__v">{formatCurrency(costing.laborCost)}</span></div>
+                      <div className="rc-resrow"><span className="rc-resrow__n">Operativo fijo</span><span className="rc-resrow__v">{formatCurrency(costing.overheadCost)}</span></div>
+                      <div className="rc-resrow"><span className="rc-resrow__n">Rinde usado</span><span className="rc-resrow__v">{fmtAmt(costing.rindeUsado)}</span></div>
+                      <div className="rc-resrow"><span className="rc-resrow__n"><b>Costo por unidad</b></span><span className="rc-resrow__v"><b>{formatCurrency(costing.costPerUnit)}</b></span></div>
+                    </div>
+                  </>
+                )}
+
+                {pricing && (
+                  <>
+                    <div className="rc-sep" style={{ margin: "16px 0" }} />
+                    <div className="rc-card__title" style={{ marginBottom: 10 }}>Precios por canal</div>
+                    <div className="ps-tablewrap">
+                      <table className="rc-table">
+                        <thead>
+                          <tr>
+                            <th>Canal</th>
+                            <th>Margen</th>
+                            <th>Comisión</th>
+                            <th>Calculado</th>
+                            <th>Override</th>
+                            <th>Final</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pricing.channels.map((ch) => (
+                            <tr key={ch.channel}>
+                              <td>{PRICE_TYPE_LABELS[ch.channel]}</td>
+                              <td>{ch.marginPct != null ? `${Math.round(ch.marginPct * 1000) / 10}%` : "no se vende"}</td>
+                              <td>{Math.round(ch.commissionPct * 1000) / 10}%</td>
+                              <td>{ch.calculatedPrice != null ? formatCurrency(ch.calculatedPrice) : "—"}</td>
+                              <td>
+                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                  <input
+                                    type="number"
+                                    className="rc-finput"
+                                    style={{ width: 100 }}
+                                    placeholder={ch.overridePrice != null ? String(ch.overridePrice) : "manual"}
+                                    value={overrideDrafts[ch.channel] ?? ""}
+                                    onChange={(e) => setOverrideDrafts((prev) => ({ ...prev, [ch.channel]: e.target.value }))}
+                                  />
+                                  <button className="pc-btn pc-btn--ghost pc-btn--sm" onClick={() => void saveOverride(ch.channel)}>OK</button>
+                                </div>
+                              </td>
+                              <td><b>{ch.finalPrice != null ? formatCurrency(ch.finalPrice) : "—"}</b></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </>
+      )}
+
+      {/* Rentabilidad (solo lectura) */}
+      {allProfiles.length > 0 && (
+        <div className="rc-card" style={{ marginTop: 16, padding: 20 }}>
+          <div className="rc-card__head">
+            <span className="rc-card__title">Rentabilidad</span>
+          </div>
+          <div className="ps-tablewrap" style={{ marginTop: 12 }}>
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th>Receta</th>
+                  <th>Tipo</th>
+                  <th>Costo/u</th>
+                  <th>Margen min.</th>
+                  <th>Margen may.</th>
+                  <th>Margen cat.</th>
+                  <th style={{ width: 48 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {allProfiles.map((p) => (
+                  <tr key={p.productId}>
+                    <td>{p.product?.name ?? "—"}</td>
+                    <td>{RECIPE_TYPE_LABELS[p.recipeType]}</td>
+                    <td>{p.costPerUnit != null ? formatCurrency(p.costPerUnit) : "—"}</td>
+                    <td>{p.marginRetailPct != null ? `${Math.round(p.marginRetailPct * 1000) / 10}%` : "—"}</td>
+                    <td>{p.marginWholesalePct != null ? `${Math.round(p.marginWholesalePct * 1000) / 10}%` : "—"}</td>
+                    <td>{p.marginCateringPct != null ? `${Math.round(p.marginCateringPct * 1000) / 10}%` : "—"}</td>
+                    <td>
+                      <button className="pc-btn pc-btn--ghost pc-btn--sm" onClick={() => setSelectedProductId(p.productId)}>Ver</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Product create modal */}
@@ -496,9 +853,15 @@ function RecipesContent() {
                   <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej: 1800" value={pPriceMinorista} onChange={(e) => setPPriceMinorista(e.target.value)} />
                 </div>
               </div>
-              <div className="ha-field">
-                <label className="ha-label">Precio fábrica (opcional)</label>
-                <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej: 1300" value={pPriceFabrica} onChange={(e) => setPPriceFabrica(e.target.value)} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="ha-field">
+                  <label className="ha-label">Precio fábrica (opcional)</label>
+                  <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej: 1300" value={pPriceFabrica} onChange={(e) => setPPriceFabrica(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Precio catering (opcional)</label>
+                  <input type="number" className="ha-input" min={0} step={0.01} placeholder="Ej: 1400" value={pPriceCatering} onChange={(e) => setPPriceCatering(e.target.value)} />
+                </div>
               </div>
             </div>
             <div className="ha-modal__foot">

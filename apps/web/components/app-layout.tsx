@@ -15,6 +15,7 @@ import {
   MapPin,
   Menu,
   Moon,
+  Settings,
   ShoppingBag,
   Sun,
   Tag,
@@ -22,6 +23,7 @@ import {
   TrendingUp,
   UserCog,
   Users,
+  Wheat,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,7 +36,7 @@ import { BusinessLine } from "@/lib/types";
 import { BusinessLineSelector } from "./business-line-selector";
 import { NotificationsBell } from "./notifications-bell";
 
-type NavItem = { type: "item"; path: string; label: string; icon: ReactNode; sub?: boolean };
+type NavItem = { type: "item"; path: string; label: string; icon: ReactNode; sub?: boolean; businessLine?: BusinessLine };
 type NavDivider = { type: "divider"; key: string };
 type NavGroup = { type: "group"; label: string; key: string };
 type NavRow = NavItem | NavDivider | NavGroup;
@@ -60,14 +62,25 @@ const navRows: NavRow[] = [
   { type: "item", path: "/stock", label: "Movimientos", icon: <ArrowLeftRight size={18} />, sub: true },
   { type: "item", path: "/stock/locations", label: "Ubicaciones", icon: <MapPin size={18} />, sub: true },
   { type: "item", path: "/stock/suggested-order", label: "Pedido sugerido", icon: <ClipboardList size={18} />, sub: true },
+  { type: "item", path: "/ingredients", label: "Ingredientes", icon: <Wheat size={18} />, businessLine: BusinessLine.MEAT },
   { type: "item", path: "/recipes", label: "Recetas", icon: <FlaskConical size={18} /> },
+  { type: "item", path: "/operational-parameters", label: "Parámetros operativos", icon: <Settings size={18} />, businessLine: BusinessLine.MEAT },
   { type: "item", path: "/users", label: "Usuarios", icon: <UserCog size={18} /> },
 ];
 
-function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function SidebarNav({
+  pathname,
+  selectedLine,
+  onNavigate,
+}: {
+  pathname: string;
+  selectedLine: BusinessLine;
+  onNavigate?: () => void;
+}) {
+  const visibleRows = navRows.filter((row) => row.type !== "item" || !row.businessLine || row.businessLine === selectedLine);
   return (
     <nav className="ha-nav">
-      {navRows.map((row) => {
+      {visibleRows.map((row) => {
         if (row.type === "divider") return <div key={row.key} className="ha-nav__divider" />;
         if (row.type === "group") return <div key={row.key} className="ha-nav__group">{row.label}</div>;
         const active = (() => {
@@ -148,7 +161,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
           <div className="ha-brandtext">{brandName}</div>
         </div>
-        <SidebarNav pathname={pathname} />
+        <SidebarNav pathname={pathname} selectedLine={selectedLine ?? BusinessLine.BEER} />
       </aside>
 
       {/* Header */}
@@ -200,7 +213,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <X size={18} />
               </button>
             </div>
-            <SidebarNav pathname={pathname} onNavigate={closeMobileNav} />
+            <SidebarNav pathname={pathname} selectedLine={selectedLine ?? BusinessLine.BEER} onNavigate={closeMobileNav} />
           </div>
         </div>
       )}

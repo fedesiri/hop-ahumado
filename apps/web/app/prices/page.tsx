@@ -23,6 +23,7 @@ const LIST_OPTIONS = [
   { value: "mayorista", label: "Mayorista" },
   { value: "minorista", label: "Minorista" },
   { value: "fabrica", label: "Fábrica" },
+  { value: "catering", label: "Catering" },
 ];
 
 function pillInfo(description: string | null | undefined) {
@@ -30,6 +31,7 @@ function pillInfo(description: string | null | undefined) {
   if (key === "mayorista") return { cls: "pc-pill pc-pill--may", label: "May", full: "Lista Mayorista" };
   if (key === "minorista") return { cls: "pc-pill pc-pill--min", label: "Min", full: "Lista Minorista" };
   if (key === "fabrica") return { cls: "pc-pill pc-pill--fab", label: "Fab", full: "Lista Fábrica" };
+  if (key === "catering") return { cls: "pc-pill pc-pill--cat", label: "Cat", full: "Lista Catering" };
   return { cls: "pc-pill", label: description?.substring(0, 3) ?? "—", full: description ?? "—" };
 }
 
@@ -38,6 +40,7 @@ function formatPriceListLabel(description: string | null | undefined): string {
   if (key === "mayorista") return "Mayorista";
   if (key === "minorista") return "Minorista";
   if (key === "fabrica") return "Fábrica";
+  if (key === "catering") return "Catering";
   return description?.trim() || "—";
 }
 
