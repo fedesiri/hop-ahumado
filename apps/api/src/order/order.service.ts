@@ -499,6 +499,7 @@ export class OrderService {
       }
 
       const revertLocation = existing.fulfillmentLocationId ?? (await this.inventory.getDefaultLocationId(tx));
+      const isConsignment = existing.isConsignment;
 
       for (const line of existing.orderItems) {
         const targets = await this.stockTargetsForOrderLine(tx, line.productId, line.quantity);
@@ -542,7 +543,7 @@ export class OrderService {
       return tx.order.update({
         where: { id },
         data: {
-          total,
+          total: isConsignment ? 0 : total,
           fulfillmentLocationId: newFulfillmentLocationId,
           ...(dto.customerId !== undefined && { customerId: dto.customerId }),
           ...(dto.userId !== undefined && { userId: dto.userId }),
@@ -563,7 +564,8 @@ export class OrderService {
             create: items.map((i) => ({
               productId: i.productId,
               quantity: i.quantity,
-              price: i.price,
+              price: isConsignment ? null : i.price,
+              originalQuantity: isConsignment ? i.quantity : null,
             })),
           },
         },
