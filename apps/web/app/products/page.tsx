@@ -4,6 +4,7 @@ import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
+import { normalizePriceListKey } from "@/lib/order-calculator/price-types";
 import {
   ProductUnit,
   type Category,
@@ -166,7 +167,7 @@ function ProductsContent() {
       }
       for (const price of allPrices) {
         if (!map[price.productId]) map[price.productId] = {};
-        const t = price.description;
+        const t = normalizePriceListKey(price.description);
         if (t === "mayorista") map[price.productId].mayorista = price.value;
         else if (t === "minorista") map[price.productId].minorista = price.value;
         else if (t === "fabrica") map[price.productId].fabrica = price.value;
