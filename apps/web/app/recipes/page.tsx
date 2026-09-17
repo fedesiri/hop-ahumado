@@ -751,19 +751,23 @@ function RecipesContent() {
                               <td>{Math.round(ch.commissionPct * 1000) / 10}%</td>
                               <td>{ch.calculatedPrice != null ? formatCurrency(ch.calculatedPrice) : "—"}</td>
                               <td>
-                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                  <input
-                                    type="number"
-                                    className="rc-finput"
-                                    style={{ width: 100 }}
-                                    placeholder={ch.overridePrice != null ? String(ch.overridePrice) : "manual"}
-                                    value={overrideDrafts[ch.channel] ?? ""}
-                                    onChange={(e) => setOverrideDrafts((prev) => ({ ...prev, [ch.channel]: e.target.value }))}
-                                  />
-                                  <button className="pc-btn pc-btn--ghost pc-btn--sm" onClick={() => void saveOverride(ch.channel)}>OK</button>
-                                </div>
+                                {ch.marginPct == null ? (
+                                  <span style={{ color: "var(--ha-text-3)", fontSize: 13 }}>no se vende</span>
+                                ) : (
+                                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                    <input
+                                      type="number"
+                                      className="rc-finput"
+                                      style={{ width: 100 }}
+                                      placeholder={ch.overridePrice != null ? String(ch.overridePrice) : "manual"}
+                                      value={overrideDrafts[ch.channel] ?? ""}
+                                      onChange={(e) => setOverrideDrafts((prev) => ({ ...prev, [ch.channel]: e.target.value }))}
+                                    />
+                                    <button className="pc-btn pc-btn--ghost pc-btn--sm" onClick={() => void saveOverride(ch.channel)}>OK</button>
+                                  </div>
+                                )}
                               </td>
-                              <td><b>{ch.finalPrice != null ? formatCurrency(ch.finalPrice) : "—"}</b></td>
+                              <td><b>{ch.marginPct == null ? "no se vende" : ch.finalPrice != null ? formatCurrency(ch.finalPrice) : "—"}</b></td>
                             </tr>
                           ))}
                         </tbody>

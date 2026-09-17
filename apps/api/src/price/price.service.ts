@@ -13,6 +13,7 @@ export class PriceService {
 
   async create(dto: CreatePriceDto) {
     await this.validateProductExists(dto.productId);
+    await this.assertChannelSellable(dto.productId, dto.description);
     return this.prisma.price.create({
       data: {
         productId: dto.productId,
@@ -93,9 +94,12 @@ export class PriceService {
   }
 
   async update(id: string, dto: UpdatePriceDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
     if (dto.productId !== undefined) {
       await this.validateProductExists(dto.productId);
+    }
+    if (dto.value !== undefined || dto.description !== undefined || dto.productId !== undefined) {
+      await this.assertChannelSellable(dto.productId ?? existing.productId, dto.description ?? existing.description);
     }
     const data: {
       productId?: string;
@@ -131,6 +135,11 @@ export class PriceService {
    */
   async bulkReplace(dto: BulkReplacePriceDto) {
     const uniqueIds = [...new Set(dto.priceIds)];
+    const preCheck = await this.prisma.price.findMany({ where: { id: { in: uniqueIds } } });
+    for (const p of preCheck) {
+      await this.assertChannelSellable(p.productId, p.description);
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const records = await tx.price.findMany({
         where: { id: { in: uniqueIds } },
@@ -183,6 +192,12 @@ export class PriceService {
 
   /** Archiva el precio y crea uno nuevo con la misma lista (`description`) y producto. */
   async replace(id: string, dto: ReplacePriceDto) {
+    const target = await this.prisma.price.findUnique({ where: { id } });
+    if (!target) {
+      throw new NotFoundException(`Precio con id "${id}" no encontrado`);
+    }
+    await this.assertChannelSellable(target.productId, target.description);
+
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.price.findUnique({ where: { id } });
       if (!existing) {
@@ -214,6 +229,26 @@ export class PriceService {
     });
     if (!product) {
       throw new BadRequestException(`Producto con id "${productId}" no encontrado`);
+    }
+  }
+
+  /**
+   * Si el producto es una receta con perfil de costeo (RecipeCostProfile) y ese canal tiene
+   * margen null (Excel: "no se vende" por ese canal), no se puede cargar un precio ahí — evita
+   * precios fantasma en canales que el negocio nunca ofrece para esa receta.
+   */
+  private async assertChannelSellable(productId: string, description?: string | null) {
+    const channel = description?.trim().toLowerCase();
+    const marginField =
+      channel === "minorista" ? "marginRetailPct" : channel === "mayorista" ? "marginWholesalePct" : channel === "catering" ? "marginCateringPct" : null;
+    if (!marginField) return;
+
+    const profile = await this.prisma.recipeCostProfile.findUnique({ where: { productId } });
+    if (!profile) return;
+    if (profile[marginField] == null) {
+      throw new BadRequestException(
+        `Esta receta no se vende por canal "${channel}" (margen no configurado) — no se puede cargar un precio ahí.`,
+      );
     }
   }
 }
