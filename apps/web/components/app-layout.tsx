@@ -3,6 +3,7 @@
 import {
   ArrowLeftRight,
   BarChart2,
+  BookOpen,
   CalendarDays,
   ClipboardList,
   PanelLeftClose,
@@ -69,6 +70,8 @@ const navRows: NavRow[] = [
   { type: "item", path: "/production-plan", label: "Plan de producción", icon: <CalendarDays size={18} />, businessLine: BusinessLine.MEAT },
   { type: "item", path: "/quotes", label: "Presupuestos", icon: <Receipt size={18} />, businessLine: BusinessLine.MEAT },
   { type: "item", path: "/operational-parameters", label: "Parámetros operativos", icon: <Settings size={18} />, businessLine: BusinessLine.MEAT },
+  { type: "divider", key: "d4" },
+  { type: "item", path: "/manual", label: "Manual", icon: <BookOpen size={18} />, businessLine: BusinessLine.MEAT },
   { type: "item", path: "/users", label: "Usuarios", icon: <UserCog size={18} /> },
 ];
 
