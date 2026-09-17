@@ -13,6 +13,11 @@ import { Check, History, Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
 export default function CostsPage() {
   return <CostsContent />;
 }
@@ -158,8 +163,8 @@ function CostsContent() {
       setFlashId(cost.id);
       flashTimer.current = setTimeout(() => setFlashId(null), 1100);
       void fetchCosts();
-    } catch {
-      toast.error("Error al actualizar costo");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al actualizar costo"));
     } finally {
       setSubmitting(false);
     }
@@ -176,8 +181,8 @@ function CostsContent() {
       setSelectedCostIds([]);
       setBulkValue("");
       void fetchCosts();
-    } catch {
-      toast.error("Error al actualizar costos");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al actualizar costos"));
     } finally {
       setSubmitting(false);
     }
@@ -213,8 +218,8 @@ function CostsContent() {
       }
       setModalOpen(false);
       void fetchCosts();
-    } catch {
-      toast.error("Error al guardar costo");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al guardar costo"));
     } finally {
       setSubmitting(false);
     }

@@ -11,8 +11,9 @@ import { UpdateCostDto } from "./dto/update-cost.dto";
 export class CostService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateCostDto) {
+  async create(dto: CreateCostDto, opts?: { allowIngredientTracked?: boolean }) {
     await this.validateProductExists(dto.productId);
+    if (!opts?.allowIngredientTracked) await this.assertNotIngredientTracked(dto.productId);
     return this.prisma.$transaction(async (tx) => {
       const cost = await tx.cost.create({
         data: { productId: dto.productId, value: dto.value },
@@ -73,10 +74,13 @@ export class CostService {
     return cost;
   }
 
-  async update(id: string, dto: UpdateCostDto) {
+  async update(id: string, dto: UpdateCostDto, opts?: { allowIngredientTracked?: boolean }) {
     const existing = await this.findOne(id);
     if (dto.productId !== undefined) {
       await this.validateProductExists(dto.productId);
+    }
+    if (dto.value !== undefined && !opts?.allowIngredientTracked) {
+      await this.assertNotIngredientTracked(existing.productId);
     }
     const data: { productId?: string; value?: number; deactivatedAt?: Date | null } = {};
     if (dto.productId !== undefined) data.productId = dto.productId;
@@ -109,19 +113,20 @@ export class CostService {
    */
   async bulkReplace(dto: BulkReplaceCostDto) {
     const uniqueIds = [...new Set(dto.costIds)];
-    return this.prisma.$transaction(async (tx) => {
-      const records = await tx.cost.findMany({
-        where: { id: { in: uniqueIds } },
-      });
-      if (records.length !== uniqueIds.length) {
-        throw new BadRequestException("Uno o más costos no existen");
+    const records = await this.prisma.cost.findMany({ where: { id: { in: uniqueIds } } });
+    if (records.length !== uniqueIds.length) {
+      throw new BadRequestException("Uno o más costos no existen");
+    }
+    for (const c of records) {
+      if (c.deactivatedAt) {
+        throw new BadRequestException("Algún costo seleccionado ya está archivado");
       }
-      for (const c of records) {
-        if (c.deactivatedAt) {
-          throw new BadRequestException("Algún costo seleccionado ya está archivado");
-        }
-      }
+    }
+    for (const productId of new Set(records.map((c) => c.productId))) {
+      await this.assertNotIngredientTracked(productId);
+    }
 
+    return this.prisma.$transaction(async (tx) => {
       const byProduct = new Map<string, string[]>();
       for (const c of records) {
         const list = byProduct.get(c.productId) ?? [];
@@ -152,7 +157,13 @@ export class CostService {
   /**
    * Desactiva el costo indicado y crea uno nuevo para el mismo producto (historial preservado).
    */
-  async replace(id: string, dto: ReplaceCostDto) {
+  async replace(id: string, dto: ReplaceCostDto, opts?: { allowIngredientTracked?: boolean }) {
+    const target = await this.prisma.cost.findUnique({ where: { id } });
+    if (!target) {
+      throw new NotFoundException(`Costo con id "${id}" no encontrado`);
+    }
+    if (!opts?.allowIngredientTracked) await this.assertNotIngredientTracked(target.productId);
+
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.cost.findUnique({ where: { id } });
       if (!existing) {
@@ -191,6 +202,20 @@ export class CostService {
       await tx.price.update({ where: { id: existing.id }, data: { deactivatedAt: new Date() } });
     }
     await tx.price.create({ data: { productId, value, description: "fabrica" } });
+  }
+
+  /**
+   * Un producto con IngredientProfile deriva su costo de cantidad/precio de compra
+   * (ver IngredientProfileService.upsert). Editar su Cost por fuera de esa pantalla
+   * desincroniza esos dos campos del costo unitario real: bloqueado.
+   */
+  private async assertNotIngredientTracked(productId: string) {
+    const profile = await this.prisma.ingredientProfile.findUnique({ where: { productId } });
+    if (profile) {
+      throw new BadRequestException(
+        "Este producto tiene cantidad y precio de compra cargados en Ingredientes. Editá el costo desde esa pantalla para no desincronizar los datos.",
+      );
+    }
   }
 
   private async validateProductExists(productId: string) {

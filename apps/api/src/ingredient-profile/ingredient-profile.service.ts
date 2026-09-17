@@ -169,9 +169,9 @@ export class IngredientProfileService {
         orderBy: { createdAt: "desc" },
       });
       if (existingCost) {
-        await this.costService.replace(existingCost.id, { value: unitCost });
+        await this.costService.replace(existingCost.id, { value: unitCost }, { allowIngredientTracked: true });
       } else {
-        await this.costService.create({ productId, value: unitCost });
+        await this.costService.create({ productId, value: unitCost }, { allowIngredientTracked: true });
       }
     }
 
