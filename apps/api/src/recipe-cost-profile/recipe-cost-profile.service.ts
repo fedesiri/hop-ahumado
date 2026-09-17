@@ -13,6 +13,8 @@ type CostingResult = {
   productId: string;
   name: string;
   materialCost: number;
+  /** Solo ingredientes comprados directos (excluye el costo de subrecetas) — usado por Plan de Producción. */
+  ownMaterialCost: number;
   costWithWaste: number;
   laborCost: number;
   overheadCost: number;
@@ -182,6 +184,7 @@ export class RecipeCostProfileService {
       productId,
       name,
       materialCost: 0,
+      ownMaterialCost: 0,
       costWithWaste: 0,
       laborCost: 0,
       overheadCost: 0,
@@ -213,10 +216,23 @@ export class RecipeCostProfileService {
       include: { ingredient: { select: { id: true, name: true } } },
     });
 
+    const subrecipeIngredientIds = new Set(
+      (
+        await this.prisma.recipeCostProfile.findMany({
+          where: { productId: { in: recipeItems.map((i) => i.ingredientId) } },
+          select: { productId: true },
+        })
+      ).map((r) => r.productId),
+    );
+
     let materialCost = 0;
+    let ownMaterialCost = 0;
     for (const item of recipeItems) {
       const unitCost = await this.resolveUnitCost(item.ingredientId, visiting, alerts);
       materialCost += item.quantity * unitCost;
+      if (!subrecipeIngredientIds.has(item.ingredientId)) {
+        ownMaterialCost += item.quantity * unitCost;
+      }
     }
 
     visiting.delete(productId);
@@ -241,6 +257,7 @@ export class RecipeCostProfileService {
       productId,
       name: profile.product.name,
       materialCost,
+      ownMaterialCost,
       costWithWaste,
       laborCost,
       overheadCost,

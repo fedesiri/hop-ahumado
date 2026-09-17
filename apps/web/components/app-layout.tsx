@@ -3,6 +3,7 @@
 import {
   ArrowLeftRight,
   BarChart2,
+  CalendarDays,
   ClipboardList,
   PanelLeftClose,
   PanelLeftOpen,
@@ -15,6 +16,7 @@ import {
   MapPin,
   Menu,
   Moon,
+  Receipt,
   Settings,
   ShoppingBag,
   Sun,
@@ -64,6 +66,8 @@ const navRows: NavRow[] = [
   { type: "item", path: "/stock/suggested-order", label: "Pedido sugerido", icon: <ClipboardList size={18} />, sub: true },
   { type: "item", path: "/ingredients", label: "Ingredientes", icon: <Wheat size={18} />, businessLine: BusinessLine.MEAT },
   { type: "item", path: "/recipes", label: "Recetas", icon: <FlaskConical size={18} /> },
+  { type: "item", path: "/production-plan", label: "Plan de producción", icon: <CalendarDays size={18} />, businessLine: BusinessLine.MEAT },
+  { type: "item", path: "/quotes", label: "Presupuestos", icon: <Receipt size={18} />, businessLine: BusinessLine.MEAT },
   { type: "item", path: "/operational-parameters", label: "Parámetros operativos", icon: <Settings size={18} />, businessLine: BusinessLine.MEAT },
   { type: "item", path: "/users", label: "Usuarios", icon: <UserCog size={18} /> },
 ];

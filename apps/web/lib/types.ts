@@ -545,6 +545,126 @@ export interface UpsertOperationalParametersRequest {
   notes?: string;
 }
 
+// --- Plan de Producción Mensual ---
+
+export interface ProductionPlanLine {
+  id: string;
+  planId: string;
+  productId: string;
+  batchesPerMonth: number;
+  product?: { id: string; name: string };
+}
+
+export interface ProductionPlan {
+  id: string;
+  businessLineId: string;
+  month: string;
+  notes: string | null;
+  lines: ProductionPlanLine[];
+}
+
+export interface UpsertProductionPlanLineRequest {
+  businessLineId: string;
+  month: string;
+  batchesPerMonth: number;
+}
+
+export interface ProductionPlanSummaryLine {
+  productId: string;
+  productName: string;
+  recipeType: RecipeType | null;
+  batchesPerMonth: number;
+  horasHombreTotales: number;
+  unidadesProducidas: number;
+  materiaPrimaPropia: number;
+  ingresoEstimado: number;
+  margenContribucion: number;
+}
+
+export interface ProductionPlanSummary {
+  businessLineId: string;
+  month: string;
+  lines: ProductionPlanSummaryLine[];
+  horasHombreDelPlan: number;
+  capacidadHorasMes: number;
+  pctCapacidadUsada: number;
+  estructuraMensual: number;
+  estructuraAbsorbida: number;
+  estructuraNoRecuperada: number;
+  ingresoEstimadoTotal: number;
+  margenContribucionTotal: number;
+  margenContribucionPct: number;
+  ingresoNecesarioEquilibrio: number | null;
+  resultadoEstimado: number;
+}
+
+// --- Presupuestos (cotizador) ---
+
+export interface QuoteItem {
+  id: string;
+  quoteId: string;
+  productId: string;
+  channel: PriceType;
+  quantity: number;
+  unitPrice: number;
+  product?: { id: string; name: string; unit: ProductUnit };
+}
+
+export interface QuoteTotals {
+  subtotalProductos: number;
+  subtotalAgregados: number;
+  totalAntesDescuento: number;
+  descuentoAplicado: number;
+  total: number;
+  pricePerPerson: number | null;
+}
+
+export interface Quote {
+  id: string;
+  businessLineId: string;
+  customerId: string | null;
+  clientName: string | null;
+  eventDate: string | null;
+  saleType: string | null;
+  peopleCount: number | null;
+  discountPct: number;
+  extraTransport: number;
+  extraPackaging: number;
+  extraStaff: number;
+  extraOvertime: number;
+  extraOther: number;
+  createdAt: string;
+  updatedAt: string;
+  customer?: { id: string; name: string } | null;
+  items: QuoteItem[];
+  totals: QuoteTotals;
+}
+
+export interface QuoteItemRequest {
+  productId: string;
+  channel: PriceType;
+  quantity: number;
+  unitPrice?: number;
+}
+
+export interface CreateQuoteRequest {
+  businessLineId: string;
+  customerId?: string;
+  clientName?: string;
+  eventDate?: string;
+  saleType?: string;
+  peopleCount?: number;
+  discountPct?: number;
+  extraTransport?: number;
+  extraPackaging?: number;
+  extraStaff?: number;
+  extraOvertime?: number;
+  extraOther?: number;
+  items: QuoteItemRequest[];
+}
+
+export type UpdateQuoteRequest = Partial<Omit<CreateQuoteRequest, "businessLineId">>;
+
 export interface OrderItem {
   id: string;
   orderId: string;

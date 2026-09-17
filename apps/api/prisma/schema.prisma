@@ -17,6 +17,8 @@ model BusinessLine {
   products              Product[]
   baselines             TreasuryBaseline?
   operationalParameters OperationalParameters?
+  productionPlans       ProductionPlan[]
+  quotes                Quote[]
 }
 
 model User {
@@ -61,6 +63,7 @@ model Customer {
   updatedAt DateTime         @updatedAt
   profile   CustomerProfile?
   orders    Order[]
+  quotes    Quote[]
 }
 
 model CustomerProfile {
@@ -138,29 +141,31 @@ model StockBalance {
 }
 
 model Product {
-  id                     String              @id @default(uuid())
+  id                     String               @id @default(uuid())
   name                   String
   description            String?
   categoryId             String?
-  sku                    String?             @unique
+  sku                    String?              @unique
   barcode                String?
-  stock                  Float               @default(0)
+  stock                  Float                @default(0)
   deactivationDate       DateTime?
-  createdAt              DateTime            @default(now())
-  unit                   ProductUnit         @default(UNIT)
+  createdAt              DateTime             @default(now())
+  unit                   ProductUnit          @default(UNIT)
   businessLineId         String
   costs                  Cost[]
   orderItems             OrderItem[]
   prices                 Price[]
-  businessLine           BusinessLine        @relation(fields: [businessLineId], references: [id])
-  category               Category?           @relation(fields: [categoryId], references: [id])
-  usedInRecipes          RecipeItem[]        @relation("recipe_ingredient")
-  recipeItems            RecipeItem[]        @relation("recipe_product")
+  businessLine           BusinessLine         @relation(fields: [businessLineId], references: [id])
+  category               Category?            @relation(fields: [categoryId], references: [id])
+  usedInRecipes          RecipeItem[]         @relation("recipe_ingredient")
+  recipeItems            RecipeItem[]         @relation("recipe_product")
   stockBalances          StockBalance[]
   stockMovements         StockMovement[]
   ingredientProfile      IngredientProfile?
-  recipeCostProfile      RecipeCostProfile?  @relation("recipe_cost_profile")
-  usedAsMainIngredientIn RecipeCostProfile[] @relation("recipe_main_ingredient")
+  recipeCostProfile      RecipeCostProfile?   @relation("recipe_cost_profile")
+  usedAsMainIngredientIn RecipeCostProfile[]  @relation("recipe_main_ingredient")
+  productionPlanLines    ProductionPlanLine[]
+  quoteItems             QuoteItem[]
 
   @@index([businessLineId])
 }
@@ -249,6 +254,62 @@ model ChannelCommission {
   parameters    OperationalParameters @relation(fields: [parametersId], references: [id])
 
   @@unique([parametersId, channel])
+}
+
+model ProductionPlan {
+  id             String               @id @default(uuid())
+  businessLineId String
+  month          String
+  notes          String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  businessLine   BusinessLine         @relation(fields: [businessLineId], references: [id])
+  lines          ProductionPlanLine[]
+
+  @@unique([businessLineId, month])
+}
+
+model ProductionPlanLine {
+  id              String         @id @default(uuid())
+  planId          String
+  productId       String
+  batchesPerMonth Float
+  plan            ProductionPlan @relation(fields: [planId], references: [id])
+  product         Product        @relation(fields: [productId], references: [id])
+
+  @@unique([planId, productId])
+}
+
+model Quote {
+  id             String       @id @default(uuid())
+  businessLineId String
+  customerId     String?
+  clientName     String?
+  eventDate      DateTime?
+  saleType       String?
+  peopleCount    Int?
+  discountPct    Float        @default(0)
+  extraTransport Decimal      @default(0)
+  extraPackaging Decimal      @default(0)
+  extraStaff     Decimal      @default(0)
+  extraOvertime  Decimal      @default(0)
+  extraOther     Decimal      @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  businessLine   BusinessLine @relation(fields: [businessLineId], references: [id])
+  customer       Customer?    @relation(fields: [customerId], references: [id])
+  items          QuoteItem[]
+}
+
+model QuoteItem {
+  id        String  @id @default(uuid())
+  quoteId   String
+  productId String
+  channel   String
+  quantity  Float
+  unitPrice Decimal
+  quote     Quote   @relation(fields: [quoteId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
 }
 
 model Price {

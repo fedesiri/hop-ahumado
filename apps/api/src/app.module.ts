@@ -28,6 +28,8 @@ import { OrderModule } from "./order/order.module";
 import { PriceModule } from "./price/price.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductModule } from "./product/product.module";
+import { ProductionPlanModule } from "./production-plan/production-plan.module";
+import { QuoteModule } from "./quote/quote.module";
 import { RecipeCostProfileModule } from "./recipe-cost-profile/recipe-cost-profile.module";
 import { RecipeItemModule } from "./recipe-item/recipe-item.module";
 import { StockLocationModule } from "./stock-location/stock-location.module";
@@ -87,6 +89,8 @@ import { UserModule } from "./user/user.module";
     IngredientProfileModule,
     OperationalParametersModule,
     RecipeCostProfileModule,
+    ProductionPlanModule,
+    QuoteModule,
     TreasuryModule,
     NotificationsModule,
   ],

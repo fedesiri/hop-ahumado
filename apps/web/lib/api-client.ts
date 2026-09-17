@@ -18,6 +18,7 @@ import type {
   CreatePartnerRequest,
   CreatePriceRequest,
   CreateProductRequest,
+  CreateQuoteRequest,
   CreateRecipeCostProfileRequest,
   CreateRecipeItemRequest,
   CreateStockLocationRequest,
@@ -41,6 +42,9 @@ import type {
   PaginatedResponse,
   Price,
   Product,
+  ProductionPlan,
+  ProductionPlanSummary,
+  Quote,
   RecipeCosting,
   RecipeCostProfile,
   RecipeItem,
@@ -68,6 +72,7 @@ import type {
   UpdatePriceRequest,
   UpdateProductRequest,
   UpdateRecipeCostProfileRequest,
+  UpdateQuoteRequest,
   UpdateRecipeItemRequest,
   UpdateStockLocationRequest,
   UpdateTreasuryBaselineRequest,
@@ -75,6 +80,7 @@ import type {
   UpsertChannelCommissionRequest,
   UpsertIngredientProfileRequest,
   UpsertOperationalParametersRequest,
+  UpsertProductionPlanLineRequest,
   User,
   SetConsignmentPricesRequest,
   ReturnConsignmentRequest,
@@ -781,6 +787,49 @@ export class ApiClient {
       method: "PUT",
       body: JSON.stringify(data),
     });
+  }
+
+  // Production plan (Alumo)
+  async getProductionPlan(businessLineId: string, month: string): Promise<ProductionPlan> {
+    return this.request(`/production-plans${this.buildParams({ businessLineId, month })}`);
+  }
+
+  async getProductionPlanSummary(businessLineId: string, month: string): Promise<ProductionPlanSummary> {
+    return this.request(`/production-plans/summary${this.buildParams({ businessLineId, month })}`);
+  }
+
+  async upsertProductionPlanLine(productId: string, data: UpsertProductionPlanLineRequest): Promise<ProductionPlan> {
+    return this.request(`/production-plans/lines/${productId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Quotes / Presupuestos (Alumo)
+  async getQuotes(page = 1, limit = 10, businessLineId?: string): Promise<PaginatedResponse<Quote>> {
+    return this.request(`/quotes${this.buildParams({ page, limit, businessLineId })}`);
+  }
+
+  async getQuote(id: string): Promise<Quote> {
+    return this.request(`/quotes/${id}`);
+  }
+
+  async createQuote(data: CreateQuoteRequest): Promise<Quote> {
+    return this.request("/quotes", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateQuote(id: string, data: UpdateQuoteRequest): Promise<Quote> {
+    return this.request(`/quotes/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteQuote(id: string): Promise<{ success: boolean }> {
+    return this.request(`/quotes/${id}`, { method: "DELETE" });
   }
 
   // Orders
