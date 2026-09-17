@@ -5,6 +5,7 @@ import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import type { ProductionPlan, ProductionPlanSummary, RecipeCostProfile } from "@/lib/types";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -96,6 +97,26 @@ function ProductionPlanContent() {
           onChange={(e) => setMonth(e.target.value || currentMonth())}
         />
       </div>
+
+      <ScreenInfoPanel title="¿Para qué sirve esta pantalla? Tocá acá para verlo">
+        <div>
+          <p style={{ margin: "0 0 8px 0" }}>
+            Sirve para saber si lo que vas a producir este mes te alcanza para pagar los sueldos y los gastos fijos.
+          </p>
+          <ol style={{ margin: "0 0 10px 0", paddingLeft: 20 }}>
+            <li>Arriba a la derecha, elegí el mes.</li>
+            <li>En la tabla, buscá cada receta y escribí cuántas tandas pensás hacer ese mes en la columna <strong>Tandas/mes</strong>.</li>
+            <li>Tocá <strong>Guardar</strong> al lado de esa fila.</li>
+            <li>Repetí con cada receta que vayas a producir ese mes. No te olvides de las preparaciones base (por ejemplo, la Bondiola Ahumada) — también hay que cargarlas.</li>
+            <li>Mirá el resumen de abajo. Se actualiza solo.</li>
+          </ol>
+          <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>Cómo leer el resultado de abajo:</p>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <li>Si dice <strong>✅ (verde)</strong>: con esa producción alcanza para cubrir todo.</li>
+            <li>Si dice <strong>🔴 (rojo)</strong>: no alcanza. Hay que producir más, vender más caro, o gastar menos en costos fijos.</li>
+          </ul>
+        </div>
+      </ScreenInfoPanel>
 
       {loading || !plan ? (
         <Spinner />

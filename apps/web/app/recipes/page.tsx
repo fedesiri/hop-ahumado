@@ -22,6 +22,7 @@ import {
 } from "@/lib/types";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
 import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -369,6 +370,23 @@ function RecipesContent() {
     <div>
       <h1 className="pc-pagetitle">Recetas</h1>
 
+      <ScreenInfoPanel title="¿Cómo se usa esta pantalla? Tocá acá para verlo">
+        <div>
+          <p style={{ margin: "0 0 8px 0" }}>
+            Acá armás cada receta: qué lleva adentro y cuánto sale hacerla. Es la pantalla más importante de todas.
+          </p>
+          <ol style={{ margin: "0 0 10px 0", paddingLeft: 20 }}>
+            <li>Arriba de todo, en el cartel que dice <strong>Producto final</strong>, elegí la receta que querés ver o armar. Por ejemplo: <i>Bondiola Ahumada (base)</i>.</li>
+            <li>Del lado izquierdo vas a ver <strong>Ingredientes</strong>: la lista de lo que lleva esa receta.</li>
+            <li>Para agregar un ingrediente a la receta: tocá <strong>+ Agregar ingrediente</strong>, elegí cuál es y cuánto lleva, y confirmá.</li>
+            <li>Del lado derecho (o abajo, si estás en el celular) está la <strong>Calculadora</strong>: sirve para saber cuánto necesitás de cada ingrediente si querés hacer, por ejemplo, el doble de cantidad.</li>
+          </ol>
+          <p style={{ margin: 0 }}>
+            Más abajo en esta misma pantalla hay dos partes más nuevas: <strong>Costeo de receta</strong> (para saber cuánto sale hacerla) y <strong>Precios por canal</strong> (para poner el precio de venta). Cada una tiene su propia ayuda — tocá el cartel de arriba de esa parte.
+          </p>
+        </div>
+      </ScreenInfoPanel>
+
       {/* Product selector card */}
       <div className="rc-selbar">
         <div className="rc-sellabel">Producto final</div>
@@ -597,6 +615,27 @@ function RecipesContent() {
           </div>
 
           {/* Costeo de receta */}
+          <ScreenInfoPanel title="¿Cómo cargo cuánto sale hacer esta receta? Tocá acá para verlo" style={{ marginTop: 16 }}>
+            <div>
+              <p style={{ margin: "0 0 8px 0" }}>
+                Este formulario le dice al sistema cómo se hace la receta. Con estos datos, el costo se calcula solo — no hace falta hacer ninguna cuenta a mano.
+              </p>
+              <ol style={{ margin: "0 0 10px 0", paddingLeft: 20 }}>
+                <li>En <strong>Tipo</strong>: elegí <i>Preparación base</i> si esto se usa DENTRO de otra receta y nunca se vende solo (ejemplo: la Bondiola Ahumada se convierte después en Bondiola Desmenuzada). Elegí <i>Producto final</i> si esto se vende directo al cliente.</li>
+                <li>En <strong>Unidad de venta</strong>: escribí cómo se vende. Ejemplos: <i>kg</i>, <i>unidad</i>, <i>porción 300 g</i>.</li>
+                <li>Si esta receta usa carne cruda que se ahúma (pierde peso al cocinarse): en <strong>Insumo principal</strong> elegí esa carne, y en <strong>Kg insumo principal</strong> escribí cuántos kilos crudos usás. En <strong>Merma cocción %</strong> escribí cuánto peso se pierde al ahumar (por ejemplo <i>35</i> si se pierde un 35%). Esto no se cobra aparte, ya está incluido en la cuenta.</li>
+                <li>Si esta receta NO usa carne que se ahúma (por ejemplo, empanadas o figazzas): dejá vacíos Insumo principal y Merma, y en <strong>Rinde manual</strong> escribí directamente cuántas unidades salen de una tanda.</li>
+                <li>En <strong>Desperdicio %</strong>: escribí qué porcentaje se rompe o se descarta. Esto es distinto de la merma, y esto sí se cobra.</li>
+                <li>En <strong>Horas-hombre / tanda</strong>: escribí cuántas horas de trabajo lleva hacer una tanda completa.</li>
+                <li>En <strong>Margen minorista / mayorista / catering %</strong>: escribí cuánto querés ganar en cada canal de venta. Si dejás uno vacío, quiere decir que por ese canal NO se vende.</li>
+                <li>Al final, tocá <strong>Crear perfil de costeo</strong> (si es la primera vez) o <strong>Guardar cambios</strong> (si ya lo habías cargado antes).</li>
+              </ol>
+              <p style={{ margin: 0 }}>
+                En cuanto guardás, debajo aparece solo el <strong>Resultado del costeo</strong> (cuánto sale hacerlo) y más abajo los <strong>Precios por canal</strong> (a cuánto se vende).
+              </p>
+            </div>
+          </ScreenInfoPanel>
+
           <div className="rc-card" style={{ marginTop: 16, padding: 20 }}>
             <div className="rc-card__head">
               <span className="rc-card__title">Costeo de receta · {selectedProduct?.name ?? ""}</span>
@@ -730,6 +769,26 @@ function RecipesContent() {
                 {pricing && (
                   <>
                     <div className="rc-sep" style={{ margin: "16px 0" }} />
+                    <ScreenInfoPanel title="¿Cómo pongo el precio de venta? Tocá acá para verlo" style={{ marginBottom: 12 }}>
+                      <div>
+                        <p style={{ margin: "0 0 8px 0" }}>
+                          Para cada canal de venta (Minorista, Mayorista, Catering) vas a ver tres columnas:
+                        </p>
+                        <ul style={{ margin: "0 0 10px 0", paddingLeft: 20 }}>
+                          <li><strong>Calculado</strong>: el precio que da la fórmula sola. No lo tocás.</li>
+                          <li><strong>Override</strong>: acá escribís el precio real que cobrás, si es distinto del calculado.</li>
+                          <li><strong>Final</strong>: el precio que se usa en todo el sistema. Es el que vos cargaste en Override, y si no cargaste nada, es el Calculado.</li>
+                        </ul>
+                        <p style={{ margin: "0 0 8px 0", fontWeight: 600 }}>Para cambiar un precio:</p>
+                        <ol style={{ margin: "0 0 10px 0", paddingLeft: 20 }}>
+                          <li>Escribí el precio nuevo en el casillero al lado del canal que querés cambiar.</li>
+                          <li>Tocá el botón <strong>OK</strong> que está al lado.</li>
+                        </ol>
+                        <p style={{ margin: 0, padding: "8px 10px", background: "var(--ha-amber-soft)", borderRadius: 6 }}>
+                          Si un canal dice <strong>"no se vende"</strong>, no vas a poder escribir nada ahí. Es a propósito: esa receta no se vende por ese canal.
+                        </p>
+                      </div>
+                    </ScreenInfoPanel>
                     <div className="rc-card__title" style={{ marginBottom: 10 }}>Precios por canal</div>
                     <div className="ps-tablewrap">
                       <table className="rc-table">

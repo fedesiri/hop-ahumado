@@ -9,6 +9,7 @@ import type { Customer, Product, Quote, QuoteItemRequest } from "@/lib/types";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Paginator } from "@/components/paginator";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
 import { Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -229,6 +230,25 @@ function QuotesContent() {
           <Plus size={15} /> Nuevo presupuesto
         </button>
       </div>
+
+      <ScreenInfoPanel title="¿Para qué sirve esta pantalla? Tocá acá para verlo">
+        <div>
+          <p style={{ margin: "0 0 8px 0" }}>
+            Sirve para armar un precio y mandárselo a un cliente que te pidió un evento (por ejemplo, un catering). No descuenta stock ni genera un pedido — es solo el número que le pasás al cliente.
+          </p>
+          <ol style={{ margin: "0 0 10px 0", paddingLeft: 20 }}>
+            <li>Tocá <strong>+ Nuevo presupuesto</strong>.</li>
+            <li>Si el cliente ya está cargado, elegilo en <strong>Cliente existente</strong>. Si no, escribí su nombre en <strong>Nombre del cliente / evento</strong>.</li>
+            <li>Cargá la fecha del evento y cuántas personas van.</li>
+            <li>Para cada producto que va a llevar el evento: elegí el producto, el canal (normalmente <i>Catering</i>) y la cantidad, y tocá <strong>+ Agregar</strong>. El precio aparece solo — si necesitás ponerlo distinto, escribilo antes de tocar Agregar.</li>
+            <li>Repetí el paso anterior por cada producto que lleve el evento.</li>
+            <li>Si hay gastos extra (viaje, cajas, personal, horas extra), cargalos en <strong>Agregados opcionales</strong>.</li>
+            <li>Si le hacés un descuento, escribí el porcentaje.</li>
+            <li>Al final de todo, mirá el <strong>Total del presupuesto</strong> y el <strong>Precio por persona</strong>. Se calculan solos.</li>
+            <li>Tocá <strong>Guardar</strong>.</li>
+          </ol>
+        </div>
+      </ScreenInfoPanel>
 
       {loading ? (
         <Spinner />

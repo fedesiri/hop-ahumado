@@ -7,6 +7,7 @@ import { PRICE_TYPE_LABELS, PRICE_TYPES, type PriceType } from "@/lib/order-calc
 import { toast } from "@/lib/toast";
 import type { OperationalParameters } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
 import { Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -169,6 +170,44 @@ function OperationalParametersContent() {
       <div className="ha-page-header">
         <h1 className="ha-pagetitle">Parámetros operativos</h1>
       </div>
+
+      <ScreenInfoPanel title="¿Cómo se usa esta pantalla? Tocá acá para verlo">
+        <div>
+          <p style={{ margin: "0 0 8px 0" }}>
+            Acá anotás la plata que gastás todos los meses, aunque no sea para comprar ingredientes: los sueldos de los socios, el alquiler, la luz.
+          </p>
+          <p style={{ margin: "0 0 10px 0" }}>
+            El sistema usa estos números para saber cuánto cuesta una hora de trabajo. Ese costo se suma después a cada receta.
+          </p>
+
+          <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>Arriba de todo — Capacidad:</p>
+          <ol style={{ margin: "0 0 10px 0", paddingLeft: 20 }}>
+            <li>Escribí cuántos días trabajan por mes.</li>
+            <li>Escribí cuántas horas trabajan por día.</li>
+            <li>Escribí cuántas horas en total hay disponibles en el mes (ese número no se calcula solo, lo decidís vos).</li>
+            <li>Tocá <strong>Guardar capacidad</strong>.</li>
+          </ol>
+
+          <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>Más abajo — Socios:</p>
+          <ol style={{ margin: "0 0 10px 0", paddingLeft: 20 }}>
+            <li>Al pie de la tabla, escribí el nombre del socio y su sueldo del mes.</li>
+            <li>Tocá <strong>+ Agregar</strong>.</li>
+            <li>Si un socio no cobró ese mes, destildá el casillero de <strong>Activo</strong> de su fila (no hace falta borrarlo).</li>
+          </ol>
+
+          <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>Costos fijos mensuales:</p>
+          <ol style={{ margin: "0 0 10px 0", paddingLeft: 20 }}>
+            <li>Es lo mismo que Socios, pero para gastos como el alquiler, la luz, el marketing.</li>
+            <li>Escribí el nombre del gasto y cuánto sale por mes, tocá <strong>+ Agregar</strong>.</li>
+            <li>Si un gasto hoy no se paga, destildá <strong>Activo</strong> en esa fila. Podés volver a tildarlo el día que empiece a pagarse.</li>
+          </ol>
+
+          <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>Comisiones por canal:</p>
+          <p style={{ margin: 0 }}>
+            Dejalo en 0% si todavía cobrás en efectivo o transferencia. El día que empieces a cobrar con Mercado Pago o tarjeta, escribí ahí el porcentaje que te cobran y tocá <strong>Guardar</strong> en esa fila — los precios de venta se ajustan solos.
+          </p>
+        </div>
+      </ScreenInfoPanel>
 
       {loading || !data ? (
         <Spinner />

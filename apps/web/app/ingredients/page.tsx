@@ -13,6 +13,7 @@ import {
   type PaginationMeta,
 } from "@/lib/types";
 import { Paginator } from "@/components/paginator";
+import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
 import { Pencil, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -184,6 +185,34 @@ function IngredientsContent() {
           <Plus size={15} /> Nuevo ingrediente
         </button>
       </div>
+
+      <ScreenInfoPanel title="¿Cómo se usa esta pantalla? Tocá acá para verlo">
+        <div>
+          <p style={{ margin: "0 0 8px 0" }}>
+            Acá anotás las cosas que comprás para hacer los productos. Por ejemplo: la carne, la sal, las bolsas, la leña.
+          </p>
+          <p style={{ margin: "0 0 8px 0", fontWeight: 600 }}>Para anotar algo nuevo:</p>
+          <ol style={{ margin: "0 0 8px 0", paddingLeft: 20 }}>
+            <li>Arriba a la derecha, tocá el botón que dice <strong>+ Nuevo ingrediente</strong>.</li>
+            <li>Se abre un cartel del lado derecho de la pantalla.</li>
+            <li>Escribí el nombre. Por ejemplo: <i>Aceite</i>.</li>
+            <li>Elegí cómo se mide: por <i>Litro</i>, por <i>Kg</i> o por <i>Unidad</i>.</li>
+            <li>En <strong>Cantidad comprada</strong> escribí cuánto compraste. Por ejemplo: <i>5</i> (si compraste 5 litros).</li>
+            <li>En <strong>Precio de compra</strong> escribí cuánto pagaste en total. Por ejemplo: <i>21800</i> (si pagaste $21.800 por todo).</li>
+            <li>No hace falta calcular cuánto sale 1 litro solo. Eso lo calcula el sistema solo.</li>
+            <li>Al final, tocá el botón <strong>Guardar</strong>.</li>
+          </ol>
+          <p style={{ margin: "0 0 8px 0", fontWeight: 600 }}>Si ya lo tenías cargado y cambió el precio:</p>
+          <ol style={{ margin: "0 0 8px 0", paddingLeft: 20 }}>
+            <li>Buscalo en la lista de abajo.</li>
+            <li>Tocá el lápiz que está al final de esa fila.</li>
+            <li>Cambiá el precio y tocá <strong>Guardar</strong> otra vez.</li>
+          </ol>
+          <p style={{ margin: 0, padding: "8px 10px", background: "var(--ha-red-soft)", borderRadius: 6, color: "var(--ha-red)" }}>
+            <strong>Importante:</strong> si necesitás cambiar el precio de un ingrediente, hacelo siempre desde esta pantalla. No lo cambies desde la pantalla que dice "Costos" — ahí no te va a dejar, a propósito.
+          </p>
+        </div>
+      </ScreenInfoPanel>
 
       <div className="ha-filters" style={{ marginBottom: 16 }}>
         <div className="ha-filters__row">
