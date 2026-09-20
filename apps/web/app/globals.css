@@ -766,7 +766,7 @@ body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:v
 .ha-modal{background:var(--ha-bg-card);border:1px solid var(--ha-border-2);border-radius:14px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden;max-height:90vh;display:flex;flex-direction:column}
 .ha-modal__head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--ha-border);flex-shrink:0}
 .ha-modal__title{font-size:16px;font-weight:600;color:var(--ha-text)}
-.ha-modal__body{padding:20px;overflow-y:auto;flex:1}
+.ha-modal__body{padding:20px;overflow-y:auto;flex:1;scrollbar-gutter:stable}
 .ha-modal__foot{padding:14px 20px;border-top:1px solid var(--ha-border);display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-shrink:0}
 @keyframes ha-fade{from{opacity:0}to{opacity:1}}
 

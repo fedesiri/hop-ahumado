@@ -360,7 +360,8 @@ export interface IngredientProfileRow {
 
 export interface UpsertIngredientProfileRequest {
   purchaseQuantity?: number;
-  purchasePrice?: number;
+  /** `undefined` no toca el precio existente; `null` lo borra. */
+  purchasePrice?: number | null;
   supplier?: string;
   notes?: string;
 }

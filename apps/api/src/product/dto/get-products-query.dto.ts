@@ -17,4 +17,9 @@ export class GetProductsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   categoryId?: string;
+
+  /** Si es "true", excluye productos cargados como insumo (tienen perfil de ingrediente). */
+  @IsOptional()
+  @IsIn(["true", "false"], { message: "excludeIngredients debe ser 'true' o 'false'" })
+  excludeIngredients?: string;
 }

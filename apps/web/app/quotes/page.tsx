@@ -87,7 +87,7 @@ function QuotesContent() {
 
   const fetchProducts = useCallback(async () => {
     const bId = selectedLineId ?? undefined;
-    const res = await apiClient.getProducts(1, 100, false, undefined, undefined, bId);
+    const res = await apiClient.getProducts(1, 100, false, undefined, undefined, bId, true);
     setProducts(res.data);
   }, [selectedLineId]);
 
@@ -155,6 +155,11 @@ function QuotesContent() {
       setLineLoading(true);
       unitPrice = await fetchSuggestedPrice(lineProductId, lineChannel);
       setLineLoading(false);
+      if (!unitPrice) {
+        toast.error(
+          `"${product?.name ?? "Este producto"}" no tiene precio cargado para ${PRICE_TYPE_LABELS[lineChannel]}. Cargale un precio desde Recetas (o Precios) o escribilo a mano en esta línea.`,
+        );
+      }
     }
     setItems((prev) => [...prev, { productId: lineProductId, channel: lineChannel, quantity: qty, unitPrice, productName: product?.name ?? "—" }]);
     setLineProductId(""); setLineQty(""); setLineUnitPrice("");
@@ -314,7 +319,7 @@ function QuotesContent() {
               <span className="ha-modal__title">{editingId ? "Editar presupuesto" : "Nuevo presupuesto"}</span>
               <button className="ha-iconbtn" onClick={closeModal} aria-label="Cerrar"><X size={18} /></button>
             </div>
-            <div className="ha-modal__body" style={{ maxHeight: "70vh", overflowY: "auto" }}>
+            <div className="ha-modal__body">
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
                 <div className="ha-field">
                   <label className="ha-label">Cliente existente</label>

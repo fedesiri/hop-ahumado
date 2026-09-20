@@ -24,6 +24,7 @@ export class ProductController {
       query.search,
       query.categoryId,
       query.businessLineId,
+      query.excludeIngredients === "true",
     );
   }
 

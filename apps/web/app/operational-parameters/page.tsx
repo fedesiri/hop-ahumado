@@ -9,7 +9,7 @@ import type { OperationalParameters } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
-import { Plus, Trash2 } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -40,6 +40,10 @@ function OperationalParametersContent() {
 
   const [fixedCostConcept, setFixedCostConcept] = useState("");
   const [fixedCostValue, setFixedCostValue] = useState("");
+
+  const [editingFixedCostId, setEditingFixedCostId] = useState<string | null>(null);
+  const [editFixedCostConcept, setEditFixedCostConcept] = useState("");
+  const [editFixedCostValue, setEditFixedCostValue] = useState("");
 
   const [commissionDrafts, setCommissionDrafts] = useState<Record<string, string>>({});
 
@@ -130,6 +134,32 @@ function OperationalParametersContent() {
   const toggleFixedCostActive = async (id: string, active: boolean) => {
     try {
       await apiClient.updateFixedCostItem(id, { active });
+      void fetchData();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al actualizar costo fijo"));
+    }
+  };
+
+  const startEditFixedCost = (id: string, concept: string, monthlyCost: number) => {
+    setEditingFixedCostId(id);
+    setEditFixedCostConcept(concept);
+    setEditFixedCostValue(String(monthlyCost));
+  };
+
+  const cancelEditFixedCost = () => {
+    setEditingFixedCostId(null);
+    setEditFixedCostConcept("");
+    setEditFixedCostValue("");
+  };
+
+  const saveEditFixedCost = async () => {
+    if (!editingFixedCostId) return;
+    const value = Number(editFixedCostValue);
+    if (!editFixedCostConcept.trim() || !Number.isFinite(value) || value < 0) { toast.error("Completá concepto y monto válidos"); return; }
+    try {
+      await apiClient.updateFixedCostItem(editingFixedCostId, { concept: editFixedCostConcept.trim(), monthlyCost: value });
+      toast.success("Costo fijo actualizado");
+      cancelEditFixedCost();
       void fetchData();
     } catch (error) {
       toast.error(getErrorMessage(error, "Error al actualizar costo fijo"));
@@ -296,24 +326,55 @@ function OperationalParametersContent() {
                     <th>Concepto</th>
                     <th>Costo/mes</th>
                     <th>Activo</th>
-                    <th style={{ width: 48 }} />
+                    <th style={{ width: 80 }} />
                   </tr>
                 </thead>
                 <tbody>
-                  {data.fixedCosts.map((f) => (
-                    <tr key={f.id}>
-                      <td>{f.concept}</td>
-                      <td>{formatCurrency(f.monthlyCost)}</td>
-                      <td>
-                        <input type="checkbox" checked={f.active} onChange={(e) => void toggleFixedCostActive(f.id, e.target.checked)} />
-                      </td>
-                      <td>
-                        <button className="rc-xbtn" onClick={() => void removeFixedCost(f.id)} aria-label="Eliminar costo fijo">
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {data.fixedCosts.map((f) => {
+                    const isEditing = editingFixedCostId === f.id;
+                    return (
+                      <tr key={f.id}>
+                        <td>
+                          {isEditing ? (
+                            <input className="rc-finput" style={{ width: "100%" }} value={editFixedCostConcept} onChange={(e) => setEditFixedCostConcept(e.target.value)} />
+                          ) : (
+                            f.concept
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <input type="number" className="rc-finput" style={{ width: 140 }} min={0} step={1000} value={editFixedCostValue} onChange={(e) => setEditFixedCostValue(e.target.value)} />
+                          ) : (
+                            formatCurrency(f.monthlyCost)
+                          )}
+                        </td>
+                        <td>
+                          <input type="checkbox" checked={f.active} onChange={(e) => void toggleFixedCostActive(f.id, e.target.checked)} />
+                        </td>
+                        <td style={{ display: "flex", gap: 4 }}>
+                          {isEditing ? (
+                            <>
+                              <button className="rc-xbtn" onClick={() => void saveEditFixedCost()} aria-label="Guardar costo fijo">
+                                <Check size={14} />
+                              </button>
+                              <button className="rc-xbtn" onClick={cancelEditFixedCost} aria-label="Cancelar edición">
+                                <X size={14} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button className="rc-xbtn" onClick={() => startEditFixedCost(f.id, f.concept, f.monthlyCost)} aria-label="Editar costo fijo">
+                                <Pencil size={14} />
+                              </button>
+                              <button className="rc-xbtn" onClick={() => void removeFixedCost(f.id)} aria-label="Eliminar costo fijo">
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -15,7 +15,7 @@ import {
 import { Paginator } from "@/components/paginator";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
-import { Pencil, Plus, Search, X } from "lucide-react";
+import { Pencil, Plus, Power, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const PRODUCT_UNIT_OPTIONS: { label: string; value: ProductUnit }[] = [
@@ -62,6 +62,7 @@ function IngredientsContent() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<IngredientProfileRow | null>(null);
@@ -84,6 +85,7 @@ function IngredientsContent() {
         selectedLineId ?? undefined,
         search || undefined,
         categoryFilter || undefined,
+        showInactive,
       );
       setRows(res.data);
       setMeta(res.meta);
@@ -92,7 +94,7 @@ function IngredientsContent() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, selectedLineId, search, categoryFilter]);
+  }, [pagination.page, pagination.limit, selectedLineId, search, categoryFilter, showInactive]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -162,7 +164,8 @@ function IngredientsContent() {
 
       await apiClient.upsertIngredientProfile(productId, {
         purchaseQuantity: fPurchaseQty ? Number(fPurchaseQty) : undefined,
-        purchasePrice: fPurchasePrice ? Number(fPurchasePrice) : undefined,
+        // Vacío = borrar el precio cargado, no "dejarlo como estaba".
+        purchasePrice: fPurchasePrice ? Number(fPurchasePrice) : null,
         supplier: fSupplier || undefined,
         notes: fNotes || undefined,
       });
@@ -174,6 +177,18 @@ function IngredientsContent() {
       toast.error(getErrorMessage(error, "Error al guardar el ingrediente"));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const toggleActive = async (row: IngredientProfileRow) => {
+    try {
+      await apiClient.updateProduct(row.productId, {
+        deactivationDate: row.deactivationDate ? null : new Date().toISOString(),
+      });
+      toast.success(row.deactivationDate ? "Ingrediente activado" : "Ingrediente desactivado");
+      void fetchRows();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al cambiar el estado"));
     }
   };
 
@@ -241,6 +256,14 @@ function IngredientsContent() {
             <option value="">Todas las categorías</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ha-text-2)" }}>
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => { setPagination((p) => ({ ...p, page: 1 })); setShowInactive(e.target.checked); }}
+            />
+            Mostrar inactivos
+          </label>
           {meta && (
             <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--ha-text-3)" }}>{meta.total} ingredientes</span>
           )}
@@ -273,9 +296,12 @@ function IngredientsContent() {
               </thead>
               <tbody>
                 {rows.map((row) => {
-                  const estado = ESTADO_INFO[row.estado];
+                  const inactive = !!row.deactivationDate;
+                  const estado = inactive
+                    ? { label: "Inactivo", bg: "var(--ha-bg-raised)", color: "var(--ha-text-3)" }
+                    : ESTADO_INFO[row.estado];
                   return (
-                    <tr key={row.productId}>
+                    <tr key={row.productId} style={inactive ? { opacity: 0.6 } : undefined}>
                       <td style={{ fontWeight: 500 }}>{row.name}</td>
                       <td style={{ color: "var(--ha-text-2)" }}>{row.categoryName ?? "—"}</td>
                       <td className="ha-mono" style={{ color: "var(--ha-text-2)" }}>{UNIT_SHORT_LABEL[row.unit]}</td>
@@ -293,6 +319,13 @@ function IngredientsContent() {
                         </span>
                       </td>
                       <td style={{ textAlign: "right" }}>
+                        <button
+                          onClick={() => void toggleActive(row)}
+                          title={inactive ? "Activar ingrediente" : "Desactivar ingrediente"}
+                          style={{ width: 32, height: 32, display: "inline-grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: inactive ? "var(--ha-green)" : "var(--ha-text-2)", cursor: "pointer", marginRight: 6 }}
+                        >
+                          <Power size={14} />
+                        </button>
                         <button
                           onClick={() => openEdit(row)}
                           style={{ width: 32, height: 32, display: "inline-grid", placeItems: "center", border: "1px solid var(--ha-border-2)", background: "transparent", borderRadius: 7, color: "var(--ha-text-2)", cursor: "pointer" }}

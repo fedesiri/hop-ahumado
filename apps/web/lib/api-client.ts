@@ -171,6 +171,7 @@ export class ApiClient {
     search?: string,
     categoryId?: string,
     businessLineId?: string,
+    excludeIngredients = false,
   ): Promise<PaginatedResponse<Product>> {
     return this.request(
       `/products${this.buildParams({
@@ -180,6 +181,7 @@ export class ApiClient {
         search,
         categoryId,
         businessLineId,
+        excludeIngredients: excludeIngredients ? "true" : undefined,
       })}`,
     );
   }

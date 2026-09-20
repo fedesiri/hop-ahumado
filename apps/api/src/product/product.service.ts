@@ -43,6 +43,7 @@ export class ProductService {
     search?: string,
     categoryId?: string,
     businessLineId?: string,
+    excludeIngredients = false,
   ): Promise<PaginatedResponse<ProductWithCategory>> {
     const where: any = {};
 
@@ -76,6 +77,10 @@ export class ProductService {
 
     if (businessLineId) {
       where.businessLineId = businessLineId;
+    }
+
+    if (excludeIngredients) {
+      where.ingredientProfile = null;
     }
 
     const skip = (page - 1) * limit;

@@ -25,6 +25,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
 import { Plus, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const RECIPE_TYPE_LABELS: Record<RecipeType, string> = {
@@ -80,11 +81,12 @@ export default function RecipesPage() {
 
 function RecipesContent() {
   const { selectedLineId } = useLineContext();
+  const searchParams = useSearchParams();
   const [recipes, setRecipes] = useState<RecipeItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(() => searchParams.get("productId"));
   const [mobTab, setMobTab] = useState<"ing" | "calc">("ing");
   const [addOpen, setAddOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -304,14 +306,16 @@ function RecipesContent() {
     if (!profileForm.saleUnitLabel?.trim()) { toast.error("La unidad de venta es obligatoria"); return; }
     setProfileSaving(true);
     try {
+      // "Desperdicio %" ya no se edita desde la UI: la merma de cocción lo cubre. Queda en 0.
       if (profile) {
-        await apiClient.updateRecipeCostProfile(selectedProductId, profileForm);
+        await apiClient.updateRecipeCostProfile(selectedProductId, { ...profileForm, wastePct: 0 });
       } else {
         const data: CreateRecipeCostProfileRequest = {
           ...profileForm,
           productId: selectedProductId,
           recipeType: profileForm.recipeType ?? RecipeType.PRODUCTO_FINAL,
           saleUnitLabel: profileForm.saleUnitLabel,
+          wastePct: 0,
         };
         await apiClient.createRecipeCostProfile(data);
       }
@@ -703,15 +707,9 @@ function RecipesContent() {
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <div className="ha-field">
-                      <label className="ha-label">Desperdicio %</label>
-                      <input type="number" className="ha-input" min={0} max={100} step={0.1} value={pctToInput(profileForm.wastePct)} onChange={(e) => setProfileForm((p) => ({ ...p, wastePct: inputToPct(e.target.value) ?? 0 }))} />
-                    </div>
-                    <div className="ha-field">
-                      <label className="ha-label">Horas-hombre / tanda</label>
-                      <input type="number" className="ha-input" min={0} step={0.1} value={profileForm.laborHoursPerBatch ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, laborHoursPerBatch: e.target.value ? Number(e.target.value) : 0 }))} />
-                    </div>
+                  <div className="ha-field">
+                    <label className="ha-label">Horas-hombre / tanda</label>
+                    <input type="number" className="ha-input" min={0} step={0.1} value={profileForm.laborHoursPerBatch ?? ""} onChange={(e) => setProfileForm((p) => ({ ...p, laborHoursPerBatch: e.target.value ? Number(e.target.value) : 0 }))} />
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
@@ -869,7 +867,14 @@ function RecipesContent() {
                     <td>{p.marginWholesalePct != null ? `${Math.round(p.marginWholesalePct * 1000) / 10}%` : "—"}</td>
                     <td>{p.marginCateringPct != null ? `${Math.round(p.marginCateringPct * 1000) / 10}%` : "—"}</td>
                     <td>
-                      <button className="pc-btn pc-btn--ghost pc-btn--sm" onClick={() => setSelectedProductId(p.productId)}>Ver</button>
+                      <a
+                        className="pc-btn pc-btn--ghost pc-btn--sm"
+                        href={`/recipes?productId=${p.productId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Ver
+                      </a>
                     </td>
                   </tr>
                 ))}

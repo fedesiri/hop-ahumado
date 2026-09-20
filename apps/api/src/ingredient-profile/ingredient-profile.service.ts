@@ -156,11 +156,23 @@ export class IngredientProfileService {
       },
       update: {
         ...(dto.purchaseQuantity !== undefined && { purchaseQuantity: dto.purchaseQuantity }),
-        ...(dto.purchasePrice !== undefined && { purchasePrice: new Decimal(dto.purchasePrice) }),
+        ...(dto.purchasePrice !== undefined && {
+          purchasePrice: dto.purchasePrice != null ? new Decimal(dto.purchasePrice) : null,
+        }),
         ...(dto.supplier !== undefined && { supplier: dto.supplier }),
         ...(dto.notes !== undefined && { notes: dto.notes }),
       },
     });
+
+    if (dto.purchasePrice === null) {
+      const existingCost = await this.prisma.cost.findFirst({
+        where: { productId, deactivatedAt: null },
+        orderBy: { createdAt: "desc" },
+      });
+      if (existingCost) {
+        await this.costService.remove(existingCost.id);
+      }
+    }
 
     if (dto.purchaseQuantity != null && dto.purchasePrice != null && dto.purchaseQuantity > 0) {
       const unitCost = dto.purchasePrice / dto.purchaseQuantity;
