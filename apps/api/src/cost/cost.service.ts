@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Cost, Prisma } from "@prisma/client";
+import { COSTING_INPUTS_CHANGED } from "../common/costing-events";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { BulkReplaceCostDto } from "./dto/bulk-replace-cost.dto";
@@ -7,14 +9,24 @@ import { CreateCostDto } from "./dto/create-cost.dto";
 import { ReplaceCostDto } from "./dto/replace-cost.dto";
 import { UpdateCostDto } from "./dto/update-cost.dto";
 
+type CostWriteOpts = {
+  allowIngredientTracked?: boolean;
+  /** Escritura de RecipeCostSyncService: permite recetas y no vuelve a disparar la sincronización. */
+  fromRecipeSync?: boolean;
+};
+
 @Injectable()
 export class CostService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
-  async create(dto: CreateCostDto, opts?: { allowIngredientTracked?: boolean }) {
+  async create(dto: CreateCostDto, opts?: CostWriteOpts) {
     await this.validateProductExists(dto.productId);
     if (!opts?.allowIngredientTracked) await this.assertNotIngredientTracked(dto.productId);
-    return this.prisma.$transaction(async (tx) => {
+    if (!opts?.fromRecipeSync) await this.assertNotRecipeTracked(dto.productId);
+    const created = await this.prisma.$transaction(async (tx) => {
       const cost = await tx.cost.create({
         data: { productId: dto.productId, value: dto.value },
         include: { product: true },
@@ -22,6 +34,8 @@ export class CostService {
       await this.syncFabricaPrice(tx, dto.productId, dto.value);
       return cost;
     });
+    await this.notifyCostingInputsChanged(opts);
+    return created;
   }
 
   async findAll(
@@ -74,7 +88,7 @@ export class CostService {
     return cost;
   }
 
-  async update(id: string, dto: UpdateCostDto, opts?: { allowIngredientTracked?: boolean }) {
+  async update(id: string, dto: UpdateCostDto, opts?: CostWriteOpts) {
     const existing = await this.findOne(id);
     if (dto.productId !== undefined) {
       await this.validateProductExists(dto.productId);
@@ -82,29 +96,36 @@ export class CostService {
     if (dto.value !== undefined && !opts?.allowIngredientTracked) {
       await this.assertNotIngredientTracked(existing.productId);
     }
+    if (dto.value !== undefined && !opts?.fromRecipeSync) {
+      await this.assertNotRecipeTracked(existing.productId);
+    }
     const data: { productId?: string; value?: number; deactivatedAt?: Date | null } = {};
     if (dto.productId !== undefined) data.productId = dto.productId;
     if (dto.value !== undefined) data.value = dto.value;
     if (dto.deactivatedAt !== undefined) {
       data.deactivatedAt = dto.deactivatedAt === null ? null : new Date(dto.deactivatedAt);
     }
-    if (dto.value !== undefined) {
-      return this.prisma.$transaction(async (tx) => {
-        const cost = await tx.cost.update({ where: { id }, data, include: { product: true } });
-        await this.syncFabricaPrice(tx, existing.productId, dto.value!);
-        return cost;
-      });
-    }
-    return this.prisma.cost.update({ where: { id }, data, include: { product: true } });
+    const updated =
+      dto.value !== undefined
+        ? await this.prisma.$transaction(async (tx) => {
+            const cost = await tx.cost.update({ where: { id }, data, include: { product: true } });
+            await this.syncFabricaPrice(tx, existing.productId, dto.value!);
+            return cost;
+          })
+        : await this.prisma.cost.update({ where: { id }, data, include: { product: true } });
+    await this.notifyCostingInputsChanged(opts);
+    return updated;
   }
 
   async remove(id: string) {
     await this.findOne(id);
-    return this.prisma.cost.update({
+    const removed = await this.prisma.cost.update({
       where: { id },
       data: { deactivatedAt: new Date() },
       include: { product: true },
     });
+    await this.notifyCostingInputsChanged();
+    return removed;
   }
 
   /**
@@ -124,9 +145,10 @@ export class CostService {
     }
     for (const productId of new Set(records.map((c) => c.productId))) {
       await this.assertNotIngredientTracked(productId);
+      await this.assertNotRecipeTracked(productId);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const byProduct = new Map<string, string[]>();
       for (const c of records) {
         const list = byProduct.get(c.productId) ?? [];
@@ -152,19 +174,22 @@ export class CostService {
 
       return { count: created.length, costs: created };
     });
+    await this.notifyCostingInputsChanged();
+    return result;
   }
 
   /**
    * Desactiva el costo indicado y crea uno nuevo para el mismo producto (historial preservado).
    */
-  async replace(id: string, dto: ReplaceCostDto, opts?: { allowIngredientTracked?: boolean }) {
+  async replace(id: string, dto: ReplaceCostDto, opts?: CostWriteOpts) {
     const target = await this.prisma.cost.findUnique({ where: { id } });
     if (!target) {
       throw new NotFoundException(`Costo con id "${id}" no encontrado`);
     }
     if (!opts?.allowIngredientTracked) await this.assertNotIngredientTracked(target.productId);
+    if (!opts?.fromRecipeSync) await this.assertNotRecipeTracked(target.productId);
 
-    return this.prisma.$transaction(async (tx) => {
+    const replaced = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.cost.findUnique({ where: { id } });
       if (!existing) {
         throw new NotFoundException(`Costo con id "${id}" no encontrado`);
@@ -185,6 +210,14 @@ export class CostService {
       await this.syncFabricaPrice(tx, existing.productId, dto.value);
       return cost;
     });
+    await this.notifyCostingInputsChanged(opts);
+    return replaced;
+  }
+
+  /** Recalcula el costo de las recetas que usan estos costos (ver RecipeCostSyncService). */
+  private async notifyCostingInputsChanged(opts?: CostWriteOpts) {
+    if (opts?.fromRecipeSync) return;
+    await this.eventEmitter.emitAsync(COSTING_INPUTS_CHANGED);
   }
 
   private async syncFabricaPrice(tx: Prisma.TransactionClient, productId: string, value: number): Promise<void> {
@@ -214,6 +247,16 @@ export class CostService {
     if (profile) {
       throw new BadRequestException(
         "Este producto tiene cantidad y precio de compra cargados en Ingredientes. Editá el costo desde esa pantalla para no desincronizar los datos.",
+      );
+    }
+  }
+
+  /** El Cost de una receta lo calcula y guarda RecipeCostSyncService: una edición manual se pisaría. */
+  private async assertNotRecipeTracked(productId: string) {
+    const profile = await this.prisma.recipeCostProfile.findUnique({ where: { productId } });
+    if (profile) {
+      throw new BadRequestException(
+        "Este producto es una receta: su costo se calcula desde Recetas y se actualiza solo.",
       );
     }
   }

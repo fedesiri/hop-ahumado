@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Decimal } from "@prisma/client/runtime/library";
+import { COSTING_INPUTS_CHANGED } from "../common/costing-events";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateFixedCostItemDto, UpdateFixedCostItemDto } from "./dto/fixed-cost-item.dto";
 import { CreatePartnerDto, UpdatePartnerDto } from "./dto/partner.dto";
@@ -18,7 +20,16 @@ export type OperationalRates = {
 
 @Injectable()
 export class OperationalParametersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
+
+  /** Horas, sueldos y costos fijos definen las tasas de mano de obra y estructura de las recetas. */
+  private async getFullAfterRatesChange(businessLineId: string) {
+    await this.eventEmitter.emitAsync(COSTING_INPUTS_CHANGED);
+    return this.getFull(businessLineId);
+  }
 
   private async getOrCreate(businessLineId: string) {
     const existing = await this.prisma.operationalParameters.findUnique({ where: { businessLineId } });
@@ -132,7 +143,7 @@ export class OperationalParametersService {
         },
       });
     }
-    return this.getFull(dto.businessLineId);
+    return this.getFullAfterRatesChange(dto.businessLineId);
   }
 
   async addPartner(dto: CreatePartnerDto) {
@@ -145,7 +156,7 @@ export class OperationalParametersService {
         active: dto.active ?? true,
       },
     });
-    return this.getFull(dto.businessLineId);
+    return this.getFullAfterRatesChange(dto.businessLineId);
   }
 
   async updatePartner(id: string, dto: UpdatePartnerDto) {
@@ -159,14 +170,14 @@ export class OperationalParametersService {
         ...(dto.active !== undefined && { active: dto.active }),
       },
     });
-    return this.getFull(partner.parameters.businessLineId);
+    return this.getFullAfterRatesChange(partner.parameters.businessLineId);
   }
 
   async removePartner(id: string) {
     const partner = await this.prisma.operationalPartner.findUnique({ where: { id }, include: { parameters: true } });
     if (!partner) throw new NotFoundException(`Socio con id "${id}" no encontrado`);
     await this.prisma.operationalPartner.delete({ where: { id } });
-    return this.getFull(partner.parameters.businessLineId);
+    return this.getFullAfterRatesChange(partner.parameters.businessLineId);
   }
 
   async addFixedCost(dto: CreateFixedCostItemDto) {
@@ -180,7 +191,7 @@ export class OperationalParametersService {
         notes: dto.notes,
       },
     });
-    return this.getFull(dto.businessLineId);
+    return this.getFullAfterRatesChange(dto.businessLineId);
   }
 
   async updateFixedCost(id: string, dto: UpdateFixedCostItemDto) {
@@ -195,14 +206,14 @@ export class OperationalParametersService {
         ...(dto.notes !== undefined && { notes: dto.notes }),
       },
     });
-    return this.getFull(item.parameters.businessLineId);
+    return this.getFullAfterRatesChange(item.parameters.businessLineId);
   }
 
   async removeFixedCost(id: string) {
     const item = await this.prisma.fixedCostItem.findUnique({ where: { id }, include: { parameters: true } });
     if (!item) throw new NotFoundException(`Costo fijo con id "${id}" no encontrado`);
     await this.prisma.fixedCostItem.delete({ where: { id } });
-    return this.getFull(item.parameters.businessLineId);
+    return this.getFullAfterRatesChange(item.parameters.businessLineId);
   }
 
   async upsertChannelCommission(dto: UpsertChannelCommissionDto) {

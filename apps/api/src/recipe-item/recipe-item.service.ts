@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ProductUnit, RecipeItem } from "@prisma/client";
+import { COSTING_INPUTS_CHANGED } from "../common/costing-events";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateRecipeItemDto } from "./dto/create-recipe-item.dto";
@@ -12,7 +14,10 @@ type RecipeItemWithRelations = RecipeItem & {
 
 @Injectable()
 export class RecipeItemService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async create(dto: CreateRecipeItemDto) {
     if (dto.productId === dto.ingredientId) {
@@ -22,7 +27,7 @@ export class RecipeItemService {
     await this.validateProductExists(dto.ingredientId);
     await this.validateNoDuplicateIngredient(dto.productId, dto.ingredientId);
 
-    return this.prisma.recipeItem.create({
+    const item = await this.prisma.recipeItem.create({
       data: {
         productId: dto.productId,
         ingredientId: dto.ingredientId,
@@ -33,6 +38,8 @@ export class RecipeItemService {
         ingredient: { select: { id: true, name: true, unit: true } },
       },
     });
+    await this.eventEmitter.emitAsync(COSTING_INPUTS_CHANGED);
+    return item;
   }
 
   async findAll(
@@ -74,7 +81,7 @@ export class RecipeItemService {
 
   async update(id: string, dto: UpdateRecipeItemDto) {
     await this.findOne(id);
-    return this.prisma.recipeItem.update({
+    const item = await this.prisma.recipeItem.update({
       where: { id },
       data: { ...(dto.quantity !== undefined && { quantity: dto.quantity }) },
       include: {
@@ -82,17 +89,21 @@ export class RecipeItemService {
         ingredient: { select: { id: true, name: true, unit: true } },
       },
     });
+    await this.eventEmitter.emitAsync(COSTING_INPUTS_CHANGED);
+    return item;
   }
 
   async remove(id: string) {
     await this.findOne(id);
-    return this.prisma.recipeItem.delete({
+    const item = await this.prisma.recipeItem.delete({
       where: { id },
       include: {
         product: { select: { id: true, name: true, unit: true } },
         ingredient: { select: { id: true, name: true, unit: true } },
       },
     });
+    await this.eventEmitter.emitAsync(COSTING_INPUTS_CHANGED);
+    return item;
   }
 
   private async validateProductExists(productId: string) {

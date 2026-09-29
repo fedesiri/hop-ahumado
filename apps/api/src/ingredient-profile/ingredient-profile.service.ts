@@ -145,6 +145,8 @@ export class IngredientProfileService {
       throw new BadRequestException(`Producto con id "${productId}" no encontrado`);
     }
 
+    const previousProfile = await this.prisma.ingredientProfile.findUnique({ where: { productId } });
+
     await this.prisma.ingredientProfile.upsert({
       where: { productId },
       create: {
@@ -164,7 +166,9 @@ export class IngredientProfileService {
       },
     });
 
-    if (dto.purchasePrice === null) {
+    // Solo se borra el costo si el usuario vació un precio de compra que existía. Si nunca
+    // hubo precio de compra, el Cost activo vino de la pantalla Costos y no se toca.
+    if (dto.purchasePrice === null && previousProfile?.purchasePrice != null) {
       const existingCost = await this.prisma.cost.findFirst({
         where: { productId, deactivatedAt: null },
         orderBy: { createdAt: "desc" },

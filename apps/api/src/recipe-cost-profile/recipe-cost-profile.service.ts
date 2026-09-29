@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Prisma } from "@prisma/client";
+import { COSTING_INPUTS_CHANGED } from "../common/costing-events";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PRICE_LIST_TYPES, type PriceListType } from "../common/price-list-type";
 import { OperationalParametersService } from "../operational-parameters/operational-parameters.service";
@@ -36,6 +38,7 @@ export class RecipeCostProfileService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly operationalParametersService: OperationalParametersService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async create(dto: CreateRecipeCostProfileDto) {
@@ -65,6 +68,7 @@ export class RecipeCostProfileService {
         notes: dto.notes,
       },
     });
+    await this.eventEmitter.emitAsync(COSTING_INPUTS_CHANGED);
     return this.findOne(dto.productId);
   }
 
@@ -136,12 +140,14 @@ export class RecipeCostProfileService {
         ...(dto.notes !== undefined && { notes: dto.notes }),
       },
     });
+    await this.eventEmitter.emitAsync(COSTING_INPUTS_CHANGED);
     return this.findOne(productId);
   }
 
   async remove(productId: string) {
     await this.findOne(productId);
     await this.prisma.recipeCostProfile.delete({ where: { productId } });
+    await this.eventEmitter.emitAsync(COSTING_INPUTS_CHANGED);
     return { success: true };
   }
 
