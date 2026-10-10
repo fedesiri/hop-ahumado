@@ -11,6 +11,7 @@ import { AuthModule } from "./auth/auth.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { FirebaseAuthGuard } from "./auth/firebase-auth.guard";
 import { BusinessLineModule } from "./business-line/business-line.module";
+import { CashFlowModule } from "./cash-flow/cash-flow.module";
 import { CategoryModule } from "./category/category.module";
 import { CostModule } from "./cost/cost.module";
 import { CrmModule } from "./crm/crm.module";
@@ -83,6 +84,7 @@ import { UserModule } from "./user/user.module";
     PriceModule,
     CostModule,
     ExpenseModule,
+    CashFlowModule,
     StockMovementModule,
     StockLocationModule,
     RecipeItemModule,

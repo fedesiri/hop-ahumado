@@ -1016,3 +1016,91 @@ export interface LineContext {
   selectedLineId: string | null;
   setSelectedLine: (line: BusinessLine | null) => void;
 }
+
+// ── Flujo de caja ──────────────────────────────────────────────────────────
+
+export type CashMovementType = "INCOME" | "EXPENSE";
+export type CashClassification = "OPERATING" | "INVESTMENT";
+export type CashMovementStatus = "SETTLED" | "PENDING";
+
+export interface CashMovement {
+  id: string;
+  businessLineId: string;
+  /** YYYY-MM-DD */
+  date: string;
+  type: CashMovementType;
+  category: string;
+  classification: CashClassification;
+  description: string;
+  counterparty: string | null;
+  amount: number;
+  paymentMethod: string | null;
+  status: CashMovementStatus;
+  payer: string;
+  reimbursementStatus: string | null;
+  notes: string | null;
+  needsReview: boolean;
+}
+
+export interface CashMovementsResponse extends PaginatedResponse<CashMovement> {
+  totals: { income: number; expense: number };
+}
+
+export interface CashFlowConfig {
+  categories: { name: string; type: CashMovementType; classification: CashClassification }[];
+  paymentMethods: string[];
+  payers: string[];
+  reimbursementStatuses: string[];
+  defaultPayer: string;
+}
+
+export interface CashMovementInput {
+  date: string;
+  type: CashMovementType;
+  category: string;
+  description: string;
+  counterparty?: string;
+  amount: number;
+  paymentMethod?: string;
+  status?: CashMovementStatus;
+  payer?: string;
+  reimbursementStatus?: string;
+  notes?: string;
+  needsReview?: boolean;
+}
+
+export interface CashSnapshot {
+  cash: number;
+  wallet: number;
+  total: number;
+  asOf: string;
+}
+
+export interface CashSummary {
+  period: { year: number; month: number };
+  monthlyYear: number;
+  income: number;
+  operatingExpense: number;
+  investmentExpense: number;
+  operatingResult: number;
+  operatingMarginPct: number | null;
+  totalResult: number;
+  incomeByCategory: { category: string; classification: CashClassification; amount: number }[];
+  expenseByCategory: { category: string; classification: CashClassification; amount: number }[];
+  monthly: {
+    month: number;
+    label: string;
+    income: number;
+    operatingExpense: number;
+    investmentExpense: number;
+    operatingResult: number;
+    totalResult: number;
+  }[];
+  snapshot: CashSnapshot | null;
+  partnerDebts: { partner: string; paidExpenses: number; collectedIncome: number; owed: number }[];
+  partnerDebtTotal: number;
+  availableCash: number;
+  pendingReceivable: number;
+  pendingPayable: number;
+  reviewCount: number;
+}

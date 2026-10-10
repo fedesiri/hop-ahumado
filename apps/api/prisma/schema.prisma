@@ -19,6 +19,8 @@ model BusinessLine {
   operationalParameters OperationalParameters?
   productionPlans       ProductionPlan[]
   quotes                Quote[]
+  cashMovements         CashMovement[]
+  cashSnapshots         CashSnapshot[]
 }
 
 model User {
@@ -397,6 +399,46 @@ model Expense {
   @@index([businessLineId])
 }
 
+/// Ingreso o egreso del flujo de caja (independiente de Order/Payment y Expense).
+model CashMovement {
+  id                  String               @id @default(uuid())
+  businessLineId      String
+  date                DateTime
+  type                CashMovementType
+  category            String
+  classification      CashClassification
+  description         String
+  counterparty        String?
+  amount              Decimal
+  paymentMethod       String?
+  status              CashMovementStatus   @default(SETTLED)
+  /// Quién puso/cobró la plata: "Caja Alumo" o un socio.
+  payer               String               @default("Caja Alumo")
+  reimbursementStatus String?
+  notes               String?
+  needsReview         Boolean              @default(false)
+  /// Clave de idempotencia para importaciones (ej. xlsx:alumo:<fila>).
+  externalKey         String?              @unique
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  businessLine        BusinessLine         @relation(fields: [businessLineId], references: [id])
+
+  @@index([businessLineId, date])
+}
+
+/// Foto manual de la caja real (efectivo + billetera virtual).
+model CashSnapshot {
+  id             String       @id @default(uuid())
+  businessLineId String
+  cash           Decimal
+  wallet         Decimal
+  asOf           DateTime
+  createdAt      DateTime     @default(now())
+  businessLine   BusinessLine @relation(fields: [businessLineId], references: [id])
+
+  @@index([businessLineId, asOf])
+}
+
 model TreasuryBaseline {
   id             String       @id @default(uuid())
   openingCash    Decimal      @default(0)
@@ -421,6 +463,21 @@ model StockMovement {
   location       StockLocation?    @relation("MovementAtLocation", fields: [locationId], references: [id])
   product        Product           @relation(fields: [productId], references: [id])
   toLocation     StockLocation?    @relation("MovementToLocation", fields: [toLocationId], references: [id])
+}
+
+enum CashMovementType {
+  INCOME
+  EXPENSE
+}
+
+enum CashClassification {
+  OPERATING
+  INVESTMENT
+}
+
+enum CashMovementStatus {
+  SETTLED
+  PENDING
 }
 
 enum PaymentMethod {

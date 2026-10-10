@@ -1,6 +1,12 @@
 import { getAuthHeaders } from "@/lib/auth-fetch";
 import type { PriceType } from "@/lib/order-calculator/price-types";
 import type {
+  CashFlowConfig,
+  CashMovement,
+  CashMovementInput,
+  CashMovementsResponse,
+  CashSnapshot,
+  CashSummary,
   BusinessLineEntity,
   Category,
   DashboardResponse,
@@ -530,6 +536,55 @@ export class ApiClient {
 
   async deleteCost(id: string): Promise<void> {
     return this.request(`/costs/${id}`, { method: "DELETE" });
+  }
+
+  // Flujo de caja
+  async getCashFlowConfig(): Promise<CashFlowConfig> {
+    return this.request("/cash-flow/config");
+  }
+
+  async getCashFlowSummary(businessLineId: string, year = 0, month = 0): Promise<CashSummary> {
+    return this.request(`/cash-flow/summary${this.buildParams({ businessLineId, year, month })}`);
+  }
+
+  async getCashMovements(params: {
+    businessLineId: string;
+    page?: number;
+    limit?: number;
+    from?: string;
+    to?: string;
+    type?: string;
+    status?: string;
+    category?: string;
+    search?: string;
+    needsReview?: boolean;
+  }): Promise<CashMovementsResponse> {
+    return this.request(`/cash-flow/movements${this.buildParams(params)}`);
+  }
+
+  async createCashMovement(businessLineId: string, data: CashMovementInput): Promise<CashMovement> {
+    return this.request("/cash-flow/movements", {
+      method: "POST",
+      body: JSON.stringify({ businessLineId, ...data }),
+    });
+  }
+
+  async updateCashMovement(id: string, data: Partial<CashMovementInput>): Promise<CashMovement> {
+    return this.request(`/cash-flow/movements/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCashMovement(id: string): Promise<void> {
+    return this.request(`/cash-flow/movements/${id}`, { method: "DELETE" });
+  }
+
+  async saveCashSnapshot(businessLineId: string, data: { cash: number; wallet: number; asOf?: string }): Promise<CashSnapshot | null> {
+    return this.request("/cash-flow/snapshot", {
+      method: "PUT",
+      body: JSON.stringify({ businessLineId, ...data }),
+    });
   }
 
   // Expenses (egresos monetarios)
