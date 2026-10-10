@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { CashMovement, Prisma } from "@prisma/client";
+import { CashMovement, PaymentMethod, Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { buildPaginatedResponse, PaginatedResponse } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
@@ -77,6 +77,8 @@ function toResponse(m: CashMovement): CashMovementResponse {
     needsReview: m.needsReview,
   };
 }
+
+const orderPaymentKey = (paymentId: string) => `order-payment:${paymentId}`;
 
 /** Fecha "YYYY-MM-DD" (o ISO) → medianoche UTC de ese día. */
 function parseDay(value: string): Date {
@@ -353,6 +355,65 @@ export class CashFlowService {
       pendingPayable,
       reviewCount: await this.prisma.cashMovement.count({ where: { businessLineId, needsReview: true } }),
     };
+  }
+
+  /**
+   * Refleja un pago de orden como ingreso cobrado. Solo aplica a Alumo (MEAT);
+   * se llama dentro de la transacción que crea el pago. Idempotente por externalKey.
+   */
+  async recordOrderPayment(
+    tx: Prisma.TransactionClient,
+    payment: { id: string; amount: Decimal; method: PaymentMethod; createdAt: Date },
+    order: {
+      id: string;
+      priceListType: string | null;
+      customer: { name: string } | null;
+      orderItems: { product: { businessLineId: string } }[];
+    },
+  ): Promise<void> {
+    const businessLineId = order.orderItems[0]?.product.businessLineId;
+    if (!businessLineId) return;
+    const line = await tx.businessLine.findUnique({ where: { id: businessLineId }, select: { slug: true } });
+    if (line?.slug !== "MEAT") return;
+
+    const category = order.priceListType === "mayorista" ? "Venta Mayorista" : "Venta directa";
+    const customer = order.customer?.name;
+    const externalKey = orderPaymentKey(payment.id);
+    await tx.cashMovement.upsert({
+      where: { externalKey },
+      create: {
+        externalKey,
+        businessLineId,
+        date: parseDay(new Date(payment.createdAt.getTime() - 3 * 3600 * 1000).toISOString()), // día en Argentina (UTC-3)
+        type: "INCOME",
+        category,
+        classification: "OPERATING",
+        description: `Orden ${order.id.slice(0, 8)}${customer ? ` - ${customer}` : ""}`,
+        counterparty: customer ?? null,
+        amount: payment.amount,
+        paymentMethod: payment.method === "CASH" ? "Efectivo" : "Transferencia",
+        status: "SETTLED",
+        payer: CASH_BOX_PAYER,
+        notes: "Generado automáticamente desde una orden",
+      },
+      update: { paymentMethod: payment.method === "CASH" ? "Efectivo" : "Transferencia" },
+    });
+  }
+
+  /** Mantiene el medio de pago del ingreso asociado cuando se edita el pago. */
+  async syncOrderPaymentMethod(tx: Prisma.TransactionClient, paymentId: string, method: PaymentMethod): Promise<void> {
+    await tx.cashMovement.updateMany({
+      where: { externalKey: orderPaymentKey(paymentId) },
+      data: { paymentMethod: method === "CASH" ? "Efectivo" : "Transferencia" },
+    });
+  }
+
+  /** Borra los ingresos generados por los pagos de una orden que se elimina. */
+  async removeOrderPayments(tx: Prisma.TransactionClient, paymentIds: string[]): Promise<void> {
+    if (paymentIds.length === 0) return;
+    await tx.cashMovement.deleteMany({
+      where: { externalKey: { in: paymentIds.map(orderPaymentKey) } },
+    });
   }
 
   private resolveCategory(name: string, type: "INCOME" | "EXPENSE") {

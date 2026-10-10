@@ -3,6 +3,7 @@ import { Order, Prisma, StockMovementType } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import type { PriceListType } from "../common/price-list-type";
+import { CashFlowService } from "../cash-flow/cash-flow.service";
 import { CustomerProfileService } from "../customer-profile/customer-profile.service";
 import { InventoryService } from "../inventory/inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -77,6 +78,7 @@ export class OrderService {
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
     private readonly customerProfileService: CustomerProfileService,
+    private readonly cashFlow: CashFlowService,
   ) {}
 
   async create(dto: CreateOrderDto) {
@@ -606,13 +608,14 @@ export class OrderService {
     }
 
     const updatedOrder = await this.prisma.$transaction(async (tx) => {
-      await tx.payment.create({
+      const payment = await tx.payment.create({
         data: {
           orderId,
           amount: dto.amount,
           method: dto.method,
         },
       });
+      await this.cashFlow.recordOrderPayment(tx, payment, order);
 
       return tx.order.findUnique({
         where: { id: orderId },
@@ -641,6 +644,7 @@ export class OrderService {
         where: { id: paymentId },
         data: { method: dto.method },
       });
+      await this.cashFlow.syncOrderPaymentMethod(tx, paymentId, dto.method);
 
       return tx.order.findUnique({
         where: { id: orderId },
@@ -870,6 +874,8 @@ export class OrderService {
           }
         }
       }
+      const payments = await tx.payment.findMany({ where: { orderId: id }, select: { id: true } });
+      await this.cashFlow.removeOrderPayments(tx, payments.map((p) => p.id));
       await tx.payment.deleteMany({ where: { orderId: id } });
       await tx.orderItem.deleteMany({ where: { orderId: id } });
       return tx.order.delete({ where: { id } });
