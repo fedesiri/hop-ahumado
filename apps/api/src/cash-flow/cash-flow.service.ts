@@ -331,6 +331,32 @@ export class CashFlowService {
     const pendingReceivable = own.filter((m) => m.type === "INCOME").reduce((s, m) => s + Number(m.amount), 0);
     const pendingPayable = own.filter((m) => m.type === "EXPENSE").reduce((s, m) => s + Number(m.amount), 0);
 
+    // Capital parado: stock actual valuado al costo activo de cada producto.
+    const stockProducts = await this.prisma.product.findMany({
+      where: { businessLineId, stock: { gt: 0 } },
+      select: {
+        id: true,
+        name: true,
+        unit: true,
+        stock: true,
+        costs: { where: { deactivatedAt: null }, orderBy: { createdAt: "desc" }, take: 1, select: { value: true } },
+      },
+    });
+    const inventory = stockProducts
+      .map((p) => {
+        const unitCost = p.costs[0] ? Number(p.costs[0].value) : null;
+        return {
+          productId: p.id,
+          name: p.name,
+          unit: p.unit,
+          quantity: p.stock,
+          unitCost,
+          value: unitCost === null ? 0 : p.stock * unitCost,
+        };
+      })
+      .sort((a, b) => b.value - a.value);
+    const inventoryValue = inventory.reduce((s, i) => s + i.value, 0);
+
     const snapshot = await this.getSnapshot(businessLineId);
     const cashTotal = snapshot?.total ?? 0;
     const operatingResult = income - operatingExpense;
@@ -353,6 +379,8 @@ export class CashFlowService {
       availableCash: cashTotal - partnerDebtTotal,
       pendingReceivable,
       pendingPayable,
+      inventoryValue,
+      inventory,
       reviewCount: await this.prisma.cashMovement.count({ where: { businessLineId, needsReview: true } }),
     };
   }

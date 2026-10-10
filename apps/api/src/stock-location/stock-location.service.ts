@@ -140,6 +140,20 @@ export class StockLocationService {
     });
   }
 
+  /** Registra los kg totales (informativo) de un producto medido en unidades en una ubicación. */
+  async setBalanceWeight(locationId: string, productId: string, weightKg: number | null) {
+    const balance = await this.prisma.stockBalance.findUnique({
+      where: { productId_locationId: { productId, locationId } },
+    });
+    if (!balance) {
+      throw new NotFoundException("No hay saldo de ese producto en esa ubicación");
+    }
+    return this.prisma.stockBalance.update({
+      where: { id: balance.id },
+      data: { weightKg },
+    });
+  }
+
   /**
    * Mueve todo el saldo (por producto) de origen a destino. Deja origen en cero para esas filas.
    * Registra un movimiento TRANSFER por cada producto afectado.

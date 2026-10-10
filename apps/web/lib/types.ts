@@ -141,6 +141,7 @@ export interface StockBalanceRow {
   productId: string;
   locationId: string;
   quantity: number;
+  weightKg?: number | null;
   product?: Pick<Product, "id" | "name" | "unit">;
 }
 
@@ -1102,5 +1103,15 @@ export interface CashSummary {
   availableCash: number;
   pendingReceivable: number;
   pendingPayable: number;
+  /** Capital parado: stock actual valuado al costo activo. */
+  inventoryValue: number;
+  inventory: {
+    productId: string;
+    name: string;
+    unit: string;
+    quantity: number;
+    unitCost: number | null;
+    value: number;
+  }[];
   reviewCount: number;
 }

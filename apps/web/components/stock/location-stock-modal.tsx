@@ -261,6 +261,11 @@ function LocationStockModalInner({
                               >
                                 <span style={{ color: "var(--ha-text)", fontSize: 14, lineHeight: 1.4, wordBreak: "break-word" }}>
                                   {name}
+                                  {row.weightKg != null && (
+                                    <span style={{ marginLeft: 8, color: "var(--ha-text-3)", fontSize: 12 }}>
+                                      ({formatQuantity(row.weightKg)} kg)
+                                    </span>
+                                  )}
                                 </span>
                                 <StockQuantityCell quantity={Number(row.quantity)} unit={unit} />
                               </div>

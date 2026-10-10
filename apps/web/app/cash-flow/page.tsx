@@ -4,7 +4,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
 import { apiClient } from "@/lib/api-client";
-import { formatCurrency } from "@/lib/format-currency";
+import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import type {
@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState } from "react";
 type Tab = "summary" | "movements" | "cash";
 
 const PAGE_SIZE = 50;
+const UNIT_LABELS: Record<string, string> = { UNIT: "un", KG: "kg", G: "g", L: "L", ML: "ml" };
 const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 const todayStr = () => new Date().toLocaleDateString("en-CA");
@@ -141,6 +142,7 @@ function SummaryTab({ lineId, version }: { lineId: string; version: number }) {
             <Kpi label="Margen operativo" value={data.operatingResult} color={negative(data.operatingResult)} sub={data.operatingMarginPct === null ? undefined : `${data.operatingMarginPct.toFixed(1)}%`} />
             <Kpi label="Inversión (equipamiento)" value={data.investmentExpense} />
             <Kpi label="Resultado total" value={data.totalResult} color={negative(data.totalResult)} />
+            <Kpi label="Capital parado en stock (hoy)" value={data.inventoryValue} />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
@@ -680,6 +682,7 @@ function CashTab({ lineId, version, onChanged }: { lineId: string; version: numb
         <Kpi label="Efectivo realmente disponible" value={data.availableCash} color={data.availableCash < 0 ? "var(--ha-red)" : "var(--ha-green)"} />
         <Kpi label="Pendiente por cobrar" value={data.pendingReceivable} />
         <Kpi label="Pendiente por pagar" value={data.pendingPayable} />
+        <Kpi label="Capital parado en stock" value={data.inventoryValue} />
       </div>
 
       <div className="pc-card" style={{ padding: 16, marginBottom: 16 }}>
@@ -722,6 +725,32 @@ function CashTab({ lineId, version, onChanged }: { lineId: string; version: numb
             </tbody>
             <tfoot>
               <tr className="ex-foot"><td colSpan={3}>Total</td><td>{formatCurrency(data.partnerDebtTotal)}</td></tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+      <div className="pc-card" style={{ marginTop: 16 }}>
+        <h2 style={{ margin: "12px 16px 0", fontSize: 15 }}>Capital parado: stock valuado al costo</h2>
+        <p style={{ margin: "4px 16px 0", fontSize: 12, color: "var(--ha-text-3)" }}>
+          Cantidad en stock × costo vigente de cada producto. Es plata ya invertida que todavía no se vendió; no está incluida en el total de caja.
+        </p>
+        <div className="pc-tablewrap">
+          <table className="pc-table">
+            <thead>
+              <tr><th>Producto</th><th>Cantidad</th><th>Costo unitario</th><th>Valor</th></tr>
+            </thead>
+            <tbody>
+              {data.inventory.map((i) => (
+                <tr key={i.productId}>
+                  <td>{i.name}</td>
+                  <td>{formatQuantity(i.quantity)} {UNIT_LABELS[i.unit] ?? i.unit}</td>
+                  <td>{i.unitCost === null ? <span className="ha-badge ha-badge--overdue">sin costo</span> : formatCurrency(i.unitCost)}</td>
+                  <td style={{ fontWeight: 600 }}>{formatCurrency(i.value)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="ex-foot"><td colSpan={3}>Total</td><td>{formatCurrency(data.inventoryValue)}</td></tr>
             </tfoot>
           </table>
         </div>
