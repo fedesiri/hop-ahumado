@@ -7,6 +7,7 @@ import { toast } from "@/lib/toast";
 import { OrderPaymentStatus, type DashboardCash, type DashboardLowStockProduct, type DashboardPendingDelivery, type TreasuryBaseline } from "@/lib/types";
 import { ChevronDown, Eye, RefreshCw, ShoppingCart, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 function startOfLocalDay(d: Date): Date {
@@ -25,6 +26,8 @@ const ZERO_CASH: DashboardCash = { deltaCashIn: 0, deltaCashOut: 0, deltaCardIn:
 
 export function Dashboard() {
   const { selectedLineId } = useLineContext();
+  const router = useRouter();
+  const [cashSource, setCashSource] = useState<"treasury" | "cash-flow">("treasury");
   const lowStockSectionRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
@@ -58,6 +61,7 @@ export function Dashboard() {
       setApiConnected(true);
       if (data.baseline) setBaseline(data.baseline);
       if (data.cash) setCash(data.cash);
+      setCashSource(data.cashSource ?? "treasury");
       setStats({
         totalOrders: data.totalOrders,
         lowStockProducts: data.lowStockProducts,
@@ -84,6 +88,11 @@ export function Dashboard() {
       setFormErrors({});
     }
   }, [cashFlowModalOpen, baseline]);
+
+  const openCashCard = () => {
+    if (cashSource === "cash-flow") router.push("/cash-flow");
+    else setCashFlowModalOpen(true);
+  };
 
   const saveBaseline = async () => {
     if (!selectedLineId) {
@@ -161,16 +170,16 @@ export function Dashboard() {
         <div
           className="ha-stat"
           style={{ cursor: "pointer" }}
-          onClick={() => setCashFlowModalOpen(true)}
+          onClick={openCashCard}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setCashFlowModalOpen(true); }}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openCashCard(); }}
         >
           <div className="ha-stat__l">Caja disponible</div>
           <div className="ha-stat__v ha-mono">{formatCurrency(cash.total)}</div>
           {baseline && (
             <div className="ha-stat__s">
-              Desde {new Date(baseline.deltaSince).toLocaleDateString("es-AR")}
+              {cashSource === "cash-flow" ? "Foto de caja del" : "Desde"} {new Date(baseline.deltaSince).toLocaleDateString("es-AR", { timeZone: "UTC" })}{cashSource === "cash-flow" ? " + movimientos" : ""}
             </div>
           )}
         </div>
@@ -366,9 +375,17 @@ export function Dashboard() {
         </div>
         {helpOpen && (
           <div className="ha-collapse__body">
+            {cashSource === "cash-flow" ? (
+              <>
+                La caja sale de <strong>Flujo de caja</strong>: la última foto de caja (efectivo + billetera virtual) más los ingresos cobrados y menos los gastos pagados con la caja del negocio, con fecha posterior a la foto. Hacé clic en el card para ir a Flujo de caja y actualizar la foto.
+              </>
+            ) : (
+              <>
             La caja se calcula sumando el efectivo inicial (apertura) más las ventas en efectivo, menos los
             egresos en efectivo, desde la fecha de corte configurada. Hacé clic en el card de &quot;Caja disponible&quot; para
             configurar el saldo inicial y la fecha de corte.
+              </>
+            )}
           </div>
         )}
       </div>

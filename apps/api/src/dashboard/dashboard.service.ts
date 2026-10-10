@@ -40,6 +40,8 @@ export type DashboardResult = {
     createdAt: string;
   }[];
   baseline: { openingCash: number; openingCard: number; deltaSince: string; updatedAt: string } | null;
+  /** De dónde sale la caja: tesorería clásica (apertura + órdenes - egresos) o el módulo Flujo de caja. */
+  cashSource: "treasury" | "cash-flow";
   cash: {
     deltaCashIn: number;
     deltaCashOut: number;
@@ -147,20 +149,78 @@ export class DashboardService {
       cash = { deltaCashIn, deltaCashOut, deltaCardIn, deltaCardOut, balanceCash, balanceCard, total: balanceCash + balanceCard };
     }
 
+    let baselineOut = baseline
+      ? {
+          openingCash: Number(baseline.openingCash),
+          openingCard: Number(baseline.openingCard),
+          deltaSince: baseline.deltaSince.toISOString(),
+          updatedAt: baseline.updatedAt.toISOString(),
+        }
+      : null;
+    let cashSource: DashboardResult["cashSource"] = "treasury";
+
+    // Alumo: la caja sale del módulo Flujo de caja (foto de caja + movimientos posteriores).
+    const cashFlowCash = businessLineId ? await this.cashFromCashFlow(businessLineId) : null;
+    if (cashFlowCash) {
+      cash = cashFlowCash.cash;
+      baselineOut = cashFlowCash.baseline;
+      cashSource = "cash-flow";
+    }
+
     return {
       totalOrders: orders.length,
       totalCustomers,
       lowStockProducts,
       pendingDeliveries,
-      baseline: baseline
-        ? {
-            openingCash: Number(baseline.openingCash),
-            openingCard: Number(baseline.openingCard),
-            deltaSince: baseline.deltaSince.toISOString(),
-            updatedAt: baseline.updatedAt.toISOString(),
-          }
-        : null,
+      baseline: baselineOut,
+      cashSource,
       cash,
+    };
+  }
+
+  /**
+   * Caja de una línea que usa Flujo de caja: última foto (efectivo + billetera) más los
+   * movimientos cobrados/pagados por la caja del negocio con fecha posterior a la foto.
+   * Efectivo suma a efectivo; cualquier otro medio (o sin medio) a billetera virtual.
+   */
+  private async cashFromCashFlow(
+    businessLineId: string,
+  ): Promise<{ cash: NonNullable<DashboardResult["cash"]>; baseline: NonNullable<DashboardResult["baseline"]> } | null> {
+    const line = await this.prisma.businessLine.findUnique({ where: { id: businessLineId }, select: { slug: true } });
+    if (line?.slug !== "MEAT") return null;
+    const snapshot = await this.prisma.cashSnapshot.findFirst({
+      where: { businessLineId },
+      orderBy: [{ asOf: "desc" }, { createdAt: "desc" }],
+    });
+    if (!snapshot) return null;
+
+    const movements = await this.prisma.cashMovement.findMany({
+      where: { businessLineId, status: "SETTLED", payer: "Caja Alumo", date: { gt: snapshot.asOf } },
+      select: { type: true, amount: true, paymentMethod: true },
+    });
+    let deltaCashIn = 0;
+    let deltaCashOut = 0;
+    let deltaCardIn = 0;
+    let deltaCardOut = 0;
+    for (const m of movements) {
+      const amount = Number(m.amount);
+      const isCash = m.paymentMethod === "Efectivo";
+      if (m.type === "INCOME") {
+        if (isCash) deltaCashIn += amount;
+        else deltaCardIn += amount;
+      } else if (isCash) deltaCashOut += amount;
+      else deltaCardOut += amount;
+    }
+    const balanceCash = Number(snapshot.cash) + deltaCashIn - deltaCashOut;
+    const balanceCard = Number(snapshot.wallet) + deltaCardIn - deltaCardOut;
+    return {
+      cash: { deltaCashIn, deltaCashOut, deltaCardIn, deltaCardOut, balanceCash, balanceCard, total: balanceCash + balanceCard },
+      baseline: {
+        openingCash: Number(snapshot.cash),
+        openingCard: Number(snapshot.wallet),
+        deltaSince: snapshot.asOf.toISOString(),
+        updatedAt: snapshot.createdAt.toISOString(),
+      },
     };
   }
 }

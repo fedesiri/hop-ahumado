@@ -302,6 +302,8 @@ export interface DashboardResponse {
   lowStockProducts: DashboardLowStockProduct[];
   pendingDeliveries: DashboardPendingDelivery[];
   baseline: TreasuryBaseline | null;
+  /** "cash-flow": la caja sale del módulo Flujo de caja (Alumo). */
+  cashSource?: "treasury" | "cash-flow";
   cash: DashboardCash | null;
 }
 
