@@ -12,18 +12,20 @@ export function requireDecodedFirebaseUser(req: RequestWithFirebase): DecodedIdT
   return decoded;
 }
 
-/** Misma política que `GET /auth/me`: usuario Firebase ↔ fila `User`. */
-export async function upsertAppUserFromFirebase(prisma: PrismaService, decoded: DecodedIdToken): Promise<User> {
+/**
+ * Allowlist de la plataforma: solo entra quien ya tiene una fila `User` con ese email.
+ * Nunca crea usuarios; las altas se hacen por `POST /users` o directo en la base.
+ */
+export async function requireAppUserFromFirebase(prisma: PrismaService, decoded: DecodedIdToken): Promise<User> {
   const email = decoded.email;
   if (!email) throw new UnauthorizedException("Sesión inválida");
-  const name = decoded.name ?? email.split("@")[0];
-  return prisma.user.upsert({
-    where: { email },
-    update: { name },
-    create: { email, name },
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
   });
+  if (!user) throw new UnauthorizedException("Sesión inválida");
+  return user;
 }
 
-export async function upsertAppUserFromRequest(prisma: PrismaService, req: RequestWithFirebase): Promise<User> {
-  return upsertAppUserFromFirebase(prisma, requireDecodedFirebaseUser(req));
+export async function requireAppUserFromRequest(prisma: PrismaService, req: RequestWithFirebase): Promise<User> {
+  return requireAppUserFromFirebase(prisma, requireDecodedFirebaseUser(req));
 }

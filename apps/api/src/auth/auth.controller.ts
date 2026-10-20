@@ -1,7 +1,7 @@
 import { Controller, Get, Req, UnauthorizedException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { firebaseAdmin } from "./firebase-admin";
-import { upsertAppUserFromFirebase } from "./resolve-request-user";
+import { requireAppUserFromFirebase } from "./resolve-request-user";
 
 function getBearerToken(header: string | undefined) {
   if (!header) return undefined;
@@ -24,7 +24,7 @@ export class AuthController {
     if (!idToken) throw new UnauthorizedException("Missing bearer token");
 
     const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
-    const user = await upsertAppUserFromFirebase(this.prisma, decoded);
+    const user = await requireAppUserFromFirebase(this.prisma, decoded);
 
     return {
       ok: true,
