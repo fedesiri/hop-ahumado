@@ -162,13 +162,14 @@ export class OrderService {
     paymentStatus?: OrderPaymentStatus,
     delivered?: "true" | "false",
     businessLineId?: string,
+    priceListType?: PriceListType,
   ): Promise<PaginatedResponse<OrderWithComputedFields>> {
     const skip = (page - 1) * limit;
     const tol = ORDER_PAYMENT_TOLERANCE;
 
     if (paymentStatus !== undefined) {
       const whereClause = this.sqlOrderListWhereClauses(
-        { customerId, userId, dateFrom, dateTo, minTotal, maxTotal, delivered, businessLineId },
+        { customerId, userId, dateFrom, dateTo, minTotal, maxTotal, delivered, businessLineId, priceListType },
         this.sqlOrderPaymentStatusCondition(paymentStatus, tol),
       );
       return this.findAllWithPaymentStatusSql(page, limit, skip, whereClause);
@@ -183,6 +184,7 @@ export class OrderService {
       maxTotal,
       delivered,
       businessLineId,
+      priceListType,
     });
 
     const [data, total] = await Promise.all([
@@ -207,8 +209,12 @@ export class OrderService {
     maxTotal?: number;
     delivered?: "true" | "false";
     businessLineId?: string;
+    priceListType?: PriceListType;
   }): Prisma.OrderWhereInput {
     const where: Prisma.OrderWhereInput = {};
+    if (params.priceListType) {
+      where.priceListType = params.priceListType;
+    }
     if (params.businessLineId) {
       where.orderItems = { some: { product: { businessLineId: params.businessLineId } } };
     }
@@ -351,10 +357,14 @@ export class OrderService {
       maxTotal?: number;
       delivered?: "true" | "false";
       businessLineId?: string;
+      priceListType?: PriceListType;
     },
     paymentCondition: Prisma.Sql,
   ): Prisma.Sql {
     const parts: Prisma.Sql[] = [];
+    if (params.priceListType) {
+      parts.push(Prisma.sql`o."priceListType" = ${params.priceListType}`);
+    }
     if (params.businessLineId) {
       parts.push(
         Prisma.sql`EXISTS (SELECT 1 FROM "OrderItem" oi2 JOIN "Product" p ON p."id" = oi2."productId" WHERE oi2."orderId" = o."id" AND p."businessLineId" = ${params.businessLineId})`,

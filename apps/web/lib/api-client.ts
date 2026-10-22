@@ -902,6 +902,7 @@ export class ApiClient {
     paymentStatus?: string,
     delivered?: "true" | "false",
     businessLineId?: string,
+    priceListType?: string,
   ): Promise<PaginatedResponse<Order>> {
     return this.request(
       `/orders${this.buildParams({
@@ -916,6 +917,7 @@ export class ApiClient {
         paymentStatus,
         delivered,
         businessLineId,
+        priceListType,
       })}`,
     );
   }

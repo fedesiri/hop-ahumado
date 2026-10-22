@@ -1,4 +1,5 @@
 import { IsIn, IsNumberString, IsOptional, IsString, IsUUID } from "class-validator";
+import { PRICE_LIST_TYPES, type PriceListType } from "../../common/price-list-type";
 import { OrderPaymentStatus } from "../order-payment-status.enum";
 import { PaginationQueryDto } from "../../common/pagination";
 
@@ -40,4 +41,8 @@ export class GetOrdersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsIn(["true", "false"], { message: "delivered debe ser true o false" })
   delivered?: "true" | "false";
+
+  @IsOptional()
+  @IsIn(PRICE_LIST_TYPES, { message: `priceListType debe ser una de: ${PRICE_LIST_TYPES.join(", ")}` })
+  priceListType?: PriceListType;
 }

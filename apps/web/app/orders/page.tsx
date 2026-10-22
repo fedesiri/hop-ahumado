@@ -5,7 +5,7 @@ import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
-import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
+import { orderPriceListDisplayLabel, PRICE_TYPES, PRICE_TYPE_LABELS } from "@/lib/order-calculator/price-types";
 import { buildOrderClipboardText } from "@/lib/order-clipboard";
 import { formatPaymentMethodsOnly, orderPaymentStatusLabel } from "@/lib/order-labels";
 import { toast } from "@/lib/toast";
@@ -73,6 +73,9 @@ function OrdersContent() {
   const [filterDelivered, setFilterDelivered] = useState<"true" | "false" | "">(
     () => (searchParams.get("delivered") as "true" | "false") ?? "",
   );
+  const [filterPriceListType, setFilterPriceListType] = useState<string>(
+    () => searchParams.get("priceListType") ?? "",
+  );
   const customerSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateParams = useCallback(
@@ -104,7 +107,7 @@ function OrdersContent() {
     filterCustomerId, filterUserId,
     filterDateFrom, filterDateTo,
     filterMinTotal, filterMaxTotal,
-    filterPaymentStatus, filterDelivered,
+    filterPaymentStatus, filterDelivered, filterPriceListType,
     selectedLineId,
   ]);
 
@@ -159,6 +162,7 @@ function OrdersContent() {
         filterPaymentStatus || undefined,
         (filterDelivered as "true" | "false") || undefined,
         selectedLineId ?? undefined,
+        filterPriceListType || undefined,
       );
       setOrders(response.data);
       setMeta(response.meta);
@@ -382,6 +386,20 @@ function OrdersContent() {
             <option value="">Entrega</option>
             <option value="true">Entregadas</option>
             <option value="false">No entregadas</option>
+          </select>
+
+          <select
+            className="ha-select"
+            style={{ height: 36, padding: "0 12px", flex: "1 1 130px", minWidth: 120, borderRadius: 8, border: "1px solid var(--ha-border-2)", background: "var(--ha-bg-raised)", color: "var(--ha-text)", fontSize: 13 }}
+            value={filterPriceListType}
+            onChange={(e) => {
+              setPagination((p) => ({ ...p, page: 1 }));
+              setFilterPriceListType(e.target.value);
+              updateParams({ priceListType: e.target.value || null });
+            }}
+          >
+            <option value="">Tipo de venta</option>
+            {PRICE_TYPES.map((t) => <option key={t} value={t}>{PRICE_TYPE_LABELS[t]}</option>)}
           </select>
         </div>
       </div>

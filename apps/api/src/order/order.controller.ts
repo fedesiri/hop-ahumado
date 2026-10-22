@@ -32,6 +32,7 @@ export class OrderController {
       query.paymentStatus,
       query.delivered,
       query.businessLineId,
+      query.priceListType,
     );
   }
 
