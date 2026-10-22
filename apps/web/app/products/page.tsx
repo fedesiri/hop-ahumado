@@ -59,7 +59,7 @@ function ProductsContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [priceMap, setPriceMap] = useState<PriceMap>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -116,6 +116,7 @@ function ProductsContent() {
   );
 
   const fetchProducts = useCallback(async () => {
+    if (!selectedLineId) return;
     try {
       setLoading(true);
       const response = await apiClient.getProducts(
@@ -124,7 +125,7 @@ function ProductsContent() {
         showDeactivated,
         search || undefined,
         categoryFilter || undefined,
-        selectedLineId ?? undefined,
+        selectedLineId,
       );
       setProducts(response.data);
       setMeta(response.meta);
@@ -136,8 +137,9 @@ function ProductsContent() {
   }, [pagination.page, pagination.limit, showDeactivated, search, categoryFilter, selectedLineId]);
 
   const fetchCategories = useCallback(async () => {
+    if (!selectedLineId) return;
     try {
-      const response = await apiClient.getCategories(1, 100, selectedLineId ?? undefined);
+      const response = await apiClient.getCategories(1, 100, selectedLineId);
       setCategories(response.data);
     } catch {
       // silent

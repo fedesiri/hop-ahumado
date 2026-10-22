@@ -15,14 +15,20 @@ interface LineContextType {
 const LineContext = createContext<LineContextType | undefined>(undefined)
 
 export function LineProvider({ children }: { children: React.ReactNode }) {
-  const [selectedLine, setSelectedLineState] = useState<BusinessLine | null>(() => {
-    if (typeof window === 'undefined') return BusinessLine.BEER
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === BusinessLine.BEER || stored === BusinessLine.MEAT) return stored
-    return BusinessLine.BEER
-  })
+  const [selectedLine, setSelectedLineState] = useState<BusinessLine | null>(
+    BusinessLine.BEER,
+  )
+  const [hydrated, setHydrated] = useState(false)
 
   const [slugToId, setSlugToId] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored === BusinessLine.BEER || stored === BusinessLine.MEAT) {
+      setSelectedLineState(stored)
+    }
+    setHydrated(true)
+  }, [])
 
   useEffect(() => {
     apiClient.getBusinessLines().then((lines) => {
@@ -43,7 +49,8 @@ export function LineProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const selectedLineId = selectedLine ? (slugToId[selectedLine] ?? null) : null
+  const selectedLineId =
+    hydrated && selectedLine ? (slugToId[selectedLine] ?? null) : null
 
   return (
     <LineContext.Provider value={{ selectedLine, selectedLineId, setSelectedLine }}>
