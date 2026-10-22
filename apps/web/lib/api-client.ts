@@ -652,8 +652,8 @@ export class ApiClient {
   }
 
   // Stock Movements
-  async getStockMovements(page = 1, limit = 10, productId?: string, businessLineId?: string): Promise<PaginatedResponse<StockMovement>> {
-    return this.request(`/stock-movements${this.buildParams({ page, limit, productId, businessLineId })}`);
+  async getStockMovements(page = 1, limit = 10, productId?: string, businessLineId?: string, type?: string): Promise<PaginatedResponse<StockMovement>> {
+    return this.request(`/stock-movements${this.buildParams({ page, limit, productId, businessLineId, type })}`);
   }
 
   async getDistributorSuggestedOrder(params?: {

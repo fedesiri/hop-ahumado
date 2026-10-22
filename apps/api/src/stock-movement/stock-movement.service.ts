@@ -190,10 +190,12 @@ export class StockMovementService {
     limit: number = PAGINATION.defaultLimit,
     productId?: string,
     businessLineId?: string,
+    type?: StockMovementType,
   ): Promise<PaginatedResponse<StockMovementWithProduct>> {
     const where: any = {};
     if (productId) where.productId = productId;
     if (businessLineId) where.product = { businessLineId };
+    if (type) where.type = type;
     const skip = (page - 1) * limit;
     const include = {
       product: { select: { id: true, name: true, stock: true } },

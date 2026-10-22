@@ -82,7 +82,7 @@ function StockContent() {
     void (async () => {
       try { setLocations(await apiClient.getStockLocations()); } catch { setLocations([]); }
     })();
-  }, [pagination.page, pagination.limit, selectedLineId]);
+  }, [pagination.page, pagination.limit, selectedLineId, typeFilter]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -92,7 +92,7 @@ function StockContent() {
   const fetchMovements = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.getStockMovements(pagination.page, pagination.limit, undefined, selectedLineId ?? undefined);
+      const response = await apiClient.getStockMovements(pagination.page, pagination.limit, undefined, selectedLineId ?? undefined, typeFilter || undefined);
       setMovements(response.data);
       setMeta(response.meta);
     } catch {
@@ -137,7 +137,6 @@ function StockContent() {
     const to = dateTo ? new Date(dateTo + "T23:59:59") : null;
     return movements.filter((m) => {
       if (q && !(m.product?.name ?? "").toLowerCase().includes(q)) return false;
-      if (typeFilter && m.type !== typeFilter) return false;
       if (locationFilter) {
         const locId = m.location?.id ?? m.fromLocation?.id ?? m.toLocation?.id ?? "";
         if (locId !== locationFilter) return false;
@@ -147,7 +146,7 @@ function StockContent() {
       if (to && d > to) return false;
       return true;
     });
-  }, [movements, searchText, typeFilter, locationFilter, dateFrom, dateTo]);
+  }, [movements, searchText, locationFilter, dateFrom, dateTo]);
 
   const validRows = rows.filter((r) => r.productId && r.quantity && r.quantity !== "0" && r.quantity !== "");
   const computedProductsCostTotal = roundMoney(
@@ -282,7 +281,7 @@ function StockContent() {
             onChange={(e) => setSearchText(e.target.value)}
           />
         </div>
-        <select className="pc-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+        <select className="pc-select" value={typeFilter} onChange={(e) => { setPagination((prev) => ({ ...prev, page: 1 })); setTypeFilter(e.target.value); }}>
           {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         {locations.length > 0 && (
