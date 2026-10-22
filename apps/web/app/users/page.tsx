@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Paginator } from "@/components/paginator";
 import { Spinner } from "@/components/spinner";
-import { CheckCircle2, Edit2, Eye, EyeOff, Plus, Trash2, XCircle, X } from "lucide-react";
+import { CheckCircle2, Edit2, Plus, Trash2, XCircle, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 function initials(name: string): string {
@@ -36,8 +36,6 @@ function UsersContent() {
   // Form
   const [fname, setFname] = useState("");
   const [femail, setFemail] = useState("");
-  const [fpassword, setFpassword] = useState("");
-  const [showPass, setShowPass] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -76,13 +74,13 @@ function UsersContent() {
 
   const openCreate = () => {
     setEditingId(null);
-    setFname(""); setFemail(""); setFpassword(""); setShowPass(false); setErrors({});
+    setFname(""); setFemail(""); setErrors({});
     setDrawerOpen(true);
   };
 
   const openEdit = (u: User) => {
     setEditingId(u.id);
-    setFname(u.name ?? ""); setFemail(u.email ?? ""); setFpassword(""); setShowPass(false); setErrors({});
+    setFname(u.name ?? ""); setFemail(u.email ?? ""); setErrors({});
     setDrawerOpen(true);
   };
 
@@ -93,10 +91,6 @@ function UsersContent() {
     if (!fname.trim()) errs.name = "El nombre es requerido";
     if (!femail.trim()) errs.email = "El email es requerido";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(femail)) errs.email = "Email inválido";
-    if (!editingId) {
-      if (!fpassword) errs.password = "La contraseña es requerida";
-      else if (fpassword.length < 6) errs.password = "Mínimo 6 caracteres";
-    }
     return errs;
   };
 
@@ -109,7 +103,7 @@ function UsersContent() {
         await apiClient.updateUser(editingId, { name: fname.trim(), email: femail.trim() } as UpdateUserRequest);
         toast.success("Usuario actualizado");
       } else {
-        await apiClient.createUser({ name: fname.trim(), email: femail.trim(), password: fpassword } as CreateUserRequest);
+        await apiClient.createUser({ name: fname.trim(), email: femail.trim() } as CreateUserRequest);
         toast.success("Usuario creado");
       }
       closeDrawer();
@@ -298,31 +292,7 @@ function UsersContent() {
                 />
                 {errors.email && <span className="us-err">{errors.email}</span>}
               </div>
-              {!editingId ? (
-                <div className="us-field">
-                  <label className="us-label">Contraseña <span style={{ color: "var(--ha-red)" }}>*</span></label>
-                  <div className="us-inputwrap">
-                    <input
-                      className={"us-input us-input--pass" + (errors.password ? " has-err" : "")}
-                      type={showPass ? "text" : "password"}
-                      placeholder="Mínimo 6 caracteres"
-                      autoComplete="new-password"
-                      value={fpassword}
-                      onChange={(e) => { setFpassword(e.target.value); setErrors((p) => ({ ...p, password: "" })); }}
-                    />
-                    <button className="us-eye" type="button" onClick={() => setShowPass((v) => !v)} aria-label="Mostrar contraseña">
-                      {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                  {errors.password
-                    ? <span className="us-err">{errors.password}</span>
-                    : <span className="us-hint">Mínimo 6 caracteres. Usada para acceder con Firebase Auth.</span>}
-                </div>
-              ) : (
-                <div className="us-hint" style={{ marginBottom: 12 }}>
-                  Para cambiar la contraseña, el usuario debe hacerlo desde Firebase directamente.
-                </div>
-              )}
+              <div className="us-hint">El usuario ingresa con su cuenta de Google con este email.</div>
             </div>
             <div className="us-drawer__foot">
               <button className="ha-btn ha-btn--secondary" onClick={closeDrawer}>Cancelar</button>

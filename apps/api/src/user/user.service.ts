@@ -12,29 +12,9 @@ export class UserService {
 
   async create(dto: CreateUserDto) {
     const email = dto.email.toLowerCase();
-
-    // Si el usuario existe en Firebase, solo actualizamos su displayName (password no lo tocamos).
-    // Si no existe, lo creamos con password.
-    const auth = firebaseAdmin.auth();
     const name = dto.name;
 
-    try {
-      const existingFirebaseUser = (await auth.getUserByEmail(email)) as any;
-      await auth.updateUser(existingFirebaseUser.uid, { displayName: name });
-    } catch (e: any) {
-      const code = e?.code ?? e?.errorInfo?.code;
-      if (code === "auth/user-not-found") {
-        await auth.createUser({
-          email,
-          password: dto.password,
-          displayName: name,
-        });
-      } else {
-        throw e;
-      }
-    }
-
-    // DB: creamos o actualizamos el registro por email
+    // Allowlist: la fila en User habilita el acceso; el usuario de Firebase lo crea Google en el primer login.
     return this.prisma.user.upsert({
       where: { email },
       update: { name },
@@ -79,17 +59,6 @@ export class UserService {
 
     if (dto.email !== undefined && nextEmail !== existing.email) {
       await this.validateEmailUnique(nextEmail, id);
-    }
-
-    // Firebase: actualizar por UID buscando por email (no guardamos uid en DB).
-    const auth = firebaseAdmin.auth();
-    const firebaseUser = await auth.getUserByEmail(existing.email);
-    const updatePayload: any = {};
-    if (nextName !== existing.name) updatePayload.displayName = nextName;
-    if (nextEmail !== existing.email) updatePayload.email = nextEmail;
-
-    if (Object.keys(updatePayload).length > 0) {
-      await auth.updateUser(firebaseUser.uid, updatePayload);
     }
 
     return this.prisma.user.update({
