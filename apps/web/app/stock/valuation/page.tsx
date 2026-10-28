@@ -2,48 +2,23 @@
 
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
+import { classifyBeerFormat, type ClassifiedBeerFormat } from "@/lib/beer-format.util";
 import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
-import type { StockValuationResponse, StockValuationRow } from "@/lib/types";
+import { ProductUnit, type StockValuationResponse } from "@/lib/types";
 import { Spinner } from "@/components/spinner";
+import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-const QUICK_RANGES = [
-  { label: "Hace 7 días", days: 7 },
-  { label: "Hace 30 días", days: 30 },
-  { label: "Hace 90 días", days: 90 },
+const FORMAT_OPTIONS: { value: "" | ClassifiedBeerFormat; label: string }[] = [
+  { value: "", label: "Todos los formatos" },
+  { value: "HALF_LITER", label: "½ litro" },
+  { value: "LITER", label: "1 litro" },
+  { value: "UNKNOWN", label: "Otros (copas, vasos, estuches)" },
 ];
-
-function toInputDate(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function daysAgo(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return toInputDate(d);
-}
 
 function formatPct(value: number | null): string {
   return value == null ? "—" : `${(value * 100).toLocaleString("es-AR", { maximumFractionDigits: 1 })}%`;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-AR");
-}
-
-function Delta({ current, previous }: { current: number | null; previous: number | null }) {
-  if (current == null || previous == null) return null;
-  const diff = current - previous;
-  const pct = previous > 0 ? (diff / previous) * 100 : null;
-  const up = diff >= 0;
-  return (
-    <span className={"ha-stat__badge " + (up ? "ha-stat__badge--up" : "ha-stat__badge--down")}>
-      {up ? "▲" : "▼"} {formatCurrency(Math.abs(diff))}
-      {pct != null && ` (${Math.abs(pct).toLocaleString("es-AR", { maximumFractionDigits: 1 })}%)`}
-    </span>
-  );
 }
 
 export default function StockValuationPage() {
@@ -52,29 +27,24 @@ export default function StockValuationPage() {
 
 function StockValuationContent() {
   const { selectedLineId } = useLineContext();
-  const [compareDate, setCompareDate] = useState("");
-  const [current, setCurrent] = useState<StockValuationResponse | null>(null);
-  const [previous, setPrevious] = useState<StockValuationResponse | null>(null);
+  const [data, setData] = useState<StockValuationResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [formatFilter, setFormatFilter] = useState<"" | ClassifiedBeerFormat>("");
 
   useEffect(() => {
     if (!selectedLineId) return;
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      apiClient.getStockValuation(selectedLineId),
-      compareDate ? apiClient.getStockValuation(selectedLineId, compareDate) : Promise.resolve(null),
-    ])
-      .then(([cur, prev]) => {
-        if (cancelled) return;
-        setCurrent(cur);
-        setPrevious(prev);
+    apiClient
+      .getStockValuation(selectedLineId)
+      .then((res) => {
+        if (!cancelled) setData(res);
       })
       .catch(() => {
         if (cancelled) return;
         toast.error("No se pudo calcular la valorización del stock");
-        setCurrent(null);
-        setPrevious(null);
+        setData(null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -82,43 +52,47 @@ function StockValuationContent() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLineId, compareDate]);
+  }, [selectedLineId]);
 
   const rows = useMemo(() => {
-    const byId = new Map<string, { name: string; cur?: StockValuationRow; prev?: StockValuationRow }>();
-    for (const r of current?.rows ?? []) byId.set(r.productId, { name: r.name, cur: r });
-    for (const r of previous?.rows ?? []) {
-      const entry = byId.get(r.productId);
-      if (entry) entry.prev = r;
-      else byId.set(r.productId, { name: r.name, prev: r });
-    }
-    return [...byId.entries()]
-      .map(([productId, v]) => ({ productId, ...v }))
-      .sort((a, b) => a.name.localeCompare(b.name, "es"));
-  }, [current, previous]);
+    const q = searchText.trim().toLowerCase();
+    return (data?.rows ?? []).filter((r) => {
+      if (q && !r.name.toLowerCase().includes(q)) return false;
+      if (formatFilter && classifyBeerFormat(r.name, r.unit as ProductUnit) !== formatFilter) return false;
+      return true;
+    });
+  }, [data, searchText, formatFilter]);
+
+  const totals = useMemo(() => {
+    const sum = (pick: (r: (typeof rows)[number]) => number) => rows.reduce((s, r) => s + pick(r), 0);
+    return {
+      units: sum((r) => r.quantity),
+      factory: sum((r) => r.factoryValue),
+      retail: sum((r) => r.retailValue),
+      wholesale: sum((r) => r.wholesaleValue),
+      expected: rows.every((r) => r.expectedValue != null) ? sum((r) => r.expectedValue ?? 0) : null,
+    };
+  }, [rows]);
 
   const example = useMemo(
-    () => current?.rows.find((r) => r.mixSource === "product" && r.retailShare != null && r.retailPrice != null && r.wholesalePrice != null),
-    [current],
+    () => rows.find((r) => r.mixSource === "product" && r.retailShare != null && r.retailPrice != null && r.wholesalePrice != null),
+    [rows],
   );
 
-  const comparing = previous != null;
-  const prevLabel = previous ? formatDate(previous.asOf) : "";
+  const cards: { label: string; sub: string; value: number | null; highlight?: boolean }[] = [
+    { label: "Todo a precio fábrica", sub: "Lo que costaría reponerlo", value: totals.factory },
+    { label: "Todo a precio minorista", sub: "Si se vendiera todo al público", value: totals.retail },
+    { label: "Todo a precio mayorista", sub: "Si se vendiera todo a comercios", value: totals.wholesale },
+    {
+      label: "Valor esperado de venta",
+      sub: "Cada cerveza valorizada según cómo se vendió históricamente (minorista vs mayorista)",
+      value: totals.expected,
+      highlight: true,
+    },
+  ];
 
-  const cards: { label: string; sub: string; cur: number | null; prev: number | null; highlight?: boolean }[] = current
-    ? [
-        { label: "Todo a precio fábrica", sub: "Lo que costaría reponerlo", cur: current.totals.factory, prev: previous?.totals.factory ?? null },
-        { label: "Todo a precio minorista", sub: "Si se vendiera todo al público", cur: current.totals.retail, prev: previous?.totals.retail ?? null },
-        { label: "Todo a precio mayorista", sub: "Si se vendiera todo a comercios", cur: current.totals.wholesale, prev: previous?.totals.wholesale ?? null },
-        {
-          label: "Valor esperado de venta",
-          sub: "Cada cerveza valorizada según cómo se vendió históricamente (minorista vs mayorista)",
-          cur: current.totals.expected,
-          prev: previous?.totals.expected ?? null,
-          highlight: true,
-        },
-      ]
-    : [];
+  const warnings = data?.warnings;
+  const hasWarnings = !!warnings && warnings.negativeStockProducts.length + warnings.missingPriceProducts.length > 0;
 
   return (
     <div>
@@ -127,52 +101,38 @@ function StockValuationContent() {
           Stock · Valorización
         </h1>
         <p style={{ margin: "8px 0 0", fontSize: 14, color: "var(--ha-text-2)", maxWidth: 760 }}>
-          Cuánta plata hay parada en stock. Las tres primeras tarjetas suponen que se vende todo a un mismo precio. El{" "}
-          <b>valor esperado</b> es más realista: supone que cada cerveza se vende en la misma proporción minorista / mayorista en que se vendió
-          históricamente.
+          Cuánta plata hay parada en stock. Las tres primeras tarjetas suponen que se vende todo a un mismo precio. El <b>valor esperado</b> es más
+          realista: supone que cada cerveza se vende en la misma proporción minorista / mayorista en que se vendió históricamente.
         </p>
       </div>
 
       <div className="pc-filter" style={{ flexWrap: "wrap", gap: 8 }}>
-        <span style={{ fontSize: 13, color: "var(--ha-text-2)" }}>Comparar hoy contra</span>
-        <input
-          type="date"
-          className="ex-date"
-          value={compareDate}
-          max={daysAgo(1)}
-          onChange={(e) => setCompareDate(e.target.value)}
-          title="Fecha de comparación"
-        />
-        {QUICK_RANGES.map((r) => (
-          <button key={r.days} className="ha-btn ha-btn--secondary ha-btn--sm" onClick={() => setCompareDate(daysAgo(r.days))}>
-            {r.label}
-          </button>
-        ))}
-        {compareDate && (
-          <button className="ha-btn ha-btn--secondary ha-btn--sm" onClick={() => setCompareDate("")}>
-            Quitar comparación
-          </button>
-        )}
+        <div className="pc-search">
+          <Search size={17} />
+          <input placeholder="Buscar producto…" value={searchText} onChange={(e) => setSearchText(e.target.value)} />
+        </div>
+        <select className="pc-select" value={formatFilter} onChange={(e) => setFormatFilter(e.target.value as "" | ClassifiedBeerFormat)}>
+          {FORMAT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <span className="pc-count">
+          {rows.length} {rows.length === 1 ? "producto" : "productos"} · {formatQuantity(totals.units)} u.
+        </span>
       </div>
 
-      {loading && !current ? (
+      {loading && !data ? (
         <Spinner />
-      ) : !current ? null : (
+      ) : !data ? null : (
         <div style={{ opacity: loading ? 0.6 : 1, transition: "opacity .15s" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 16 }}>
             {cards.map((c) => (
               <div key={c.label} className="ha-stat" style={c.highlight ? { borderColor: "var(--ha-amber)" } : undefined}>
                 <div className="ha-stat__l">{c.label}</div>
-                <div className="ha-stat__v">{c.cur == null ? "—" : formatCurrency(c.cur)}</div>
+                <div className="ha-stat__v">{c.value == null ? "—" : formatCurrency(c.value)}</div>
                 <div className="ha-stat__s">{c.sub}</div>
-                {comparing && (
-                  <div style={{ marginTop: 10, fontSize: 12, color: "var(--ha-text-3)", display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
-                    <span>
-                      {prevLabel}: {c.prev == null ? "—" : formatCurrency(c.prev)}
-                    </span>
-                    <Delta current={c.cur} previous={c.prev} />
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -196,123 +156,84 @@ function StockValuationContent() {
             <div style={{ display: "flex", gap: 32, flexWrap: "wrap", marginTop: 16 }}>
               <div>
                 <div className="ps-label">Ventas totales minorista</div>
-                <div className="us-stat__v">{formatPct(current.mix.retailPct)}</div>
-                <div className="ha-stat__s">{formatQuantity(current.mix.retailUnits)} unidades</div>
+                <div className="us-stat__v">{formatPct(data.mix.retailPct)}</div>
+                <div className="ha-stat__s">{formatQuantity(data.mix.retailUnits)} unidades</div>
               </div>
               <div>
                 <div className="ps-label">Ventas totales mayorista</div>
-                <div className="us-stat__v">{formatPct(current.mix.wholesalePct)}</div>
-                <div className="ha-stat__s">{formatQuantity(current.mix.wholesaleUnits)} unidades</div>
+                <div className="us-stat__v">{formatPct(data.mix.wholesalePct)}</div>
+                <div className="ha-stat__s">{formatQuantity(data.mix.wholesaleUnits)} unidades</div>
               </div>
-              {comparing && (
-                <>
-                  <div>
-                    <div className="ps-label">Minorista al {prevLabel}</div>
-                    <div className="us-stat__v">{formatPct(previous.mix.retailPct)}</div>
-                  </div>
-                  <div>
-                    <div className="ps-label">Mayorista al {prevLabel}</div>
-                    <div className="us-stat__v">{formatPct(previous.mix.wholesalePct)}</div>
-                  </div>
-                </>
-              )}
             </div>
             <div className="ha-stat__s" style={{ marginTop: 12 }}>
               Los pedidos anteriores al 20/04/2026 no guardan la lista de precios: se clasificaron por el precio cobrado y, si no coincidía con
-              ninguna lista, por el tipo de cliente ({formatQuantity(current.mix.inferredUnits)} unidades). No entran al porcentaje:{" "}
-              {formatQuantity(current.mix.otherListUnits)} unidades vendidas a precio fábrica o catering y{" "}
-              {formatQuantity(current.mix.unclassifiedUnits)} que no se pudieron clasificar.
+              ninguna lista, por el tipo de cliente ({formatQuantity(data.mix.inferredUnits)} unidades). No entran al porcentaje:{" "}
+              {formatQuantity(data.mix.otherListUnits)} unidades vendidas a precio fábrica o catering y{" "}
+              {formatQuantity(data.mix.unclassifiedUnits)} que no se pudieron clasificar.
             </div>
           </div>
 
-          {[current, previous].map((resp) =>
-            resp && (resp.warnings.negativeStockProducts.length > 0 || resp.warnings.estimatedPriceProducts.length > 0 || resp.warnings.missingPriceProducts.length > 0) ? (
-              <div key={resp.asOf} className="ps-warn">
-                <b>⚠ Datos aproximados al {formatDate(resp.asOf)}</b>
-                {resp.warnings.negativeStockProducts.length > 0 && (
-                  <div className="ps-warn__row">
-                    Stock reconstruido negativo (se valoriza en 0): {resp.warnings.negativeStockProducts.join(", ")}
-                  </div>
-                )}
-                {resp.warnings.estimatedPriceProducts.length > 0 && (
-                  <div className="ps-warn__row">
-                    Fecha anterior al primer precio registrado (se usó el más antiguo): {resp.warnings.estimatedPriceProducts.join(", ")}
-                  </div>
-                )}
-                {resp.warnings.missingPriceProducts.length > 0 && (
-                  <div className="ps-warn__row">Sin precio en alguna lista: {resp.warnings.missingPriceProducts.join(", ")}</div>
-                )}
-              </div>
-            ) : null,
+          {hasWarnings && warnings && (
+            <div className="ps-warn">
+              <b>⚠ Datos incompletos</b>
+              {warnings.negativeStockProducts.length > 0 && (
+                <div className="ps-warn__row">Stock negativo (se valoriza en 0): {warnings.negativeStockProducts.join(", ")}</div>
+              )}
+              {warnings.missingPriceProducts.length > 0 && (
+                <div className="ps-warn__row">Sin precio en alguna lista: {warnings.missingPriceProducts.join(", ")}</div>
+              )}
+            </div>
           )}
 
           <div className="pc-card" style={{ marginTop: 16 }}>
-            <div style={{ overflowX: "auto" }}>
-              <table className="pc-table" style={{ minWidth: comparing ? 1100 : 880 }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: "auto" }}>Producto</th>
-                    <th style={{ textAlign: "right" }}>Stock</th>
-                    {comparing && <th style={{ textAlign: "right" }}>Stock {prevLabel}</th>}
-                    <th style={{ textAlign: "right" }}>Fábrica</th>
-                    <th style={{ textAlign: "right" }}>Minorista</th>
-                    <th style={{ textAlign: "right" }}>Mayorista</th>
-                    <th style={{ textAlign: "right" }}>% vendido min / may</th>
-                    <th style={{ textAlign: "right" }}>Valor esperado</th>
-                    {comparing && <th style={{ textAlign: "right" }}>Esperado {prevLabel}</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ productId, name, cur, prev }) => (
-                    <tr key={productId}>
-                      <td style={{ fontWeight: 500 }}>{name}</td>
-                      <td style={{ textAlign: "right" }}>{cur ? formatQuantity(cur.quantity) : "0"}</td>
-                      {comparing && <td style={{ textAlign: "right" }}>{prev ? formatQuantity(prev.quantity) : "0"}</td>}
-                      <td style={{ textAlign: "right" }}>{cur?.factoryPrice != null ? formatCurrency(cur.factoryPrice) : "—"}</td>
-                      <td style={{ textAlign: "right" }}>{cur?.retailPrice != null ? formatCurrency(cur.retailPrice) : "—"}</td>
-                      <td style={{ textAlign: "right" }}>{cur?.wholesalePrice != null ? formatCurrency(cur.wholesalePrice) : "—"}</td>
-                      <td style={{ textAlign: "right", color: "var(--ha-text-2)" }}>
-                        {cur ? (
-                          <>
-                            {formatPct(cur.retailShare)} / {formatPct(cur.wholesaleShare)}
-                            {cur.mixSource === "global" && <span title="Pocas ventas: usa el porcentaje de todas las ventas"> *</span>}
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>{cur?.expectedValue != null ? formatCurrency(cur.expectedValue) : "—"}</td>
-                      {comparing && (
-                        <td style={{ textAlign: "right", color: "var(--ha-text-2)" }}>
-                          {prev?.expectedValue != null ? formatCurrency(prev.expectedValue) : "—"}
-                        </td>
-                      )}
+            {rows.length === 0 ? (
+              <div className="ha-empty">
+                <p className="ha-empty__t">Sin resultados para los filtros aplicados</p>
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="pc-table" style={{ minWidth: 880 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: "auto" }}>Producto</th>
+                      <th style={{ textAlign: "right" }}>Stock</th>
+                      <th style={{ textAlign: "right" }}>Fábrica</th>
+                      <th style={{ textAlign: "right" }}>Minorista</th>
+                      <th style={{ textAlign: "right" }}>Mayorista</th>
+                      <th style={{ textAlign: "right" }}>% vendido min / may</th>
+                      <th style={{ textAlign: "right" }}>Valor esperado</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td style={{ padding: "12px 18px", fontWeight: 600 }}>Total</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{formatQuantity(current.rows.reduce((s, r) => s + r.quantity, 0))}</td>
-                    {comparing && (
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>{formatQuantity(previous.rows.reduce((s, r) => s + r.quantity, 0))}</td>
-                    )}
-                    <td colSpan={4} />
-                    <td style={{ textAlign: "right", fontWeight: 700 }}>
-                      {current.totals.expected != null ? formatCurrency(current.totals.expected) : "—"}
-                    </td>
-                    {comparing && (
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>
-                        {previous.totals.expected != null ? formatCurrency(previous.totals.expected) : "—"}
-                      </td>
-                    )}
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.productId}>
+                        <td style={{ fontWeight: 500 }}>{r.name}</td>
+                        <td style={{ textAlign: "right" }}>{formatQuantity(r.quantity)}</td>
+                        <td style={{ textAlign: "right" }}>{r.factoryPrice != null ? formatCurrency(r.factoryPrice) : "—"}</td>
+                        <td style={{ textAlign: "right" }}>{r.retailPrice != null ? formatCurrency(r.retailPrice) : "—"}</td>
+                        <td style={{ textAlign: "right" }}>{r.wholesalePrice != null ? formatCurrency(r.wholesalePrice) : "—"}</td>
+                        <td style={{ textAlign: "right", color: "var(--ha-text-2)" }}>
+                          {formatPct(r.retailShare)} / {formatPct(r.wholesaleShare)}
+                          {r.mixSource === "global" && <span title="Pocas ventas: usa el porcentaje de todas las ventas"> *</span>}
+                        </td>
+                        <td style={{ textAlign: "right", fontWeight: 600 }}>{r.expectedValue != null ? formatCurrency(r.expectedValue) : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td style={{ padding: "12px 18px", fontWeight: 600 }}>Total</td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>{formatQuantity(totals.units)}</td>
+                      <td colSpan={4} />
+                      <td style={{ textAlign: "right", fontWeight: 700 }}>{totals.expected != null ? formatCurrency(totals.expected) : "—"}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
           </div>
           <p className="ha-stat__s" style={{ marginTop: 10 }}>
-            * Producto con menos de 12 unidades vendidas: usa el porcentaje de todas las ventas. Las columnas de precio y porcentaje muestran los valores de hoy.
+            * Producto con menos de 12 unidades vendidas: usa el porcentaje de todas las ventas.
           </p>
         </div>
       )}
