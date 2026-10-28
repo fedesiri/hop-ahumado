@@ -113,6 +113,53 @@ export interface DistributorSuggestedOrderResponse {
   copyText: string;
 }
 
+export type StockValuationMixMode = "product" | "global";
+
+export type StockValuationMixSource = "product" | "global" | "none";
+
+export interface StockValuationRow {
+  productId: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  factoryPrice: number | null;
+  retailPrice: number | null;
+  wholesalePrice: number | null;
+  retailShare: number | null;
+  wholesaleShare: number | null;
+  mixSource: StockValuationMixSource;
+  factoryValue: number;
+  retailValue: number;
+  wholesaleValue: number;
+  expectedValue: number | null;
+}
+
+export interface StockValuationResponse {
+  asOf: string;
+  isToday: boolean;
+  mixMode: StockValuationMixMode;
+  totals: {
+    factory: number;
+    retail: number;
+    wholesale: number;
+    expected: number | null;
+  };
+  mix: {
+    retailUnits: number;
+    wholesaleUnits: number;
+    retailPct: number | null;
+    wholesalePct: number | null;
+    otherListUnits: number;
+    unclassifiedUnits: number;
+  };
+  warnings: {
+    negativeStockProducts: string[];
+    missingPriceProducts: string[];
+    estimatedPriceProducts: string[];
+  };
+  rows: StockValuationRow[];
+}
+
 export interface StockLocation {
   id: string;
   name: string;

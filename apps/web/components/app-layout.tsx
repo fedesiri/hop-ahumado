@@ -67,6 +67,7 @@ const navRows: NavRow[] = [
   { type: "group", label: "Stock", key: "g-stock" },
   { type: "item", path: "/stock", label: "Movimientos", icon: <ArrowLeftRight size={18} />, sub: true },
   { type: "item", path: "/stock/locations", label: "Ubicaciones", icon: <MapPin size={18} />, sub: true },
+  { type: "item", path: "/stock/valuation", label: "Valorización", icon: <DollarSign size={18} />, sub: true, businessLine: BusinessLine.BEER },
   { type: "item", path: "/stock/suggested-order", label: "Pedido sugerido", icon: <ClipboardList size={18} />, sub: true, businessLine: BusinessLine.BEER },
   { type: "item", path: "/ingredients", label: "Ingredientes", icon: <Wheat size={18} />, businessLine: BusinessLine.MEAT },
   { type: "item", path: "/recipes", label: "Recetas", icon: <FlaskConical size={18} /> },
