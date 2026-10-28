@@ -30,8 +30,6 @@ export interface StockValuationRow {
   wholesaleValue: number;
   /** Valor esperado con el mix propio del producto (o el global si vendió poco). */
   expectedValue: number | null;
-  /** Valor esperado con el mix global de todas las ventas. */
-  expectedValueGlobal: number | null;
 }
 
 export interface StockValuationResponse {
@@ -42,7 +40,6 @@ export interface StockValuationResponse {
     retail: number;
     wholesale: number;
     expected: number | null;
-    expectedGlobal: number | null;
   };
   mix: {
     retailUnits: number;
@@ -53,6 +50,8 @@ export interface StockValuationResponse {
     otherListUnits: number;
     /** Unidades sin lista identificable (no entran al mix). */
     unclassifiedUnits: number;
+    /** Unidades incluidas en el mix por inferencia a partir del cliente (pedidos viejos sin lista). */
+    inferredUnits: number;
   };
   warnings: {
     /** Productos cuyo stock reconstruido dio negativo (se valoriza en 0). */
@@ -88,6 +87,22 @@ function movementDelta(type: StockMovementType, quantity: number): number {
   return quantity;
 }
 
+interface ProductSales {
+  retail: number;
+  wholesale: number;
+  other: number;
+  unclassified: number;
+  /** Unidades de retail/wholesale que se asignaron por cliente (no por lista ni por precio). */
+  inferred: number;
+}
+
+function listFromCustomerType(customerType: string | null): "minorista" | "mayorista" | null {
+  const t = (customerType ?? "").toLowerCase();
+  if (/mayorista|empresa|distribuidor|b2b/.test(t)) return "mayorista";
+  if (/minorista|particular|consumidor|b2c/.test(t)) return "minorista";
+  return null;
+}
+
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 @Injectable()
@@ -115,6 +130,7 @@ export class StockValuationService {
     const globalW = [...salesByProduct.values()].reduce((s, v) => s + v.wholesale, 0);
     const otherListUnits = [...salesByProduct.values()].reduce((s, v) => s + v.other, 0);
     const unclassifiedUnits = [...salesByProduct.values()].reduce((s, v) => s + v.unclassified, 0);
+    const inferredUnits = [...salesByProduct.values()].reduce((s, v) => s + v.inferred, 0);
     const globalShare = globalR + globalW > 0 ? { retail: globalR / (globalR + globalW), wholesale: globalW / (globalR + globalW) } : null;
 
     const negativeStockProducts: string[] = [];
@@ -163,9 +179,6 @@ export class StockValuationService {
         retailValue: round2(retailValue),
         wholesaleValue: round2(wholesaleValue),
         expectedValue: share ? round2(share.retail * retailValue + share.wholesale * wholesaleValue) : null,
-        expectedValueGlobal: globalShare
-          ? round2(globalShare.retail * retailValue + globalShare.wholesale * wholesaleValue)
-          : null,
       });
     }
 
@@ -180,7 +193,6 @@ export class StockValuationService {
         retail: sum((r) => r.retailValue),
         wholesale: sum((r) => r.wholesaleValue),
         expected: allHaveExpected ? sum((r) => r.expectedValue ?? 0) : null,
-        expectedGlobal: globalShare ? sum((r) => r.expectedValueGlobal ?? 0) : null,
       },
       mix: {
         retailUnits: globalR,
@@ -189,6 +201,7 @@ export class StockValuationService {
         wholesalePct: globalShare ? globalShare.wholesale : null,
         otherListUnits,
         unclassifiedUnits,
+        inferredUnits,
       },
       warnings: { negativeStockProducts, missingPriceProducts, estimatedPriceProducts },
       rows,
@@ -249,20 +262,26 @@ export class StockValuationService {
 
   /**
    * Unidades vendidas por producto hasta `asOfEnd`, separadas en minorista / mayorista / otras listas.
-   * Los pedidos previos al campo `priceListType` se clasifican por coincidencia del precio del ítem con
-   * alguna versión de las listas del producto.
+   * La lista de cada ítem se determina, en este orden, por: `priceListType` del pedido; coincidencia del precio
+   * del ítem con alguna versión de las listas del producto (pedidos previos al campo); lista dominante del cliente
+   * en sus otras ventas; tipo de cliente del perfil CRM. Lo que no se puede resolver queda sin clasificar.
    */
-  private async salesMixByProduct(
-    productIds: string[],
-    asOfEnd: Date,
-  ): Promise<Map<string, { retail: number; wholesale: number; other: number; unclassified: number }>> {
+  private async salesMixByProduct(productIds: string[], asOfEnd: Date): Promise<Map<string, ProductSales>> {
     const items = await this.prisma.orderItem.findMany({
       where: { productId: { in: productIds }, order: { createdAt: { lte: asOfEnd } } },
       select: {
         productId: true,
         quantity: true,
         price: true,
-        order: { select: { priceListType: true, isConsignment: true, cancelledAt: true } },
+        order: {
+          select: {
+            priceListType: true,
+            isConsignment: true,
+            cancelledAt: true,
+            customerId: true,
+            customer: { select: { profile: { select: { customerType: true } } } },
+          },
+        },
       },
     });
     const prices = await this.prisma.price.findMany({
@@ -278,14 +297,21 @@ export class StockValuationService {
       pricesByProduct.set(pr.productId, arr);
     }
 
-    const result = new Map<string, { retail: number; wholesale: number; other: number; unclassified: number }>();
+    const result = new Map<string, ProductSales>();
+    const entryFor = (productId: string) => {
+      const entry = result.get(productId) ?? { retail: 0, wholesale: 0, other: 0, unclassified: 0, inferred: 0 };
+      result.set(productId, entry);
+      return entry;
+    };
+    const customerUnits = new Map<string, { retail: number; wholesale: number }>();
+    const pending: { productId: string; qty: number; customerId: string | null; profileType: string | null }[] = [];
+
     for (const it of items) {
       if (it.order.cancelledAt && it.order.cancelledAt <= asOfEnd) continue;
       // Consignación sin precio fijado todavía: la mercadería no se vendió.
       if (it.order.isConsignment && it.price == null) continue;
 
-      const entry = result.get(it.productId) ?? { retail: 0, wholesale: 0, other: 0, unclassified: 0 };
-      result.set(it.productId, entry);
+      const entry = entryFor(it.productId);
       const qty = Number(it.quantity);
 
       let list = normalizeList(it.order.priceListType);
@@ -298,10 +324,40 @@ export class StockValuationService {
         if (hits.size === 1) list = [...hits][0];
       }
 
-      if (list === "minorista") entry.retail += qty;
-      else if (list === "mayorista") entry.wholesale += qty;
-      else if (list) entry.other += qty;
-      else entry.unclassified += qty;
+      if (!list) {
+        pending.push({
+          productId: it.productId,
+          qty,
+          customerId: it.order.customerId,
+          profileType: it.order.customer?.profile?.customerType ?? null,
+        });
+        continue;
+      }
+      if (list === "minorista" || list === "mayorista") {
+        if (it.order.customerId) {
+          const c = customerUnits.get(it.order.customerId) ?? { retail: 0, wholesale: 0 };
+          if (list === "minorista") c.retail += qty;
+          else c.wholesale += qty;
+          customerUnits.set(it.order.customerId, c);
+        }
+        if (list === "minorista") entry.retail += qty;
+        else entry.wholesale += qty;
+      } else {
+        entry.other += qty;
+      }
+    }
+
+    for (const p of pending) {
+      const entry = entryFor(p.productId);
+      const c = p.customerId ? customerUnits.get(p.customerId) : undefined;
+      let list: "minorista" | "mayorista" | null = null;
+      if (c && c.retail + c.wholesale > 0) list = c.wholesale >= c.retail ? "mayorista" : "minorista";
+      else list = listFromCustomerType(p.profileType);
+
+      if (list === "minorista") entry.retail += p.qty;
+      else if (list === "mayorista") entry.wholesale += p.qty;
+      else entry.unclassified += p.qty;
+      if (list) entry.inferred += p.qty;
     }
     return result;
   }

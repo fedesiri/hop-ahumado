@@ -111,17 +111,10 @@ function StockValuationContent() {
         { label: "Todo a precio minorista", sub: "Si se vendiera todo al público", cur: current.totals.retail, prev: previous?.totals.retail ?? null },
         { label: "Todo a precio mayorista", sub: "Si se vendiera todo a comercios", cur: current.totals.wholesale, prev: previous?.totals.wholesale ?? null },
         {
-          label: "Valor esperado · por producto",
-          sub: "Cada cerveza según cómo se vendió ella (minorista vs mayorista)",
+          label: "Valor esperado de venta",
+          sub: "Cada cerveza valorizada según cómo se vendió históricamente (minorista vs mayorista)",
           cur: current.totals.expected,
           prev: previous?.totals.expected ?? null,
-          highlight: true,
-        },
-        {
-          label: "Valor esperado · global",
-          sub: `Todas las cervezas con el promedio de todas las ventas (${formatPct(current.mix.retailPct)} minorista / ${formatPct(current.mix.wholesalePct)} mayorista)`,
-          cur: current.totals.expectedGlobal,
-          prev: previous?.totals.expectedGlobal ?? null,
           highlight: true,
         },
       ]
@@ -134,8 +127,8 @@ function StockValuationContent() {
           Stock · Valorización
         </h1>
         <p style={{ margin: "8px 0 0", fontSize: 14, color: "var(--ha-text-2)", maxWidth: 760 }}>
-          Cuánta plata hay parada en stock. Las tres primeras tarjetas suponen que se vende todo a un mismo precio. Las dos del{" "}
-          <b>valor esperado</b> son más realistas: suponen que el stock se vende en la misma proporción minorista / mayorista en que se vendió
+          Cuánta plata hay parada en stock. Las tres primeras tarjetas suponen que se vende todo a un mismo precio. El{" "}
+          <b>valor esperado</b> es más realista: supone que cada cerveza se vende en la misma proporción minorista / mayorista en que se vendió
           históricamente.
         </p>
       </div>
@@ -189,15 +182,10 @@ function StockValuationContent() {
             <div className="ps-card__sub">
               Valor esperado = cantidad en stock × (% vendido minorista × precio minorista + % vendido mayorista × precio mayorista)
             </div>
-            <ul style={{ margin: "12px 0 0", paddingLeft: 18, fontSize: 13, color: "var(--ha-text-2)", display: "flex", flexDirection: "column", gap: 6 }}>
-              <li>
-                <b>Por producto:</b> el porcentaje sale de las ventas de esa cerveza. Si vendió menos de 12 unidades, no hay datos suficientes y usa el
-                porcentaje global (se marca con *).
-              </li>
-              <li>
-                <b>Global:</b> todas las cervezas usan el mismo porcentaje, calculado con las ventas de todas juntas.
-              </li>
-            </ul>
+            <div className="ha-stat__s" style={{ marginTop: 10 }}>
+              El porcentaje sale de las ventas de cada cerveza. Si vendió menos de 12 unidades no hay datos suficientes y se usa el porcentaje de
+              todas las ventas juntas (se marca con *).
+            </div>
             {example && (
               <div style={{ marginTop: 12, fontSize: 13, color: "var(--ha-text-2)" }}>
                 <b>Ejemplo con {example.name}:</b> {formatQuantity(example.quantity)} u. × ({formatPct(example.retailShare)} ×{" "}
@@ -207,12 +195,12 @@ function StockValuationContent() {
             )}
             <div style={{ display: "flex", gap: 32, flexWrap: "wrap", marginTop: 16 }}>
               <div>
-                <div className="ps-label">Ventas globales minorista</div>
+                <div className="ps-label">Ventas totales minorista</div>
                 <div className="us-stat__v">{formatPct(current.mix.retailPct)}</div>
                 <div className="ha-stat__s">{formatQuantity(current.mix.retailUnits)} unidades</div>
               </div>
               <div>
-                <div className="ps-label">Ventas globales mayorista</div>
+                <div className="ps-label">Ventas totales mayorista</div>
                 <div className="us-stat__v">{formatPct(current.mix.wholesalePct)}</div>
                 <div className="ha-stat__s">{formatQuantity(current.mix.wholesaleUnits)} unidades</div>
               </div>
@@ -230,8 +218,10 @@ function StockValuationContent() {
               )}
             </div>
             <div className="ha-stat__s" style={{ marginTop: 12 }}>
-              No entran al porcentaje: {formatQuantity(current.mix.otherListUnits)} unidades vendidas a precio fábrica o catering y{" "}
-              {formatQuantity(current.mix.unclassifiedUnits)} sin lista identificable (pedidos anteriores al 20/04/2026 sin coincidencia de precio).
+              Los pedidos anteriores al 20/04/2026 no guardan la lista de precios: se clasificaron por el precio cobrado y, si no coincidía con
+              ninguna lista, por el tipo de cliente ({formatQuantity(current.mix.inferredUnits)} unidades). No entran al porcentaje:{" "}
+              {formatQuantity(current.mix.otherListUnits)} unidades vendidas a precio fábrica o catering y{" "}
+              {formatQuantity(current.mix.unclassifiedUnits)} que no se pudieron clasificar.
             </div>
           </div>
 
@@ -258,7 +248,7 @@ function StockValuationContent() {
 
           <div className="pc-card" style={{ marginTop: 16 }}>
             <div style={{ overflowX: "auto" }}>
-              <table className="pc-table" style={{ minWidth: comparing ? 1200 : 980 }}>
+              <table className="pc-table" style={{ minWidth: comparing ? 1100 : 880 }}>
                 <thead>
                   <tr>
                     <th style={{ width: "auto" }}>Producto</th>
@@ -268,9 +258,8 @@ function StockValuationContent() {
                     <th style={{ textAlign: "right" }}>Minorista</th>
                     <th style={{ textAlign: "right" }}>Mayorista</th>
                     <th style={{ textAlign: "right" }}>% vendido min / may</th>
-                    <th style={{ textAlign: "right" }}>Esperado · por producto</th>
-                    <th style={{ textAlign: "right" }}>Esperado · global</th>
-                    {comparing && <th style={{ textAlign: "right" }}>Esperado por producto {prevLabel}</th>}
+                    <th style={{ textAlign: "right" }}>Valor esperado</th>
+                    {comparing && <th style={{ textAlign: "right" }}>Esperado {prevLabel}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -286,16 +275,13 @@ function StockValuationContent() {
                         {cur ? (
                           <>
                             {formatPct(cur.retailShare)} / {formatPct(cur.wholesaleShare)}
-                            {cur.mixSource === "global" && <span title="Pocas ventas: usa el porcentaje global"> *</span>}
+                            {cur.mixSource === "global" && <span title="Pocas ventas: usa el porcentaje de todas las ventas"> *</span>}
                           </>
                         ) : (
                           "—"
                         )}
                       </td>
                       <td style={{ textAlign: "right", fontWeight: 600 }}>{cur?.expectedValue != null ? formatCurrency(cur.expectedValue) : "—"}</td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>
-                        {cur?.expectedValueGlobal != null ? formatCurrency(cur.expectedValueGlobal) : "—"}
-                      </td>
                       {comparing && (
                         <td style={{ textAlign: "right", color: "var(--ha-text-2)" }}>
                           {prev?.expectedValue != null ? formatCurrency(prev.expectedValue) : "—"}
@@ -315,9 +301,6 @@ function StockValuationContent() {
                     <td style={{ textAlign: "right", fontWeight: 700 }}>
                       {current.totals.expected != null ? formatCurrency(current.totals.expected) : "—"}
                     </td>
-                    <td style={{ textAlign: "right", fontWeight: 700 }}>
-                      {current.totals.expectedGlobal != null ? formatCurrency(current.totals.expectedGlobal) : "—"}
-                    </td>
                     {comparing && (
                       <td style={{ textAlign: "right", fontWeight: 600 }}>
                         {previous.totals.expected != null ? formatCurrency(previous.totals.expected) : "—"}
@@ -329,7 +312,7 @@ function StockValuationContent() {
             </div>
           </div>
           <p className="ha-stat__s" style={{ marginTop: 10 }}>
-            * Producto con menos de 12 unidades vendidas: usa el porcentaje global. Las columnas de precio y porcentaje muestran los valores de hoy.
+            * Producto con menos de 12 unidades vendidas: usa el porcentaje de todas las ventas. Las columnas de precio y porcentaje muestran los valores de hoy.
           </p>
         </div>
       )}

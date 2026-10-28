@@ -130,7 +130,6 @@ export interface StockValuationRow {
   retailValue: number;
   wholesaleValue: number;
   expectedValue: number | null;
-  expectedValueGlobal: number | null;
 }
 
 export interface StockValuationResponse {
@@ -141,7 +140,6 @@ export interface StockValuationResponse {
     retail: number;
     wholesale: number;
     expected: number | null;
-    expectedGlobal: number | null;
   };
   mix: {
     retailUnits: number;
@@ -150,6 +148,7 @@ export interface StockValuationResponse {
     wholesalePct: number | null;
     otherListUnits: number;
     unclassifiedUnits: number;
+    inferredUnits: number;
   };
   warnings: {
     negativeStockProducts: string[];
