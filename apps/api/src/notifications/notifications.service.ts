@@ -3,11 +3,11 @@ import { Logger } from "nestjs-pino";
 import { OnEvent } from "@nestjs/event-emitter";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { buildPaginatedResponse, toLimit, toPage } from "../common/pagination";
+import { findLapsedWholesaleCustomers } from "../crm/wholesale-lapse";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   NOTIFICATION_CATALOG,
   type CrmAssignPayload,
-  type CustomerLapsedPayload,
   type CrmFollowupPayload,
   type CrmInteractionPayload,
   type StockAtypicalPayload,
@@ -16,10 +16,6 @@ import {
 import type { GetNotificationsQueryDto } from "./dto/get-notifications.query.dto";
 
 const RETENTION_DAYS = Number(process.env.NOTIFICATION_RETENTION_DAYS ?? 90);
-/** Días sin comprar a partir de los cuales se avisa de un cliente mayorista. */
-const LAPSE_DAYS = Number(process.env.CUSTOMER_LAPSE_DAYS ?? 30);
-const WHOLESALE_TYPE = /mayorista|empresa|distribuidor|b2b/i;
-const NON_WHOLESALE_TYPE = /particular|minorista|consumidor|b2c/i;
 
 @Injectable()
 export class NotificationsService {
@@ -197,56 +193,11 @@ export class NotificationsService {
     }
   }
 
-  /**
-   * Clientes mayoristas con LAPSE_DAYS o más sin comprar (última compra = `deliveryDate` de pedidos no
-   * cancelados). Es mayorista si su tipo en el CRM es Mayorista / Empresa; si no tiene tipo reconocible,
-   * si alguna vez compró con lista mayorista. Los que nunca compraron cuentan desde que se cargaron al CRM.
-   * `referenceDate` es la fecha desde la que se mide (última compra o alta) y define cuándo ya se avisó.
-   */
-  async findLapsedWholesaleCustomers(
-    now: Date = new Date(),
-  ): Promise<(CustomerLapsedPayload & { referenceDate: Date })[]> {
-    const customers = await this.prisma.customer.findMany({
-      where: { profile: { isNot: null } },
-      select: {
-        name: true,
-        profile: { select: { id: true, customerType: true, createdAt: true } },
-        orders: { where: { cancelledAt: null }, select: { deliveryDate: true, priceListType: true } },
-      },
-    });
-
-    const lapsed: (CustomerLapsedPayload & { referenceDate: Date })[] = [];
-    for (const c of customers) {
-      if (!c.profile) continue;
-      const type = c.profile.customerType ?? "";
-      const isWholesale = WHOLESALE_TYPE.test(type)
-        ? true
-        : NON_WHOLESALE_TYPE.test(type)
-          ? false
-          : c.orders.some((o) => o.priceListType === "mayorista");
-      if (!isWholesale) continue;
-
-      const lastPurchase =
-        c.orders.length > 0 ? new Date(Math.max(...c.orders.map((o) => o.deliveryDate.getTime()))) : null;
-      const referenceDate = lastPurchase ?? c.profile.createdAt;
-      const days = Math.floor((now.getTime() - referenceDate.getTime()) / 86_400_000);
-      if (days < LAPSE_DAYS) continue;
-      lapsed.push({
-        profileId: c.profile.id,
-        customerName: c.name,
-        daysSincePurchase: days,
-        lastPurchaseAt: lastPurchase?.toISOString() ?? null,
-        referenceDate,
-      });
-    }
-    return lapsed.sort((a, b) => a.daysSincePurchase - b.daysSincePurchase);
-  }
-
   /** Una vez por día; avisa una sola vez por cada última compra (si vuelve a comprar y se enfría, avisa de nuevo). */
   @Cron("0 9 * * *", { timeZone: "America/Argentina/Buenos_Aires" })
   async scanLapsedWholesaleCustomers(): Promise<void> {
     try {
-      for (const { referenceDate, ...payload } of await this.findLapsedWholesaleCustomers()) {
+      for (const { referenceDate, ...payload } of await findLapsedWholesaleCustomers(this.prisma)) {
         if (await this.alreadyNotifiedSince("crm.customer_lapsed", payload.profileId, referenceDate)) continue;
         await this.ingest("crm.customer_lapsed", payload);
       }

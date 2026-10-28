@@ -6,6 +6,7 @@ import { CustomerProfileService } from "../customer-profile/customer-profile.ser
 import { CustomerService } from "../customer/customer.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCrmCustomerDto } from "./dto/create-crm-customer.dto";
+import { findLapsedWholesaleCustomers } from "./wholesale-lapse";
 
 /** Coincidencias para el filtro del listado (UI solo ofrece Empresa / Particular; en DB suele haber texto libre del Excel). */
 function customerTypeProfileClause(filter: string): Record<string, unknown> {
@@ -99,6 +100,7 @@ export class CrmService {
     customerType?: string,
     responsibleId?: string,
     responsibleSearch?: string,
+    lapsedWholesale?: boolean,
   ): Promise<PaginatedResponse<CrmCustomerListItem>> {
     const skip = (page - 1) * limit;
 
@@ -148,6 +150,11 @@ export class CrmService {
     if (profileParts.length > 0) {
       const profileIs = profileParts.length === 1 ? profileParts[0] : { AND: profileParts };
       where.AND = [...(where.AND ?? []), { profile: { is: profileIs } }];
+    }
+
+    if (lapsedWholesale) {
+      const lapsed = await findLapsedWholesaleCustomers(this.prisma);
+      where.AND = [...(where.AND ?? []), { profile: { is: { id: { in: lapsed.map((l) => l.profileId) } } } }];
     }
 
     const [customers, total] = await Promise.all([

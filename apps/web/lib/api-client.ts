@@ -338,6 +338,7 @@ export class ApiClient {
     customerType?: string,
     responsibleId?: string,
     responsibleSearch?: string,
+    lapsedWholesale?: boolean,
   ): Promise<PaginatedResponse<CrmCustomerListItem>> {
     return this.request(
       `/crm/customers${this.buildParams({
@@ -349,6 +350,7 @@ export class ApiClient {
         customerType,
         responsibleId,
         responsibleSearch,
+        lapsedWholesale: lapsedWholesale || undefined,
       })}`,
     );
   }

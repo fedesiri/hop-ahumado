@@ -76,6 +76,7 @@ function CrmContent() {
   const [sourceFilter, setSourceFilter] = useState(() => searchParams.get("source") ?? "");
   const [customerTypeFilter, setCustomerTypeFilter] = useState(() => searchParams.get("customerType") ?? "");
   const [responsibleIdFilter, setResponsibleIdFilter] = useState(() => searchParams.get("responsibleId") ?? "");
+  const [lapsedFilter, setLapsedFilter] = useState(() => searchParams.get("lapsedWholesale") === "true");
 
   // Mobile filter sheet draft state
   const [draftSearch, setDraftSearch] = useState(search);
@@ -111,7 +112,20 @@ function CrmContent() {
     [searchParams, router],
   );
 
-  const activeFilterCount = [search, statusFilter, customerTypeFilter, sourceFilter, responsibleIdFilter].filter(Boolean).length;
+  const activeFilterCount = [search, statusFilter, customerTypeFilter, sourceFilter, responsibleIdFilter, lapsedFilter].filter(Boolean).length;
+
+  // Llegar desde la campanita a /crm?lapsedWholesale=true con la página ya montada.
+  useEffect(() => {
+    setLapsedFilter(searchParams.get("lapsedWholesale") === "true");
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  }, [searchParams]);
+
+  const toggleLapsedFilter = () => {
+    const next = !lapsedFilter;
+    setPagination((p) => ({ ...p, page: 1 }));
+    setLapsedFilter(next);
+    updateParams({ lapsedWholesale: next ? "true" : null });
+  };
 
   const openFilterSheet = () => {
     setDraftSearch(search);
@@ -169,6 +183,8 @@ function CrmContent() {
         sourceFilter || undefined,
         customerTypeFilter || undefined,
         responsibleIdFilter || undefined,
+        undefined,
+        lapsedFilter,
       );
       setList(response.data);
       setMeta(response.meta);
@@ -177,7 +193,7 @@ function CrmContent() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, statusFilter, sourceFilter, customerTypeFilter, responsibleIdFilter]);
+  }, [pagination.page, pagination.limit, search, statusFilter, sourceFilter, customerTypeFilter, responsibleIdFilter, lapsedFilter]);
 
   useEffect(() => { void fetchList(); void fetchUsers(); }, [fetchList]);
 
@@ -384,6 +400,28 @@ function CrmContent() {
             {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </div>
+      </div>
+
+      {/* Quick filter: mayoristas sin comprar */}
+      <div style={{ marginBottom: 12 }}>
+        <button
+          onClick={toggleLapsedFilter}
+          aria-pressed={lapsedFilter}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            height: 36, padding: "0 14px", border: "1.5px solid var(--ha-border-2)",
+            borderRadius: 999, background: "transparent", color: "var(--ha-text-2)",
+            fontSize: 13, fontWeight: 600, cursor: "pointer",
+            ...(lapsedFilter ? { borderColor: "var(--ha-amber)", color: "var(--ha-amber)", background: "var(--ha-amber-soft)" } : {}),
+          }}
+        >
+          Mayoristas sin comprar hace +30 días{lapsedFilter ? " ✕" : ""}
+        </button>
+        {lapsedFilter && (
+          <span style={{ marginLeft: 10, fontSize: 12, color: "var(--ha-text-3)" }}>
+            Incluye mayoristas que nunca compraron (cuenta desde que se cargaron).
+          </span>
+        )}
       </div>
 
       {/* Mobile filter button */}

@@ -12,6 +12,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const POLL_DEFAULT_MS = 30_000;
+const PAGE_SIZE = 30;
+const LAPSED_EVENT = "crm.customer_lapsed";
 
 function categoryIcon(eventType: string) {
   const color = "var(--ha-green)";
@@ -40,14 +42,20 @@ export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<UserNotificationRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Páginas siguientes a la primera; la primera se refresca con el polling sin perder lo ya cargado.
+  const [extraRows, setExtraRows] = useState<UserNotificationRow[]>([]);
+  const nextPageRef = useRef(2);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await apiClient.getNotifications(1, 30, false);
+      const res = await apiClient.getNotifications(1, PAGE_SIZE, false);
       setRows(res.data);
+      setTotal(res.meta.total);
       setUnreadCount(res.unreadCount);
     } catch {
       setRows([]);
@@ -55,6 +63,25 @@ export function NotificationsBell() {
       setLoading(false);
     }
   }, []);
+
+  const loadMore = async () => {
+    try {
+      setLoadingMore(true);
+      const res = await apiClient.getNotifications(nextPageRef.current, PAGE_SIZE, false);
+      nextPageRef.current += 1;
+      setExtraRows((prev) => [...prev, ...res.data]);
+      setTotal(res.meta.total);
+    } catch {
+      toast.error("No se pudieron cargar más notificaciones");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const allRows = useMemo(() => {
+    const seen = new Set(rows.map((r) => r.id));
+    return [...rows, ...extraRows.filter((r) => !seen.has(r.id))];
+  }, [rows, extraRows]);
 
   useEffect(() => {
     void load();
@@ -80,6 +107,8 @@ export function NotificationsBell() {
   const onMarkAll = async () => {
     try {
       await apiClient.markAllNotificationsRead();
+      const now = new Date().toISOString();
+      setExtraRows((prev) => prev.map((r) => ({ ...r, readAt: r.readAt ?? now })));
       toast.success("Todas marcadas como leídas");
       await load();
     } catch {
@@ -90,7 +119,11 @@ export function NotificationsBell() {
   const onRowClick = async (row: UserNotificationRow) => {
     const path = pathForNotificationEntity(row.entityType, row.entityId);
     try {
-      if (!row.readAt) await apiClient.markNotificationRead(row.id);
+      if (!row.readAt) {
+        await apiClient.markNotificationRead(row.id);
+        const now = new Date().toISOString();
+        setExtraRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, readAt: now } : r)));
+      }
     } catch {
       toast.error("No se pudo marcar como leída");
     }
@@ -103,7 +136,14 @@ export function NotificationsBell() {
     <div ref={wrapRef} style={{ position: "relative" }}>
       <button
         className={`ha-bell${open ? " is-open" : ""}`}
-        onClick={() => { setOpen(!open); if (!open) void load(); }}
+        onClick={() => {
+          if (open) {
+            setExtraRows([]);
+            nextPageRef.current = 2;
+          }
+          setOpen(!open);
+          if (!open) void load();
+        }}
         aria-label="Notificaciones"
       >
         <Bell size={20} strokeWidth={2} />
@@ -140,13 +180,13 @@ export function NotificationsBell() {
                   </div>
                 ))}
               </>
-            ) : rows.length === 0 ? (
+            ) : allRows.length === 0 ? (
               <div className="ha-notif__empty">
                 <Bell size={24} strokeWidth={1.5} />
                 <span className="t">Sin notificaciones</span>
               </div>
             ) : (
-              rows.map((row) => {
+              allRows.map((row) => {
                 const unread = !row.readAt;
                 const href = pathForNotificationEntity(row.entityType, row.entityId);
                 return (
@@ -170,6 +210,21 @@ export function NotificationsBell() {
             )}
           </div>
 
+          {allRows.length < total && (
+            <button className="ha-notif__mark" style={{ width: "100%", padding: "10px 0" }} disabled={loadingMore} onClick={() => void loadMore()}>
+              {loadingMore ? "Cargando…" : `Ver más (${total - allRows.length} restantes)`}
+            </button>
+          )}
+          {allRows.some((r) => r.eventType === LAPSED_EVENT) && (
+            <Link
+              href="/crm?lapsedWholesale=true"
+              className="ha-notif__mark"
+              style={{ display: "block", textAlign: "center", padding: "10px 0" }}
+              onClick={() => setOpen(false)}
+            >
+              Ver mayoristas sin comprar
+            </Link>
+          )}
           <div className="ha-notif__ft">
             Actualiza cada {Math.round(pollMs / 1000)}s
           </div>

@@ -35,6 +35,7 @@ export class CrmController {
       query.customerType,
       query.responsibleId,
       query.responsibleSearch,
+      query.lapsedWholesale,
     );
   }
 
