@@ -62,7 +62,6 @@ import type {
   StockBalanceRow,
   StockLocation,
   StockMovement,
-  StockValuationMixMode,
   StockValuationResponse,
   TransferAllStockRequest,
   TransferAllStockResult,
@@ -674,12 +673,8 @@ export class ApiClient {
     );
   }
 
-  async getStockValuation(
-    businessLineId: string,
-    asOf?: string,
-    mixMode?: StockValuationMixMode,
-  ): Promise<StockValuationResponse> {
-    return this.request(`/stock-valuation${this.buildParams({ businessLineId, asOf, mixMode })}`);
+  async getStockValuation(businessLineId: string, asOf?: string): Promise<StockValuationResponse> {
+    return this.request(`/stock-valuation${this.buildParams({ businessLineId, asOf })}`);
   }
 
   async getStockMovement(id: string): Promise<StockMovement> {

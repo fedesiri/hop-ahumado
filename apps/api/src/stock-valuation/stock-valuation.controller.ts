@@ -8,6 +8,6 @@ export class StockValuationController {
 
   @Get()
   get(@Query() query: GetStockValuationQueryDto) {
-    return this.stockValuationService.getValuation(query.businessLineId, query.asOf, query.mixMode);
+    return this.stockValuationService.getValuation(query.businessLineId, query.asOf);
   }
 }

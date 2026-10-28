@@ -113,8 +113,6 @@ export interface DistributorSuggestedOrderResponse {
   copyText: string;
 }
 
-export type StockValuationMixMode = "product" | "global";
-
 export type StockValuationMixSource = "product" | "global" | "none";
 
 export interface StockValuationRow {
@@ -132,17 +130,18 @@ export interface StockValuationRow {
   retailValue: number;
   wholesaleValue: number;
   expectedValue: number | null;
+  expectedValueGlobal: number | null;
 }
 
 export interface StockValuationResponse {
   asOf: string;
   isToday: boolean;
-  mixMode: StockValuationMixMode;
   totals: {
     factory: number;
     retail: number;
     wholesale: number;
     expected: number | null;
+    expectedGlobal: number | null;
   };
   mix: {
     retailUnits: number;

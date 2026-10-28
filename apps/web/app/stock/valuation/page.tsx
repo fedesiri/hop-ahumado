@@ -4,7 +4,7 @@ import { apiClient } from "@/lib/api-client";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
-import type { StockValuationMixMode, StockValuationResponse, StockValuationRow } from "@/lib/types";
+import type { StockValuationResponse, StockValuationRow } from "@/lib/types";
 import { Spinner } from "@/components/spinner";
 import { useEffect, useMemo, useState } from "react";
 
@@ -29,6 +29,10 @@ function formatPct(value: number | null): string {
   return value == null ? "—" : `${(value * 100).toLocaleString("es-AR", { maximumFractionDigits: 1 })}%`;
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-AR");
+}
+
 function Delta({ current, previous }: { current: number | null; previous: number | null }) {
   if (current == null || previous == null) return null;
   const diff = current - previous;
@@ -49,7 +53,6 @@ export default function StockValuationPage() {
 function StockValuationContent() {
   const { selectedLineId } = useLineContext();
   const [compareDate, setCompareDate] = useState("");
-  const [mixMode, setMixMode] = useState<StockValuationMixMode>("product");
   const [current, setCurrent] = useState<StockValuationResponse | null>(null);
   const [previous, setPrevious] = useState<StockValuationResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,8 +62,8 @@ function StockValuationContent() {
     let cancelled = false;
     setLoading(true);
     Promise.all([
-      apiClient.getStockValuation(selectedLineId, undefined, mixMode),
-      compareDate ? apiClient.getStockValuation(selectedLineId, compareDate, mixMode) : Promise.resolve(null),
+      apiClient.getStockValuation(selectedLineId),
+      compareDate ? apiClient.getStockValuation(selectedLineId, compareDate) : Promise.resolve(null),
     ])
       .then(([cur, prev]) => {
         if (cancelled) return;
@@ -79,7 +82,7 @@ function StockValuationContent() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLineId, compareDate, mixMode]);
+  }, [selectedLineId, compareDate]);
 
   const rows = useMemo(() => {
     const byId = new Map<string, { name: string; cur?: StockValuationRow; prev?: StockValuationRow }>();
@@ -94,17 +97,31 @@ function StockValuationContent() {
       .sort((a, b) => a.name.localeCompare(b.name, "es"));
   }, [current, previous]);
 
+  const example = useMemo(
+    () => current?.rows.find((r) => r.mixSource === "product" && r.retailShare != null && r.retailPrice != null && r.wholesalePrice != null),
+    [current],
+  );
+
   const comparing = previous != null;
+  const prevLabel = previous ? formatDate(previous.asOf) : "";
+
   const cards: { label: string; sub: string; cur: number | null; prev: number | null; highlight?: boolean }[] = current
     ? [
-        { label: "A precio fábrica", sub: "Lista fábrica", cur: current.totals.factory, prev: previous?.totals.factory ?? null },
-        { label: "A precio minorista", sub: "Si todo se vendiera minorista", cur: current.totals.retail, prev: previous?.totals.retail ?? null },
-        { label: "A precio mayorista", sub: "Si todo se vendiera mayorista", cur: current.totals.wholesale, prev: previous?.totals.wholesale ?? null },
+        { label: "Todo a precio fábrica", sub: "Lo que costaría reponerlo", cur: current.totals.factory, prev: previous?.totals.factory ?? null },
+        { label: "Todo a precio minorista", sub: "Si se vendiera todo al público", cur: current.totals.retail, prev: previous?.totals.retail ?? null },
+        { label: "Todo a precio mayorista", sub: "Si se vendiera todo a comercios", cur: current.totals.wholesale, prev: previous?.totals.wholesale ?? null },
         {
-          label: "Valor esperado de venta",
-          sub: `Mix histórico ${mixMode === "global" ? "global" : "por producto"}`,
+          label: "Valor esperado · por producto",
+          sub: "Cada cerveza según cómo se vendió ella (minorista vs mayorista)",
           cur: current.totals.expected,
           prev: previous?.totals.expected ?? null,
+          highlight: true,
+        },
+        {
+          label: "Valor esperado · global",
+          sub: `Todas las cervezas con el promedio de todas las ventas (${formatPct(current.mix.retailPct)} minorista / ${formatPct(current.mix.wholesalePct)} mayorista)`,
+          cur: current.totals.expectedGlobal,
+          prev: previous?.totals.expectedGlobal ?? null,
           highlight: true,
         },
       ]
@@ -116,6 +133,11 @@ function StockValuationContent() {
         <h1 className="pc-pagetitle" style={{ margin: 0 }}>
           Stock · Valorización
         </h1>
+        <p style={{ margin: "8px 0 0", fontSize: 14, color: "var(--ha-text-2)", maxWidth: 760 }}>
+          Cuánta plata hay parada en stock. Las tres primeras tarjetas suponen que se vende todo a un mismo precio. Las dos del{" "}
+          <b>valor esperado</b> son más realistas: suponen que el stock se vende en la misma proporción minorista / mayorista en que se vendió
+          históricamente.
+        </p>
       </div>
 
       <div className="pc-filter" style={{ flexWrap: "wrap", gap: 8 }}>
@@ -138,11 +160,6 @@ function StockValuationContent() {
             Quitar comparación
           </button>
         )}
-        <span style={{ fontSize: 13, color: "var(--ha-text-2)", marginLeft: "auto" }}>Mix</span>
-        <select className="pc-select" value={mixMode} onChange={(e) => setMixMode(e.target.value as StockValuationMixMode)}>
-          <option value="product">Por producto</option>
-          <option value="global">Global</option>
-        </select>
       </div>
 
       {loading && !current ? (
@@ -151,18 +168,14 @@ function StockValuationContent() {
         <div style={{ opacity: loading ? 0.6 : 1, transition: "opacity .15s" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 16 }}>
             {cards.map((c) => (
-              <div
-                key={c.label}
-                className="ha-stat"
-                style={c.highlight ? { borderColor: "var(--ha-amber)" } : undefined}
-              >
+              <div key={c.label} className="ha-stat" style={c.highlight ? { borderColor: "var(--ha-amber)" } : undefined}>
                 <div className="ha-stat__l">{c.label}</div>
                 <div className="ha-stat__v">{c.cur == null ? "—" : formatCurrency(c.cur)}</div>
                 <div className="ha-stat__s">{c.sub}</div>
                 {comparing && (
                   <div style={{ marginTop: 10, fontSize: 12, color: "var(--ha-text-3)", display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
                     <span>
-                      {new Date(previous.asOf).toLocaleDateString("es-AR")}: {c.prev == null ? "—" : formatCurrency(c.prev)}
+                      {prevLabel}: {c.prev == null ? "—" : formatCurrency(c.prev)}
                     </span>
                     <Delta current={c.cur} previous={c.prev} />
                   </div>
@@ -172,38 +185,52 @@ function StockValuationContent() {
           </div>
 
           <div className="ps-card ps-card--pad">
-            <div className="ps-card__h">Mix histórico de ventas</div>
+            <div className="ps-card__h">Cómo se calcula el valor esperado</div>
             <div className="ps-card__sub">
-              Unidades vendidas por lista hasta {comparing ? "cada fecha" : "hoy"}. {mixMode === "global"
-                ? "Todos los productos usan este mix global."
-                : "Los porcentajes de abajo son el mix global; cada producto usa su propio mix y, si tiene menos de 12 unidades vendidas, el global."}
+              Valor esperado = cantidad en stock × (% vendido minorista × precio minorista + % vendido mayorista × precio mayorista)
             </div>
-            <div style={{ display: "flex", gap: 32, flexWrap: "wrap", marginTop: 14 }}>
+            <ul style={{ margin: "12px 0 0", paddingLeft: 18, fontSize: 13, color: "var(--ha-text-2)", display: "flex", flexDirection: "column", gap: 6 }}>
+              <li>
+                <b>Por producto:</b> el porcentaje sale de las ventas de esa cerveza. Si vendió menos de 12 unidades, no hay datos suficientes y usa el
+                porcentaje global (se marca con *).
+              </li>
+              <li>
+                <b>Global:</b> todas las cervezas usan el mismo porcentaje, calculado con las ventas de todas juntas.
+              </li>
+            </ul>
+            {example && (
+              <div style={{ marginTop: 12, fontSize: 13, color: "var(--ha-text-2)" }}>
+                <b>Ejemplo con {example.name}:</b> {formatQuantity(example.quantity)} u. × ({formatPct(example.retailShare)} ×{" "}
+                {formatCurrency(example.retailPrice)} + {formatPct(example.wholesaleShare)} × {formatCurrency(example.wholesalePrice)}) ={" "}
+                <b>{formatCurrency(example.expectedValue)}</b>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 32, flexWrap: "wrap", marginTop: 16 }}>
               <div>
-                <div className="ps-label">Minorista</div>
+                <div className="ps-label">Ventas globales minorista</div>
                 <div className="us-stat__v">{formatPct(current.mix.retailPct)}</div>
                 <div className="ha-stat__s">{formatQuantity(current.mix.retailUnits)} unidades</div>
               </div>
               <div>
-                <div className="ps-label">Mayorista</div>
+                <div className="ps-label">Ventas globales mayorista</div>
                 <div className="us-stat__v">{formatPct(current.mix.wholesalePct)}</div>
                 <div className="ha-stat__s">{formatQuantity(current.mix.wholesaleUnits)} unidades</div>
               </div>
               {comparing && (
                 <>
                   <div>
-                    <div className="ps-label">Minorista ({new Date(previous.asOf).toLocaleDateString("es-AR")})</div>
+                    <div className="ps-label">Minorista al {prevLabel}</div>
                     <div className="us-stat__v">{formatPct(previous.mix.retailPct)}</div>
                   </div>
                   <div>
-                    <div className="ps-label">Mayorista ({new Date(previous.asOf).toLocaleDateString("es-AR")})</div>
+                    <div className="ps-label">Mayorista al {prevLabel}</div>
                     <div className="us-stat__v">{formatPct(previous.mix.wholesalePct)}</div>
                   </div>
                 </>
               )}
             </div>
             <div className="ha-stat__s" style={{ marginTop: 12 }}>
-              No entran al mix: {formatQuantity(current.mix.otherListUnits)} unidades vendidas a precio fábrica o catering y{" "}
+              No entran al porcentaje: {formatQuantity(current.mix.otherListUnits)} unidades vendidas a precio fábrica o catering y{" "}
               {formatQuantity(current.mix.unclassifiedUnits)} sin lista identificable (pedidos anteriores al 20/04/2026 sin coincidencia de precio).
             </div>
           </div>
@@ -211,7 +238,7 @@ function StockValuationContent() {
           {[current, previous].map((resp) =>
             resp && (resp.warnings.negativeStockProducts.length > 0 || resp.warnings.estimatedPriceProducts.length > 0 || resp.warnings.missingPriceProducts.length > 0) ? (
               <div key={resp.asOf} className="ps-warn">
-                <b>⚠ Datos aproximados al {new Date(resp.asOf).toLocaleDateString("es-AR")}</b>
+                <b>⚠ Datos aproximados al {formatDate(resp.asOf)}</b>
                 {resp.warnings.negativeStockProducts.length > 0 && (
                   <div className="ps-warn__row">
                     Stock reconstruido negativo (se valoriza en 0): {resp.warnings.negativeStockProducts.join(", ")}
@@ -231,18 +258,19 @@ function StockValuationContent() {
 
           <div className="pc-card" style={{ marginTop: 16 }}>
             <div style={{ overflowX: "auto" }}>
-              <table className="pc-table" style={{ minWidth: comparing ? 1100 : 860 }}>
+              <table className="pc-table" style={{ minWidth: comparing ? 1200 : 980 }}>
                 <thead>
                   <tr>
                     <th style={{ width: "auto" }}>Producto</th>
                     <th style={{ textAlign: "right" }}>Stock</th>
-                    {comparing && <th style={{ textAlign: "right" }}>Stock {new Date(previous.asOf).toLocaleDateString("es-AR")}</th>}
+                    {comparing && <th style={{ textAlign: "right" }}>Stock {prevLabel}</th>}
                     <th style={{ textAlign: "right" }}>Fábrica</th>
                     <th style={{ textAlign: "right" }}>Minorista</th>
                     <th style={{ textAlign: "right" }}>Mayorista</th>
-                    <th style={{ textAlign: "right" }}>Mix min / may</th>
-                    <th style={{ textAlign: "right" }}>Valor esperado</th>
-                    {comparing && <th style={{ textAlign: "right" }}>Esperado {new Date(previous.asOf).toLocaleDateString("es-AR")}</th>}
+                    <th style={{ textAlign: "right" }}>% vendido min / may</th>
+                    <th style={{ textAlign: "right" }}>Esperado · por producto</th>
+                    <th style={{ textAlign: "right" }}>Esperado · global</th>
+                    {comparing && <th style={{ textAlign: "right" }}>Esperado por producto {prevLabel}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -258,13 +286,16 @@ function StockValuationContent() {
                         {cur ? (
                           <>
                             {formatPct(cur.retailShare)} / {formatPct(cur.wholesaleShare)}
-                            {mixMode === "product" && cur.mixSource === "global" && <span title="Pocas ventas: usa el mix global"> *</span>}
+                            {cur.mixSource === "global" && <span title="Pocas ventas: usa el porcentaje global"> *</span>}
                           </>
                         ) : (
                           "—"
                         )}
                       </td>
                       <td style={{ textAlign: "right", fontWeight: 600 }}>{cur?.expectedValue != null ? formatCurrency(cur.expectedValue) : "—"}</td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>
+                        {cur?.expectedValueGlobal != null ? formatCurrency(cur.expectedValueGlobal) : "—"}
+                      </td>
                       {comparing && (
                         <td style={{ textAlign: "right", color: "var(--ha-text-2)" }}>
                           {prev?.expectedValue != null ? formatCurrency(prev.expectedValue) : "—"}
@@ -284,6 +315,9 @@ function StockValuationContent() {
                     <td style={{ textAlign: "right", fontWeight: 700 }}>
                       {current.totals.expected != null ? formatCurrency(current.totals.expected) : "—"}
                     </td>
+                    <td style={{ textAlign: "right", fontWeight: 700 }}>
+                      {current.totals.expectedGlobal != null ? formatCurrency(current.totals.expectedGlobal) : "—"}
+                    </td>
                     {comparing && (
                       <td style={{ textAlign: "right", fontWeight: 600 }}>
                         {previous.totals.expected != null ? formatCurrency(previous.totals.expected) : "—"}
@@ -295,7 +329,7 @@ function StockValuationContent() {
             </div>
           </div>
           <p className="ha-stat__s" style={{ marginTop: 10 }}>
-            {mixMode === "product" && "* Producto con menos de 12 unidades vendidas: usa el mix global. "}Las columnas de precio y mix muestran los valores de hoy.
+            * Producto con menos de 12 unidades vendidas: usa el porcentaje global. Las columnas de precio y porcentaje muestran los valores de hoy.
           </p>
         </div>
       )}

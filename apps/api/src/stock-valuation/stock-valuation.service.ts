@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { StockMovementType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import { StockValuationMixMode } from "./dto/get-stock-valuation-query.dto";
 
 type PriceList = "fabrica" | "minorista" | "mayorista" | "catering";
 
@@ -29,18 +28,21 @@ export interface StockValuationRow {
   factoryValue: number;
   retailValue: number;
   wholesaleValue: number;
+  /** Valor esperado con el mix propio del producto (o el global si vendió poco). */
   expectedValue: number | null;
+  /** Valor esperado con el mix global de todas las ventas. */
+  expectedValueGlobal: number | null;
 }
 
 export interface StockValuationResponse {
   asOf: string;
   isToday: boolean;
-  mixMode: StockValuationMixMode;
   totals: {
     factory: number;
     retail: number;
     wholesale: number;
     expected: number | null;
+    expectedGlobal: number | null;
   };
   mix: {
     retailUnits: number;
@@ -92,11 +94,7 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 export class StockValuationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getValuation(
-    businessLineId: string,
-    asOf?: string,
-    mixMode: StockValuationMixMode = "product",
-  ): Promise<StockValuationResponse> {
+  async getValuation(businessLineId: string, asOf?: string): Promise<StockValuationResponse> {
     const now = new Date();
     const asOfEnd = resolveAsOfEnd(asOf, now);
     const isToday = asOfEnd.getTime() >= now.getTime();
@@ -137,8 +135,7 @@ export class StockValuationService {
       if (estimated) estimatedPriceProducts.push(p.name);
 
       const sales = salesByProduct.get(p.id);
-      const own =
-        mixMode === "product" && sales && sales.retail + sales.wholesale >= MIN_PRODUCT_SAMPLE_UNITS ? sales : null;
+      const own = sales && sales.retail + sales.wholesale >= MIN_PRODUCT_SAMPLE_UNITS ? sales : null;
       let share: { retail: number; wholesale: number } | null = null;
       let mixSource: MixSource = "none";
       if (own) {
@@ -166,6 +163,9 @@ export class StockValuationService {
         retailValue: round2(retailValue),
         wholesaleValue: round2(wholesaleValue),
         expectedValue: share ? round2(share.retail * retailValue + share.wholesale * wholesaleValue) : null,
+        expectedValueGlobal: globalShare
+          ? round2(globalShare.retail * retailValue + globalShare.wholesale * wholesaleValue)
+          : null,
       });
     }
 
@@ -175,12 +175,12 @@ export class StockValuationService {
     return {
       asOf: asOfEnd.toISOString(),
       isToday,
-      mixMode,
       totals: {
         factory: sum((r) => r.factoryValue),
         retail: sum((r) => r.retailValue),
         wholesale: sum((r) => r.wholesaleValue),
         expected: allHaveExpected ? sum((r) => r.expectedValue ?? 0) : null,
+        expectedGlobal: globalShare ? sum((r) => r.expectedValueGlobal ?? 0) : null,
       },
       mix: {
         retailUnits: globalR,
