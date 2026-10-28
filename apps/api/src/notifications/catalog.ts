@@ -47,6 +47,15 @@ export type CrmAssignPayload = {
   assignedUserId?: string | null;
 };
 
+export type CustomerLapsedPayload = {
+  profileId: string;
+  customerName: string;
+  /** Días desde la última compra; sin compras, desde que se cargó el cliente al CRM. */
+  daysSincePurchase: number;
+  /** null si el cliente nunca compró. */
+  lastPurchaseAt: string | null;
+};
+
 const as = <T>(p: unknown) => p as T;
 
 export const NOTIFICATION_CATALOG: Record<string, CatalogEntry> = {
@@ -95,6 +104,22 @@ export const NOTIFICATION_CATALOG: Record<string, CatalogEntry> = {
     resolveEntity: (p: unknown) => ({
       entityType: "customer_profile" as const,
       entityId: as<CrmFollowupPayload>(p).profileId,
+    }),
+  },
+
+  "crm.customer_lapsed": {
+    dedupeHours: 24,
+    messageTemplate: (p: unknown) => {
+      const x = as<CustomerLapsedPayload>(p);
+      if (!x.lastPurchaseAt) {
+        return `Cliente mayorista sin compras registradas (cargado hace ${x.daysSincePurchase} días): ${x.customerName}`;
+      }
+      const last = new Date(x.lastPurchaseAt).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+      return `Cliente mayorista sin comprar hace ${x.daysSincePurchase} días: ${x.customerName} (última compra ${last})`;
+    },
+    resolveEntity: (p: unknown) => ({
+      entityType: "customer_profile" as const,
+      entityId: as<CustomerLapsedPayload>(p).profileId,
     }),
   },
 
