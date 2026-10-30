@@ -12,6 +12,7 @@ export const CASH_FLOW_CATEGORIES: ReadonlyArray<{
   { name: "Venta directa", type: "INCOME", classification: "OPERATING" },
   { name: "Venta Mayorista", type: "INCOME", classification: "OPERATING" },
   { name: "Otros ingresos", type: "INCOME", classification: "OPERATING" },
+  { name: "Venta a socios", type: "INCOME", classification: "OPERATING" },
   { name: "Materia prima", type: "EXPENSE", classification: "OPERATING" },
   { name: "Carbón / Leña", type: "EXPENSE", classification: "OPERATING" },
   { name: "Packaging", type: "EXPENSE", classification: "OPERATING" },
