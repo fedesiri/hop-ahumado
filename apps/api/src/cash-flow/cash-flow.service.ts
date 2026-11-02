@@ -158,7 +158,7 @@ export class CashFlowService {
         description: dto.description.trim(),
         counterparty: dto.counterparty?.trim() || null,
         amount: new Decimal(dto.amount),
-        paymentMethod: dto.paymentMethod ?? null,
+        paymentMethod: dto.paymentMethod || null,
         status: dto.status ?? "SETTLED",
         payer: dto.payer?.trim() || CASH_BOX_PAYER,
         reimbursementStatus: dto.reimbursementStatus || null,

@@ -40,7 +40,7 @@ export class CreateCashMovementDto {
   @IsNumber()
   amount!: number;
 
-  @IsOptional()
+  @ValidateIf((_, v) => v !== undefined && v !== null && v !== "")
   @IsIn(CASH_FLOW_PAYMENT_METHODS)
   paymentMethod?: string;
 
