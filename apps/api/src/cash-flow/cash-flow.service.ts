@@ -161,7 +161,7 @@ export class CashFlowService {
         paymentMethod: dto.paymentMethod ?? null,
         status: dto.status ?? "SETTLED",
         payer: dto.payer?.trim() || CASH_BOX_PAYER,
-        reimbursementStatus: dto.reimbursementStatus ?? null,
+        reimbursementStatus: dto.reimbursementStatus || null,
         notes: dto.notes?.trim() || null,
         needsReview: dto.needsReview ?? false,
       },

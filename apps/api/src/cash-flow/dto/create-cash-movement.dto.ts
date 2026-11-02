@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  ValidateIf,
 } from "class-validator";
 import { CASH_FLOW_PAYMENT_METHODS, CASH_FLOW_REIMBURSEMENT_STATUSES } from "../cash-flow.catalog";
 
@@ -51,7 +52,7 @@ export class CreateCashMovementDto {
   @IsString()
   payer?: string;
 
-  @IsOptional()
+  @ValidateIf((_, v) => v !== undefined && v !== null && v !== "")
   @IsIn(CASH_FLOW_REIMBURSEMENT_STATUSES)
   reimbursementStatus?: string;
 
