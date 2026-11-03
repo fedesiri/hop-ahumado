@@ -54,6 +54,10 @@ export function ProductRow({
   const unitPrice = unitPriceOverride ?? list;
   const unitLabel = UNIT_LABELS[unit] ?? unit;
   const meta = [category, unitLabel].filter(Boolean).join(" · ");
+  // Productos por kilo se venden en envases de medio kilo: paso de 0,5 y salto de 1 kg.
+  const isKg = unit === ProductUnit.KG;
+  const step = isKg ? 0.5 : 1;
+  const bulk = isKg ? 1 : 12;
 
   return (
     <div className={`oc-prow${quantity > 0 ? " has-qty" : ""}`}>
@@ -74,32 +78,32 @@ export function ProductRow({
       <div className="oc-stepwrap">
         <button
           className="oc-stepbtn oc-stepbtn--bulk"
-          disabled={quantity < 12}
-          onClick={() => { vibrate(); onQuantityChange(Math.max(0, quantity - 12)); }}
-          title="-12"
+          disabled={quantity < bulk}
+          onClick={() => { vibrate(); onQuantityChange(Math.max(0, quantity - bulk)); }}
+          title={`-${bulk}`}
         >
-          -12
+          -{bulk}
         </button>
         <button
           className="oc-stepbtn"
           disabled={quantity === 0}
-          onClick={() => { vibrate(); onQuantityChange(Math.max(0, quantity - 1)); }}
+          onClick={() => { vibrate(); onQuantityChange(Math.max(0, quantity - step)); }}
         >
           −
         </button>
         <div className={`oc-stepval${quantity > 0 ? " has" : ""}`}>{quantity}</div>
         <button
           className="oc-stepbtn oc-stepbtn--plus"
-          onClick={() => { vibrate(); onQuantityChange(quantity + 1); }}
+          onClick={() => { vibrate(); onQuantityChange(quantity + step); }}
         >
           +
         </button>
         <button
           className="oc-stepbtn oc-stepbtn--bulk oc-stepbtn--plus"
-          onClick={() => { vibrate(); onQuantityChange(quantity + 12); }}
-          title="+12"
+          onClick={() => { vibrate(); onQuantityChange(quantity + bulk); }}
+          title={`+${bulk}`}
         >
-          +12
+          +{bulk}
         </button>
       </div>
     </div>
