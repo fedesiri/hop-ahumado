@@ -79,6 +79,14 @@ function toResponse(m: CashMovement): CashMovementResponse {
 }
 
 const orderPaymentKey = (paymentId: string) => `order-payment:${paymentId}`;
+/** Ingreso pendiente de una orden aún sin cobrar (se convierte al registrar el pago). */
+const orderPendingKey = (orderId: string) => `order-pending:${orderId}`;
+
+const ORDER_CATEGORY_BY_PRICE_LIST: Record<string, string> = {
+  mayorista: "Venta Mayorista",
+  fabrica: "Venta a socios",
+  catering: "Eventos",
+};
 
 /** Fecha "YYYY-MM-DD" (o ISO) → medianoche UTC de ese día. */
 function parseDay(value: string): Date {
@@ -404,27 +412,43 @@ export class CashFlowService {
     const line = await tx.businessLine.findUnique({ where: { id: businessLineId }, select: { slug: true } });
     if (line?.slug !== "MEAT") return;
 
-    const category = order.priceListType === "mayorista" ? "Venta Mayorista" : "Venta directa";
+    const category = ORDER_CATEGORY_BY_PRICE_LIST[order.priceListType ?? ""] ?? "Venta directa";
     const customer = order.customer?.name;
     const externalKey = orderPaymentKey(payment.id);
+    const date = parseDay(new Date(payment.createdAt.getTime() - 3 * 3600 * 1000).toISOString()); // día en Argentina (UTC-3)
+    const paymentMethod = payment.method === "CASH" ? "Efectivo" : "Transferencia";
+
+    // Si la orden ya tenía un ingreso pendiente (carga histórica), se cobra ese en vez de duplicarlo.
+    const pending = await tx.cashMovement.findUnique({ where: { externalKey: orderPendingKey(order.id) } });
+    if (pending) {
+      const remaining = Number(pending.amount) - Number(payment.amount);
+      if (remaining <= 0.5) {
+        await tx.cashMovement.update({
+          where: { id: pending.id },
+          data: { externalKey, status: "SETTLED", amount: payment.amount, paymentMethod, date },
+        });
+        return;
+      }
+      await tx.cashMovement.update({ where: { id: pending.id }, data: { amount: new Decimal(remaining) } });
+    }
     await tx.cashMovement.upsert({
       where: { externalKey },
       create: {
         externalKey,
         businessLineId,
-        date: parseDay(new Date(payment.createdAt.getTime() - 3 * 3600 * 1000).toISOString()), // día en Argentina (UTC-3)
+        date,
         type: "INCOME",
         category,
         classification: "OPERATING",
         description: `Orden ${order.id.slice(0, 8)}${customer ? ` - ${customer}` : ""}`,
         counterparty: customer ?? null,
         amount: payment.amount,
-        paymentMethod: payment.method === "CASH" ? "Efectivo" : "Transferencia",
+        paymentMethod,
         status: "SETTLED",
         payer: CASH_BOX_PAYER,
         notes: "Generado automáticamente desde una orden",
       },
-      update: { paymentMethod: payment.method === "CASH" ? "Efectivo" : "Transferencia" },
+      update: { paymentMethod },
     });
   }
 
@@ -437,10 +461,9 @@ export class CashFlowService {
   }
 
   /** Borra los ingresos generados por los pagos de una orden que se elimina. */
-  async removeOrderPayments(tx: Prisma.TransactionClient, paymentIds: string[]): Promise<void> {
-    if (paymentIds.length === 0) return;
+  async removeOrderPayments(tx: Prisma.TransactionClient, orderId: string, paymentIds: string[]): Promise<void> {
     await tx.cashMovement.deleteMany({
-      where: { externalKey: { in: paymentIds.map(orderPaymentKey) } },
+      where: { externalKey: { in: [orderPendingKey(orderId), ...paymentIds.map(orderPaymentKey)] } },
     });
   }
 

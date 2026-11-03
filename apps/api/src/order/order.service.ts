@@ -885,7 +885,7 @@ export class OrderService {
         }
       }
       const payments = await tx.payment.findMany({ where: { orderId: id }, select: { id: true } });
-      await this.cashFlow.removeOrderPayments(tx, payments.map((p) => p.id));
+      await this.cashFlow.removeOrderPayments(tx, id, payments.map((p) => p.id));
       await tx.payment.deleteMany({ where: { orderId: id } });
       await tx.orderItem.deleteMany({ where: { orderId: id } });
       return tx.order.delete({ where: { id } });
