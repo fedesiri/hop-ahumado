@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { formatCurrency } from "@/lib/format-currency";
 import { getPriceForType, type PriceType } from "@/lib/order-calculator/price-types";
 import { ProductUnit, type Price } from "@/lib/types";
@@ -114,23 +115,37 @@ export function ProductRow({
         >
           −
         </button>
-        <div className={`oc-stepval${quantity > 0 ? " has" : ""}`}>{quantity}</div>
+        <div
+          className={`oc-stepval${quantity > 0 ? " has" : ""}`}
+          style={isKg ? { cursor: "pointer" } : undefined}
+          onClick={isKg ? openWeightModal : undefined}
+        >
+          {quantity}
+        </div>
         <button
           className="oc-stepbtn oc-stepbtn--plus"
-          onClick={() => { vibrate(); onQuantityChange(quantity + step); }}
+          onClick={() => {
+            vibrate();
+            if (isKg && quantity === 0) openWeightModal();
+            else onQuantityChange(quantity + step);
+          }}
         >
           +
         </button>
         <button
           className="oc-stepbtn oc-stepbtn--bulk oc-stepbtn--plus"
-          onClick={() => { vibrate(); onQuantityChange(quantity + bulk); }}
+          onClick={() => {
+            vibrate();
+            if (isKg && quantity === 0) openWeightModal();
+            else onQuantityChange(quantity + bulk);
+          }}
           title={`+${bulk}`}
         >
           +{bulk}
         </button>
       </div>
 
-      {weightOpen && (
+      {weightOpen && typeof document !== "undefined" && createPortal(
         <div className="ha-modal-backdrop" onClick={() => setWeightOpen(false)}>
           <div
             className="ha-modal"
@@ -204,7 +219,8 @@ export function ProductRow({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
