@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { formatCurrency } from "@/lib/format-currency";
 import { getPriceForType, type PriceType } from "@/lib/order-calculator/price-types";
 import { ProductUnit, type Price } from "@/lib/types";
@@ -130,7 +131,7 @@ export function ProductRow({
         </button>
       </div>
 
-      {weightOpen && (
+      {weightOpen && typeof document !== "undefined" && createPortal(
         <div className="ha-modal-backdrop" onClick={() => setWeightOpen(false)}>
           <div
             className="ha-modal"
@@ -204,7 +205,8 @@ export function ProductRow({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
