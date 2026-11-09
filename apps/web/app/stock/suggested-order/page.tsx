@@ -4,12 +4,56 @@ import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { toast } from "@/lib/toast";
 import type { DistributorSuggestedOrderResponse } from "@/lib/types";
-import { ChevronDown, Copy } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, Copy, Minus, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 
-function formatCostDate(iso: string | null) {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+type OrderItem = DistributorSuggestedOrderResponse["items"][number];
+
+function boxLabel(n: number) {
+  return `${n} ${n === 1 ? "caja" : "cajas"}`;
+}
+
+function QtyStepper({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const set = (n: number) => onChange(Math.min(1000, Math.max(0, Math.floor(n) || 0)));
+  return (
+    <div className="ps-qty">
+      <button type="button" className="ps-qty__b" onClick={() => set(value - 1)} disabled={value <= 0} aria-label="Menos">
+        <Minus size={14} />
+      </button>
+      <input
+        type="number" inputMode="numeric" min={0} max={1000} className="ps-qty__i"
+        value={value} onChange={(e) => set(Number(e.target.value))} aria-label="Cajas a pedir"
+      />
+      <button type="button" className="ps-qty__b" onClick={() => set(value + 1)} aria-label="Más">
+        <Plus size={14} />
+      </button>
+    </div>
+  );
+}
+
+function buildWhatsAppText(categoryName: string, items: OrderItem[], qty: Record<string, number>, unitsPerBox: number) {
+  const picked = items.filter((i) => (qty[i.productId] ?? 0) > 0);
+  const date = new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+  const lines: string[] = [`Pedido ${categoryName} — ${date}`];
+  if (picked.length === 0) return lines.concat("", "(Sin productos para pedir)").join("\n");
+  const groups: Array<[string, OrderItem[]]> = [
+    ["1 L", picked.filter((i) => i.format === "LITER")],
+    ["½ L", picked.filter((i) => i.format !== "LITER")],
+  ];
+  for (const [label, rows] of groups) {
+    if (rows.length === 0) continue;
+    lines.push("", label);
+    for (const r of rows) {
+      const boxes = qty[r.productId];
+      const price = r.unitCost != null ? ` — ${formatCurrency(boxes * unitsPerBox * r.unitCost)}` : "";
+      lines.push(`• ${r.name}: ${boxLabel(boxes)} (${boxes * unitsPerBox} u)${price}`);
+    }
+  }
+  const totalBoxes = picked.reduce((a, i) => a + qty[i.productId], 0);
+  const totalCost = picked.reduce((a, i) => a + (i.unitCost != null ? qty[i.productId] * unitsPerBox * i.unitCost : 0), 0);
+  const totalPrice = totalCost > 0 ? ` — aprox. ${formatCurrency(Math.round(totalCost * 100) / 100)}` : "";
+  lines.push("", `Total: ${boxLabel(totalBoxes)} (${totalBoxes * unitsPerBox} u)${totalPrice}`);
+  return lines.join("\n");
 }
 
 export default function SuggestedOrderPage() {
@@ -21,12 +65,18 @@ function SuggestedOrderContent() {
   const [order, setOrder] = useState<DistributorSuggestedOrderResponse | null>(null);
   const [params, setParams] = useState({ literTargetBoxes: 5, halfLiterTargetBoxes: 6, unitsPerBox: 12 });
   const [infoOpen, setInfoOpen] = useState(true);
+  // Cajas a pedir por producto (editable; arranca con lo sugerido).
+  const [qty, setQty] = useState<Record<string, number>>({});
+  // Si el usuario edita el texto de WhatsApp a mano, se guarda acá hasta que cambie una cantidad.
+  const [textOverride, setTextOverride] = useState<string | null>(null);
 
   const calcular = async () => {
     try {
       setLoading(true);
       const res = await apiClient.getDistributorSuggestedOrder(params);
       setOrder(res);
+      setQty(Object.fromEntries(res.items.map((i) => [i.productId, i.suggestedBoxes])));
+      setTextOverride(null);
     } catch {
       toast.error("No se pudo generar el pedido sugerido");
       setOrder(null);
@@ -35,10 +85,37 @@ function SuggestedOrderContent() {
     }
   };
 
+  const setItemQty = (productId: string, n: number) => {
+    setQty((q) => ({ ...q, [productId]: n }));
+    setTextOverride(null);
+  };
+
+  const unitsPerBox = order?.parameters.unitsPerBox ?? params.unitsPerBox;
+
+  const waText = useMemo(
+    () => (order ? buildWhatsAppText(order.parameters.categoryName, order.items, qty, order.parameters.unitsPerBox) : ""),
+    [order, qty],
+  );
+  const finalText = textOverride ?? waText;
+
+  const totals = useMemo(() => {
+    if (!order) return { boxes: 0, lines: 0, approx: 0, missingCost: 0 };
+    let boxes = 0, lines = 0, approx = 0, missingCost = 0;
+    for (const i of order.items) {
+      const b = qty[i.productId] ?? 0;
+      if (b <= 0) continue;
+      boxes += b;
+      lines += 1;
+      if (i.unitCost == null) missingCost += 1;
+      else approx += b * order.parameters.unitsPerBox * i.unitCost;
+    }
+    return { boxes, lines, approx: Math.round(approx * 100) / 100, missingCost };
+  }, [order, qty]);
+
   const copyWA = async () => {
-    if (!order?.copyText) return;
+    if (!finalText.trim() || totals.lines === 0) return;
     try {
-      await navigator.clipboard.writeText(order.copyText);
+      await navigator.clipboard.writeText(finalText);
       toast.success("Copiado al portapapeles");
     } catch {
       toast.error("No se pudo copiar");
@@ -114,7 +191,7 @@ function SuggestedOrderContent() {
         </div>
         {infoOpen && (
           <div className="ps-collapse__b">
-            Las <b>Unidades sugeridas</b> son el resultado de: (objetivo en unidades) − stock actual. Solo se muestran valores positivos. El total aproximado usa los últimos costos registrados para cada producto.
+            Las <b>cajas sugeridas</b> salen de: (objetivo en unidades) − stock actual, redondeado a cajas completas. Después podés cambiar las cajas de cada producto antes de copiar el mensaje. El total aproximado usa el último costo registrado de cada producto.
           </div>
         )}
       </div>
@@ -122,7 +199,9 @@ function SuggestedOrderContent() {
       {/* Results */}
       {order && (
         <>
-          {/* Table + mobile cards */}
+          <div className="ps-step">
+            <span className="ps-step__n">1</span> Revisá y ajustá las cajas a pedir
+          </div>
           <div className="pc-card" style={{ marginBottom: 16 }}>
             {/* Desktop table */}
             <div className="ps-tablewrap">
@@ -133,16 +212,15 @@ function SuggestedOrderContent() {
                     <th>Formato</th>
                     <th className="r">Stock actual</th>
                     <th className="r">Objetivo</th>
-                    <th className="r">Unid. sugeridas</th>
-                    <th className="r">Cajas</th>
-                    <th className="r">Costo unit.</th>
+                    <th className="r">Sugerido</th>
+                    <th className="r">Cajas a pedir</th>
                     <th className="r">Total aprox.</th>
                   </tr>
                 </thead>
                 <tbody>
                   {order.items.map((item) => {
-                    const hasSug = item.suggestedUnits > 0;
-                    const d = formatCostDate(item.costRecordedAt);
+                    const b = qty[item.productId] ?? 0;
+                    const line = item.unitCost != null ? b * unitsPerBox * item.unitCost : null;
                     return (
                       <tr key={item.productId}>
                         <td style={{ minWidth: 180 }}>{item.name}</td>
@@ -153,29 +231,15 @@ function SuggestedOrderContent() {
                         </td>
                         <td className="r">{item.currentStock}</td>
                         <td className="r">{item.targetUnits}</td>
-                        <td className={"r" + (hasSug ? " ps-sugcell" : "")}>
-                          {hasSug
-                            ? <span className="ps-sug">{item.suggestedUnits}</span>
-                            : <span style={{ color: "var(--ha-text-3)" }}>—</span>}
+                        <td className="r" style={{ color: "var(--ha-text-3)" }}>
+                          {item.suggestedBoxes > 0 ? item.suggestedBoxes : "—"}
                         </td>
                         <td className="r">
-                          {hasSug
-                            ? <span style={{ fontVariantNumeric: "tabular-nums" }}>{item.suggestedBoxes}</span>
-                            : <span style={{ color: "var(--ha-text-3)" }}>—</span>}
+                          <QtyStepper value={b} onChange={(n) => setItemQty(item.productId, n)} />
                         </td>
-                        <td className="r">
-                          {item.unitCost == null ? (
-                            <span style={{ color: "var(--ha-text-3)" }}>—</span>
-                          ) : (
-                            <div style={{ lineHeight: 1.25 }}>
-                              <div style={{ fontVariantNumeric: "tabular-nums" }}>{formatCurrency(item.unitCost)}</div>
-                              {d && <div style={{ fontSize: 10, color: "var(--ha-text-3)" }}>{d}</div>}
-                            </div>
-                          )}
-                        </td>
-                        <td className={"r" + (hasSug ? " ps-sugcell" : "")}>
-                          {hasSug && item.lineApproximateTotal != null
-                            ? <span className="ps-sug">{formatCurrency(item.lineApproximateTotal)}</span>
+                        <td className={"r" + (b > 0 ? " ps-sugcell" : "")}>
+                          {b > 0 && line != null
+                            ? <span className="ps-sug">{formatCurrency(line)}</span>
                             : <span style={{ color: "var(--ha-text-3)" }}>—</span>}
                         </td>
                       </tr>
@@ -184,8 +248,9 @@ function SuggestedOrderContent() {
                 </tbody>
                 <tfoot className="ps-tfoot">
                   <tr>
-                    <td colSpan={7}>Total aproximado</td>
-                    <td className="amt">{formatCurrency(order.costSummary.approximateTotal)}</td>
+                    <td colSpan={5}>Total · {boxLabel(totals.boxes)}</td>
+                    <td />
+                    <td className="amt">{formatCurrency(totals.approx)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -194,9 +259,10 @@ function SuggestedOrderContent() {
             {/* Mobile cards */}
             <div className="ps-cardlist">
               {order.items.map((item) => {
-                const hasSug = item.suggestedUnits > 0;
+                const b = qty[item.productId] ?? 0;
+                const line = item.unitCost != null ? b * unitsPerBox * item.unitCost : null;
                 return (
-                  <div key={item.productId} className={"ps-pcard" + (hasSug ? " has" : "")}>
+                  <div key={item.productId} className={"ps-pcard" + (b > 0 ? " has" : "")}>
                     <div className="ps-pcard__top">
                       <span className="ps-pcard__n">{item.name}</span>
                       <span className={"ps-fmt " + (item.format === "LITER" ? "ps-fmt--1" : "ps-fmt--h")}>
@@ -206,21 +272,11 @@ function SuggestedOrderContent() {
                     <div className="ps-pcard__mid">
                       <span>Stock: <strong style={{ color: "var(--ha-text)" }}>{item.currentStock}</strong></span>
                       <span>Objetivo: <strong style={{ color: "var(--ha-text)" }}>{item.targetUnits}</strong></span>
+                      <span>Sugerido: <strong style={{ color: "var(--ha-text)" }}>{item.suggestedBoxes}</strong></span>
                     </div>
                     <div className="ps-pcard__bot">
-                      <div>
-                        <span className={"ps-pcard__sug" + (hasSug ? "" : " zero")}>
-                          {hasSug ? item.suggestedUnits : "—"}
-                        </span>
-                        {hasSug && (
-                          <span className="ps-pcard__cajas">
-                            {" "}~{item.suggestedBoxes} {item.suggestedBoxes === 1 ? "caja" : "cajas"}
-                          </span>
-                        )}
-                      </div>
-                      {hasSug && item.lineApproximateTotal != null && (
-                        <span className="ps-pcard__total">{formatCurrency(item.lineApproximateTotal)}</span>
-                      )}
+                      <QtyStepper value={b} onChange={(n) => setItemQty(item.productId, n)} />
+                      {b > 0 && line != null && <span className="ps-pcard__total">{formatCurrency(line)}</span>}
                     </div>
                   </div>
                 );
@@ -228,33 +284,41 @@ function SuggestedOrderContent() {
             </div>
           </div>
 
-          {/* Summary + WhatsApp */}
+          <div className="ps-step">
+            <span className="ps-step__n">2</span> Copiá el mensaje y mandalo por WhatsApp
+          </div>
           <div className="ps-card">
             <div className="ps-summary">
               <div>
-                <p className="ps-sumtot">
-                  Total aproximado: {formatCurrency(order.costSummary.approximateTotal)}
-                </p>
+                <p className="ps-sumtot">{boxLabel(totals.boxes)} · {totals.lines} {totals.lines === 1 ? "producto" : "productos"}</p>
                 <p className="ps-sumstat">
-                  Líneas con pedido:{" "}
-                  <strong>{order.costSummary.orderLinesWithSuggestedUnits} de {order.items.length}</strong>
+                  Costo aprox.: <strong>{formatCurrency(totals.approx)}</strong>
                 </p>
-                <p className={"ps-sumstat" + (order.costSummary.orderLinesWithCost > 0 ? " g" : "")}>
-                  Con costo registrado: <strong>{order.costSummary.orderLinesWithCost}</strong>
-                </p>
-                <p className="ps-sumstat">
-                  Sin costo registrado: <strong>{order.costSummary.orderLinesMissingCost}</strong>
-                </p>
-              </div>
-              <div>
+                {totals.missingCost > 0 && (
+                  <p className="ps-sumstat">
+                    {totals.missingCost} {totals.missingCost === 1 ? "producto" : "productos"} sin costo registrado (no suma al total)
+                  </p>
+                )}
                 <button
                   className="pc-btn pc-btn--primary"
-                  style={{ width: "100%", height: 44, justifyContent: "center", gap: 8 }}
+                  style={{ width: "100%", height: 44, justifyContent: "center", gap: 8, marginTop: 14 }}
                   onClick={() => void copyWA()}
+                  disabled={totals.lines === 0}
                 >
                   <Copy size={15} /> Copiar para WhatsApp
                 </button>
-                <textarea className="ps-wa" readOnly value={order.copyText} rows={5} />
+              </div>
+              <div>
+                <div className="ps-sumstat" style={{ marginBottom: 6 }}>
+                  Así va a quedar el mensaje (podés editarlo):
+                </div>
+                <textarea
+                  className="ps-wa"
+                  style={{ marginTop: 0 }}
+                  value={finalText}
+                  onChange={(e) => setTextOverride(e.target.value)}
+                  rows={Math.min(14, Math.max(5, finalText.split("\n").length + 1))}
+                />
               </div>
             </div>
           </div>
