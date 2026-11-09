@@ -148,7 +148,12 @@ function OrdersContent() {
     return () => { cancelled = true; };
   }, [filterCustomerId]);
 
+  const latestFetchRef = useRef(0);
+
   const fetchOrders = async () => {
+    // Sin la línea resuelta no pedimos nada: si no, el backend devuelve órdenes de todas las líneas.
+    if (!selectedLineId) return;
+    const fetchId = ++latestFetchRef.current;
     try {
       setLoading(true);
       const dateFrom = filterDateFrom ? new Date(filterDateFrom + "T00:00:00").toISOString() : undefined;
@@ -161,15 +166,16 @@ function OrdersContent() {
         filterMaxTotal ? Number(filterMaxTotal) : undefined,
         filterPaymentStatus || undefined,
         (filterDelivered as "true" | "false") || undefined,
-        selectedLineId ?? undefined,
+        selectedLineId,
         filterPriceListType || undefined,
       );
+      if (fetchId !== latestFetchRef.current) return; // respuesta vieja (cambió la línea o un filtro)
       setOrders(response.data);
       setMeta(response.meta);
     } catch {
-      toast.error("Error al cargar órdenes");
+      if (fetchId === latestFetchRef.current) toast.error("Error al cargar órdenes");
     } finally {
-      setLoading(false);
+      if (fetchId === latestFetchRef.current) setLoading(false);
     }
   };
 
