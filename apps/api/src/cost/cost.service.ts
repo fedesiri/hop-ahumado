@@ -220,19 +220,21 @@ export class CostService {
     await this.eventEmitter.emitAsync(COSTING_INPUTS_CHANGED);
   }
 
+  /**
+   * El precio Fábrica sigue al costo: se archivan TODOS los precios Fábrica activos del producto
+   * (tolerando mayúsculas, tildes y espacios en la descripción) y se crea uno nuevo con el costo.
+   * Si quedara más de uno activo, otras pantallas podrían seguir leyendo el viejo.
+   */
   private async syncFabricaPrice(tx: Prisma.TransactionClient, productId: string, value: number): Promise<void> {
-    const existing = await tx.price.findFirst({
-      where: {
-        productId,
-        deactivatedAt: null,
-        OR: [
-          { description: { equals: "fabrica", mode: "insensitive" } },
-          { description: { equals: "fábrica", mode: "insensitive" } },
-        ],
-      },
+    const active = await tx.price.findMany({
+      where: { productId, deactivatedAt: null },
+      select: { id: true, description: true },
     });
-    if (existing) {
-      await tx.price.update({ where: { id: existing.id }, data: { deactivatedAt: new Date() } });
+    const normalize = (d: string | null) =>
+      (d ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    const fabricaIds = active.filter((p) => normalize(p.description) === "fabrica").map((p) => p.id);
+    if (fabricaIds.length > 0) {
+      await tx.price.updateMany({ where: { id: { in: fabricaIds } }, data: { deactivatedAt: new Date() } });
     }
     await tx.price.create({ data: { productId, value, description: "fabrica" } });
   }

@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Price, Prisma } from "@prisma/client";
+import { COSTING_INPUTS_CHANGED } from "../common/costing-events";
 import { buildPaginatedResponse, PaginatedResponse, PAGINATION } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { BulkReplacePriceDto } from "./dto/bulk-replace-price.dto";
@@ -7,21 +9,38 @@ import { CreatePriceDto } from "./dto/create-price.dto";
 import { ReplacePriceDto } from "./dto/replace-price.dto";
 import { UpdatePriceDto } from "./dto/update-price.dto";
 
+function isFabricaList(description: string | null | undefined): boolean {
+  return (
+    (description ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() === "fabrica"
+  );
+}
+
 @Injectable()
 export class PriceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async create(dto: CreatePriceDto) {
     await this.validateProductExists(dto.productId);
     await this.assertChannelSellable(dto.productId, dto.description);
-    return this.prisma.price.create({
-      data: {
-        productId: dto.productId,
-        value: dto.value,
-        description: dto.description ?? undefined,
-      },
-      include: { product: true },
+    const fabrica = isFabricaList(dto.description);
+    if (fabrica) await this.assertFabricaEditable(dto.productId);
+    const created = await this.prisma.$transaction(async (tx) => {
+      const price = await tx.price.create({
+        data: {
+          productId: dto.productId,
+          value: dto.value,
+          description: dto.description ?? undefined,
+        },
+        include: { product: true },
+      });
+      if (fabrica) await this.syncCostFromFabrica(tx, dto.productId, dto.value);
+      return price;
     });
+    if (fabrica) await this.notifyCostingInputsChanged();
+    return created;
   }
 
   async findAll(
@@ -113,11 +132,21 @@ export class PriceService {
     if (dto.deactivatedAt !== undefined) {
       data.deactivatedAt = dto.deactivatedAt === null ? null : new Date(dto.deactivatedAt);
     }
-    return this.prisma.price.update({
-      where: { id },
-      data,
-      include: { product: true },
+    const finalProductId = dto.productId ?? existing.productId;
+    const finalDescription = dto.description ?? existing.description;
+    const stillActive = data.deactivatedAt !== undefined ? data.deactivatedAt === null : existing.deactivatedAt === null;
+    const syncCost =
+      isFabricaList(finalDescription) &&
+      stillActive &&
+      (dto.value !== undefined || dto.description !== undefined || dto.productId !== undefined);
+    if (syncCost) await this.assertFabricaEditable(finalProductId);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const price = await tx.price.update({ where: { id }, data, include: { product: true } });
+      if (syncCost) await this.syncCostFromFabrica(tx, finalProductId, Number(price.value));
+      return price;
     });
+    if (syncCost) await this.notifyCostingInputsChanged();
+    return updated;
   }
 
   async remove(id: string) {
@@ -138,9 +167,11 @@ export class PriceService {
     const preCheck = await this.prisma.price.findMany({ where: { id: { in: uniqueIds } } });
     for (const p of preCheck) {
       await this.assertChannelSellable(p.productId, p.description);
+      if (isFabricaList(p.description)) await this.assertFabricaEditable(p.productId);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    let touchedFabrica = false;
+    const result = await this.prisma.$transaction(async (tx) => {
       const records = await tx.price.findMany({
         where: { id: { in: uniqueIds } },
       });
@@ -183,11 +214,17 @@ export class PriceService {
           },
           include: { product: { select: { id: true, name: true } } },
         });
+        if (isFabricaList(description)) {
+          await this.syncCostFromFabrica(tx, productId, dto.value);
+          touchedFabrica = true;
+        }
         created.push(row);
       }
 
       return { count: created.length, prices: created };
     });
+    if (touchedFabrica) await this.notifyCostingInputsChanged();
+    return result;
   }
 
   /** Archiva el precio y crea uno nuevo con la misma lista (`description`) y producto. */
@@ -197,8 +234,10 @@ export class PriceService {
       throw new NotFoundException(`Precio con id "${id}" no encontrado`);
     }
     await this.assertChannelSellable(target.productId, target.description);
+    const fabrica = isFabricaList(target.description);
+    if (fabrica) await this.assertFabricaEditable(target.productId);
 
-    return this.prisma.$transaction(async (tx) => {
+    const replaced = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.price.findUnique({ where: { id } });
       if (!existing) {
         throw new NotFoundException(`Precio con id "${id}" no encontrado`);
@@ -212,7 +251,7 @@ export class PriceService {
         data: { deactivatedAt: new Date() },
       });
 
-      return tx.price.create({
+      const row = await tx.price.create({
         data: {
           productId: existing.productId,
           value: dto.value,
@@ -220,7 +259,54 @@ export class PriceService {
         },
         include: { product: { select: { id: true, name: true } } },
       });
+      if (fabrica) await this.syncCostFromFabrica(tx, existing.productId, dto.value);
+      return row;
     });
+    if (fabrica) await this.notifyCostingInputsChanged();
+    return replaced;
+  }
+
+  /**
+   * El Costo sigue al precio Fábrica (y viceversa, ver CostService.syncFabricaPrice): se archivan los costos
+   * activos del producto y se crea uno nuevo con ese valor. Se escribe directo con Prisma (no vía CostService)
+   * para no volver a disparar la sincronización inversa.
+   */
+  private async syncCostFromFabrica(tx: Prisma.TransactionClient, productId: string, value: number): Promise<void> {
+    const active = await tx.cost.findMany({ where: { productId, deactivatedAt: null }, select: { id: true, value: true } });
+    if (active.length === 1 && Math.abs(Number(active[0].value) - value) < 0.005) return;
+    if (active.length > 0) {
+      await tx.cost.updateMany({
+        where: { id: { in: active.map((c) => c.id) } },
+        data: { deactivatedAt: new Date() },
+      });
+    }
+    await tx.cost.create({ data: { productId, value } });
+  }
+
+  /** Recalcula las recetas que usan este costo (ver RecipeCostSyncService). */
+  private async notifyCostingInputsChanged() {
+    await this.eventEmitter.emitAsync(COSTING_INPUTS_CHANGED);
+  }
+
+  /**
+   * Ingredientes (cantidad y precio de compra) y recetas derivan su costo de otros datos: tocar su precio
+   * Fábrica a mano pisaría ese costo y lo desincronizaría. Mismo criterio que CostService.
+   */
+  private async assertFabricaEditable(productId: string) {
+    const [ingredient, recipe] = await Promise.all([
+      this.prisma.ingredientProfile.findUnique({ where: { productId } }),
+      this.prisma.recipeCostProfile.findUnique({ where: { productId } }),
+    ]);
+    if (ingredient) {
+      throw new BadRequestException(
+        "Este producto tiene cantidad y precio de compra cargados en Ingredientes. Editá el costo desde esa pantalla para no desincronizar los datos.",
+      );
+    }
+    if (recipe) {
+      throw new BadRequestException(
+        "Este producto es una receta: su costo (y su precio Fábrica) se calculan desde Recetas y se actualizan solos.",
+      );
+    }
   }
 
   private async validateProductExists(productId: string) {
