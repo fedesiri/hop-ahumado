@@ -100,6 +100,15 @@ export interface DistributorSuggestedOrderUnknown {
   isDeactivated: boolean;
 }
 
+export interface DistributorSuggestedOrderCase {
+  productId: string;
+  name: string;
+  currentStock: number;
+  isDeactivated: boolean;
+  unitCost: number | null;
+  costRecordedAt: string | null;
+}
+
 export interface DistributorSuggestedOrderResponse {
   parameters: {
     categoryName: string;
@@ -109,6 +118,7 @@ export interface DistributorSuggestedOrderResponse {
   };
   items: DistributorSuggestedOrderItem[];
   unknownFormat: DistributorSuggestedOrderUnknown[];
+  cases: DistributorSuggestedOrderCase[];
   costSummary: DistributorSuggestedOrderCostSummary;
   copyText: string;
 }

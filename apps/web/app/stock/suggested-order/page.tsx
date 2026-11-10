@@ -8,12 +8,19 @@ import { ChevronDown, Copy, Minus, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 
 type OrderItem = DistributorSuggestedOrderResponse["items"][number];
+type CaseItem = DistributorSuggestedOrderResponse["cases"][number];
+
+function unitLabel(n: number) {
+  return `${n} ${n === 1 ? "unidad" : "unidades"}`;
+}
 
 function boxLabel(n: number) {
   return `${n} ${n === 1 ? "caja" : "cajas"}`;
 }
 
-function QtyStepper({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+function QtyStepper({
+  value, onChange, label = "Cajas a pedir",
+}: { value: number; onChange: (n: number) => void; label?: string }) {
   const set = (n: number) => onChange(Math.min(1000, Math.max(0, Math.floor(n) || 0)));
   return (
     <div className="ps-qty">
@@ -22,7 +29,7 @@ function QtyStepper({ value, onChange }: { value: number; onChange: (n: number) 
       </button>
       <input
         type="number" inputMode="numeric" min={0} max={1000} className="ps-qty__i"
-        value={value} onChange={(e) => set(Number(e.target.value))} aria-label="Cajas a pedir"
+        value={value} onChange={(e) => set(Number(e.target.value))} aria-label={label}
       />
       <button type="button" className="ps-qty__b" onClick={() => set(value + 1)} aria-label="Más">
         <Plus size={14} />
@@ -31,11 +38,15 @@ function QtyStepper({ value, onChange }: { value: number; onChange: (n: number) 
   );
 }
 
-function buildWhatsAppText(categoryName: string, items: OrderItem[], qty: Record<string, number>, unitsPerBox: number) {
+function buildWhatsAppText(
+  categoryName: string, items: OrderItem[], qty: Record<string, number>, unitsPerBox: number,
+  cases: CaseItem[], caseQty: Record<string, number>,
+) {
   const picked = items.filter((i) => (qty[i.productId] ?? 0) > 0);
+  const pickedCases = cases.filter((c) => (caseQty[c.productId] ?? 0) > 0);
   const date = new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" });
   const lines: string[] = [`Pedido ${categoryName} — ${date}`];
-  if (picked.length === 0) return lines.concat("", "(Sin productos para pedir)").join("\n");
+  if (picked.length === 0 && pickedCases.length === 0) return lines.concat("", "(Sin productos para pedir)").join("\n");
   const groups: Array<[string, OrderItem[]]> = [
     ["1 L", picked.filter((i) => i.format === "LITER")],
     ["½ L", picked.filter((i) => i.format !== "LITER")],
@@ -49,10 +60,22 @@ function buildWhatsAppText(categoryName: string, items: OrderItem[], qty: Record
       lines.push(`• ${r.name}: ${boxLabel(boxes)} (${boxes * unitsPerBox} u)${price}`);
     }
   }
+  if (pickedCases.length > 0) {
+    lines.push("", "Estuches");
+    for (const c of pickedCases) {
+      const n = caseQty[c.productId];
+      const price = c.unitCost != null ? ` — ${formatCurrency(n * c.unitCost)}` : "";
+      lines.push(`• ${c.name}: ${unitLabel(n)}${price}`);
+    }
+  }
   const totalBoxes = picked.reduce((a, i) => a + qty[i.productId], 0);
-  const totalCost = picked.reduce((a, i) => a + (i.unitCost != null ? qty[i.productId] * unitsPerBox * i.unitCost : 0), 0);
+  const totalCost =
+    picked.reduce((a, i) => a + (i.unitCost != null ? qty[i.productId] * unitsPerBox * i.unitCost : 0), 0) +
+    pickedCases.reduce((a, c) => a + (c.unitCost != null ? caseQty[c.productId] * c.unitCost : 0), 0);
   const totalPrice = totalCost > 0 ? ` — aprox. ${formatCurrency(Math.round(totalCost * 100) / 100)}` : "";
-  lines.push("", `Total: ${boxLabel(totalBoxes)} (${totalBoxes * unitsPerBox} u)${totalPrice}`);
+  const totalCases = pickedCases.reduce((a, c) => a + caseQty[c.productId], 0);
+  const casesPart = totalCases > 0 ? ` + ${unitLabel(totalCases)} de estuches` : "";
+  lines.push("", `Total: ${boxLabel(totalBoxes)} (${totalBoxes * unitsPerBox} u)${casesPart}${totalPrice}`);
   return lines.join("\n");
 }
 
@@ -67,6 +90,8 @@ function SuggestedOrderContent() {
   const [infoOpen, setInfoOpen] = useState(true);
   // Cajas a pedir por producto (editable; arranca con lo sugerido).
   const [qty, setQty] = useState<Record<string, number>>({});
+  // Unidades de estuches a pedir por producto (sin objetivo: se cargan a mano).
+  const [caseQty, setCaseQty] = useState<Record<string, number>>({});
   // Si el usuario edita el texto de WhatsApp a mano, se guarda acá hasta que cambie una cantidad.
   const [textOverride, setTextOverride] = useState<string | null>(null);
 
@@ -76,6 +101,7 @@ function SuggestedOrderContent() {
       const res = await apiClient.getDistributorSuggestedOrder(params);
       setOrder(res);
       setQty(Object.fromEntries(res.items.map((i) => [i.productId, i.suggestedBoxes])));
+      setCaseQty(Object.fromEntries(res.cases.map((c) => [c.productId, 0])));
       setTextOverride(null);
     } catch {
       toast.error("No se pudo generar el pedido sugerido");
@@ -90,17 +116,30 @@ function SuggestedOrderContent() {
     setTextOverride(null);
   };
 
+  const setCaseItemQty = (productId: string, n: number) => {
+    setCaseQty((q) => ({ ...q, [productId]: n }));
+    setTextOverride(null);
+  };
+
   const unitsPerBox = order?.parameters.unitsPerBox ?? params.unitsPerBox;
 
   const waText = useMemo(
-    () => (order ? buildWhatsAppText(order.parameters.categoryName, order.items, qty, order.parameters.unitsPerBox) : ""),
-    [order, qty],
+    () => (order ? buildWhatsAppText(order.parameters.categoryName, order.items, qty, order.parameters.unitsPerBox, order.cases, caseQty) : ""),
+    [order, qty, caseQty],
   );
   const finalText = textOverride ?? waText;
 
   const totals = useMemo(() => {
-    if (!order) return { boxes: 0, lines: 0, approx: 0, missingCost: 0 };
-    let boxes = 0, lines = 0, approx = 0, missingCost = 0;
+    if (!order) return { boxes: 0, lines: 0, approx: 0, missingCost: 0, caseUnits: 0 };
+    let boxes = 0, lines = 0, approx = 0, missingCost = 0, caseUnits = 0;
+    for (const c of order.cases) {
+      const n = caseQty[c.productId] ?? 0;
+      if (n <= 0) continue;
+      caseUnits += n;
+      lines += 1;
+      if (c.unitCost == null) missingCost += 1;
+      else approx += n * c.unitCost;
+    }
     for (const i of order.items) {
       const b = qty[i.productId] ?? 0;
       if (b <= 0) continue;
@@ -109,8 +148,8 @@ function SuggestedOrderContent() {
       if (i.unitCost == null) missingCost += 1;
       else approx += b * order.parameters.unitsPerBox * i.unitCost;
     }
-    return { boxes, lines, approx: Math.round(approx * 100) / 100, missingCost };
-  }, [order, qty]);
+    return { boxes, lines, approx: Math.round(approx * 100) / 100, missingCost, caseUnits };
+  }, [order, qty, caseQty]);
 
   const copyWA = async () => {
     if (!finalText.trim() || totals.lines === 0) return;
@@ -284,13 +323,68 @@ function SuggestedOrderContent() {
             </div>
           </div>
 
+          {order.cases.length > 0 && (
+            <div className="pc-card" style={{ marginBottom: 16 }}>
+              <div className="ps-card__h" style={{ padding: "14px 16px 0" }}>Estuches</div>
+              <div className="ps-card__sub" style={{ padding: "0 16px" }}>Se piden por unidad (no por caja) y no tienen objetivo automático</div>
+              <div className="ps-tablewrap">
+                <table className="ps-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th className="r">Stock actual</th>
+                      <th className="r">Unidades a pedir</th>
+                      <th className="r">Total aprox.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {order.cases.map((c) => {
+                      const n = caseQty[c.productId] ?? 0;
+                      return (
+                        <tr key={c.productId}>
+                          <td style={{ minWidth: 180 }}>{c.name}</td>
+                          <td className="r">{c.currentStock}</td>
+                          <td className="r">
+                            <QtyStepper value={n} label="Unidades a pedir" onChange={(v) => setCaseItemQty(c.productId, v)} />
+                          </td>
+                          <td className={"r" + (n > 0 ? " ps-sugcell" : "")}>
+                            {n > 0 && c.unitCost != null
+                              ? <span className="ps-sug">{formatCurrency(n * c.unitCost)}</span>
+                              : <span style={{ color: "var(--ha-text-3)" }}>—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="ps-cardlist">
+                {order.cases.map((c) => {
+                  const n = caseQty[c.productId] ?? 0;
+                  return (
+                    <div key={c.productId} className={"ps-pcard" + (n > 0 ? " has" : "")}>
+                      <div className="ps-pcard__top"><span className="ps-pcard__n">{c.name}</span></div>
+                      <div className="ps-pcard__mid">
+                        <span>Stock: <strong style={{ color: "var(--ha-text)" }}>{c.currentStock}</strong></span>
+                      </div>
+                      <div className="ps-pcard__bot">
+                        <QtyStepper value={n} label="Unidades a pedir" onChange={(v) => setCaseItemQty(c.productId, v)} />
+                        {n > 0 && c.unitCost != null && <span className="ps-pcard__total">{formatCurrency(n * c.unitCost)}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="ps-step">
             <span className="ps-step__n">2</span> Copiá el mensaje y mandalo por WhatsApp
           </div>
           <div className="ps-card">
             <div className="ps-summary">
               <div>
-                <p className="ps-sumtot">{boxLabel(totals.boxes)} · {totals.lines} {totals.lines === 1 ? "producto" : "productos"}</p>
+                <p className="ps-sumtot">{boxLabel(totals.boxes)}{totals.caseUnits > 0 ? ` + ${unitLabel(totals.caseUnits)} de estuches` : ""} · {totals.lines} {totals.lines === 1 ? "producto" : "productos"}</p>
                 <p className="ps-sumstat">
                   Costo aprox.: <strong>{formatCurrency(totals.approx)}</strong>
                 </p>

@@ -28,6 +28,22 @@ export interface DistributorSuggestedOrderItem {
   lineApproximateTotal: number | null;
 }
 
+/** Producto que se pide por unidad suelta (estuches), sin objetivo ni cajas. */
+export interface DistributorSuggestedOrderCase {
+  productId: string;
+  name: string;
+  currentStock: number;
+  isDeactivated: boolean;
+  unitCost: number | null;
+  costRecordedAt: string | null;
+}
+
+/** Estuches reales: "Estuche..." sin "/" (Estuche/Copa y Estuche/Vaso son combos de promo armados al vender). */
+function isCaseProduct(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return n.startsWith("estuche") && !n.includes("/");
+}
+
 export interface DistributorSuggestedOrderUnknown {
   productId: string;
   name: string;
@@ -56,6 +72,7 @@ export interface DistributorSuggestedOrderResponse {
   };
   items: DistributorSuggestedOrderItem[];
   unknownFormat: DistributorSuggestedOrderUnknown[];
+  cases: DistributorSuggestedOrderCase[];
   costSummary: DistributorSuggestedOrderCostSummary;
   copyText: string;
 }
@@ -103,8 +120,20 @@ export class DistributorSuggestedOrderService {
 
     const items: DistributorSuggestedOrderItem[] = [];
     const unknownFormat: DistributorSuggestedOrderUnknown[] = [];
+    const cases: DistributorSuggestedOrderCase[] = [];
 
     for (const p of products) {
+      if (isCaseProduct(p.name)) {
+        cases.push({
+          productId: p.id,
+          name: p.name,
+          currentStock: Math.max(0, Math.floor(Number(p.stock) || 0)),
+          isDeactivated: p.deactivationDate != null,
+          unitCost: null,
+          costRecordedAt: null,
+        });
+        continue;
+      }
       const format = classifyBeerFormat(p.name, p.unit);
       const targetUnits = format === "HALF_LITER" ? halfLiterTargetUnits : literTargetUnits;
       const targetBoxes = format === "HALF_LITER" ? halfLiterTargetBoxes : literTargetBoxes;
@@ -151,8 +180,19 @@ export class DistributorSuggestedOrderService {
       return ka[1].localeCompare(kb[1], "es");
     });
     unknownFormat.sort((a, b) => a.name.localeCompare(b.name, "es"));
+    cases.sort((a, b) => a.name.localeCompare(b.name, "es"));
 
-    const costByProduct = await this.getLatestActiveUnitCostByProductId(items.map((i) => i.productId));
+    const costByProduct = await this.getLatestActiveUnitCostByProductId([
+      ...items.map((i) => i.productId),
+      ...cases.map((c) => c.productId),
+    ]);
+    for (const c of cases) {
+      const cost = costByProduct.get(c.productId);
+      if (cost) {
+        c.unitCost = cost.value;
+        c.costRecordedAt = cost.createdAt.toISOString();
+      }
+    }
     for (const row of items) {
       const c = costByProduct.get(row.productId);
       if (c) {
@@ -239,6 +279,7 @@ export class DistributorSuggestedOrderService {
       },
       items,
       unknownFormat,
+      cases,
       costSummary,
       copyText,
     };
