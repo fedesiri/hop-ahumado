@@ -61,7 +61,7 @@ function buildWhatsAppText(
     }
   }
   if (pickedCases.length > 0) {
-    lines.push("", "Estuches");
+    lines.push("", "Estuches, copas y vasos");
     for (const c of pickedCases) {
       const n = caseQty[c.productId];
       const price = c.unitCost != null ? ` — ${formatCurrency(n * c.unitCost)}` : "";
@@ -74,7 +74,7 @@ function buildWhatsAppText(
     pickedCases.reduce((a, c) => a + (c.unitCost != null ? caseQty[c.productId] * c.unitCost : 0), 0);
   const totalPrice = totalCost > 0 ? ` — aprox. ${formatCurrency(Math.round(totalCost * 100) / 100)}` : "";
   const totalCases = pickedCases.reduce((a, c) => a + caseQty[c.productId], 0);
-  const casesPart = totalCases > 0 ? ` + ${unitLabel(totalCases)} de estuches` : "";
+  const casesPart = totalCases > 0 ? ` + ${unitLabel(totalCases)} de estuches, copas y vasos` : "";
   lines.push("", `Total: ${boxLabel(totalBoxes)} (${totalBoxes * unitsPerBox} u)${casesPart}${totalPrice}`);
   return lines.join("\n");
 }
@@ -325,7 +325,7 @@ function SuggestedOrderContent() {
 
           {order.cases.length > 0 && (
             <div className="pc-card" style={{ marginBottom: 16 }}>
-              <div className="ps-card__h" style={{ padding: "14px 16px 0" }}>Estuches</div>
+              <div className="ps-card__h" style={{ padding: "14px 16px 0" }}>Estuches, copas y vasos</div>
               <div className="ps-card__sub" style={{ padding: "0 16px" }}>Se piden por unidad (no por caja) y no tienen objetivo automático</div>
               <div className="ps-tablewrap">
                 <table className="ps-table">
@@ -384,7 +384,7 @@ function SuggestedOrderContent() {
           <div className="ps-card">
             <div className="ps-summary">
               <div>
-                <p className="ps-sumtot">{boxLabel(totals.boxes)}{totals.caseUnits > 0 ? ` + ${unitLabel(totals.caseUnits)} de estuches` : ""} · {totals.lines} {totals.lines === 1 ? "producto" : "productos"}</p>
+                <p className="ps-sumtot">{boxLabel(totals.boxes)}{totals.caseUnits > 0 ? ` + ${unitLabel(totals.caseUnits)} de estuches, copas y vasos` : ""} · {totals.lines} {totals.lines === 1 ? "producto" : "productos"}</p>
                 <p className="ps-sumstat">
                   Costo aprox.: <strong>{formatCurrency(totals.approx)}</strong>
                 </p>

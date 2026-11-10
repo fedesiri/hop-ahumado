@@ -28,7 +28,7 @@ export interface DistributorSuggestedOrderItem {
   lineApproximateTotal: number | null;
 }
 
-/** Producto que se pide por unidad suelta (estuches), sin objetivo ni cajas. */
+/** Producto que se pide por unidad suelta (estuches, copas y vasos), sin objetivo ni cajas. */
 export interface DistributorSuggestedOrderCase {
   productId: string;
   name: string;
@@ -38,10 +38,10 @@ export interface DistributorSuggestedOrderCase {
   costRecordedAt: string | null;
 }
 
-/** Estuches reales: "Estuche..." sin "/" (Estuche/Copa y Estuche/Vaso son combos de promo armados al vender). */
+/** Estuches, copas y vasos reales (sin "/": Estuche/Copa y Estuche/Vaso son combos de promo armados al vender). */
 function isCaseProduct(name: string): boolean {
   const n = name.trim().toLowerCase();
-  return n.startsWith("estuche") && !n.includes("/");
+  return /^(estuche|copa|vaso)\b/.test(n) && !n.includes("/");
 }
 
 export interface DistributorSuggestedOrderUnknown {
