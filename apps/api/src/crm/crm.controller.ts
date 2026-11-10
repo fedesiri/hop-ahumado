@@ -41,8 +41,11 @@ export class CrmController {
   }
 
   @Get("customers/:profileId")
-  getCustomerDetail(@Param("profileId") profileId: string) {
-    return this.crmService.getCrmCustomerDetail(profileId);
+  getCustomerDetail(
+    @Param("profileId") profileId: string,
+    @Query("businessLineId") businessLineId?: string,
+  ) {
+    return this.crmService.getCrmCustomerDetail(profileId, businessLineId || undefined);
   }
 
   @Post("customers")

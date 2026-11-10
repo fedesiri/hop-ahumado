@@ -357,7 +357,7 @@ export class ApiClient {
     );
   }
 
-  async getCrmCustomerDetail(profileId: string): Promise<
+  async getCrmCustomerDetail(profileId: string, businessLineId?: string): Promise<
     CustomerProfile & {
       customer: Customer;
       responsible?: User | null;
@@ -369,7 +369,7 @@ export class ApiClient {
       daysSinceLastContact: number | null;
     }
   > {
-    return this.request(`/crm/customers/${profileId}`);
+    return this.request(`/crm/customers/${profileId}${this.buildParams({ businessLineId })}`);
   }
 
   async createCrmCustomer(data: CreateCrmCustomerRequest): Promise<{

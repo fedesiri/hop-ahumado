@@ -11,6 +11,7 @@ import {
 } from "@/lib/crm-profile-options";
 import dayjs from "@/lib/dayjs";
 import { formatCurrency } from "@/lib/format-currency";
+import { useLineContext } from "@/lib/line-context";
 import { orderPriceListDisplayLabel } from "@/lib/order-calculator/price-types";
 import { formatPaymentMethodsOnly, orderPaymentStatusLabel } from "@/lib/order-labels";
 import { toast } from "@/lib/toast";
@@ -89,6 +90,7 @@ export default function CrmCustomerDetailPage() {
   const params = useParams();
   const profileId = params.profileId as string;
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const { selectedLineId } = useLineContext();
   const [detail, setDetail] = useState<DetailData | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -147,16 +149,17 @@ export default function CrmCustomerDetailPage() {
   );
 
   const fetchDetail = useCallback(async () => {
+    if (!selectedLineId) return;
     try {
       setLoading(true);
-      const data = await apiClient.getCrmCustomerDetail(profileId);
+      const data = await apiClient.getCrmCustomerDetail(profileId, selectedLineId);
       setDetail(data);
     } catch {
       toast.error("Error al cargar el cliente");
     } finally {
       setLoading(false);
     }
-  }, [profileId]);
+  }, [profileId, selectedLineId]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -168,16 +171,26 @@ export default function CrmCustomerDetailPage() {
   }, []);
 
   const fetchOrders = useCallback(async (customerId: string) => {
+    if (!selectedLineId) return;
     try {
       setOrdersLoading(true);
-      const response = await apiClient.getOrders(1, 100, customerId);
-      setOrders(response.data);
+      const response = await apiClient.getOrders(
+        1, 100, customerId, undefined, undefined, undefined, undefined, undefined,
+        undefined, undefined, selectedLineId,
+      );
+      // Un pedido puede mezclar productos de ambas líneas: se dejan solo los ítems de la línea activa.
+      setOrders(
+        response.data.map((o) => ({
+          ...o,
+          orderItems: o.orderItems?.filter((i) => i.product?.businessLineId === selectedLineId),
+        })),
+      );
     } catch {
       toast.error("Error al cargar pedidos del cliente");
     } finally {
       setOrdersLoading(false);
     }
-  }, []);
+  }, [selectedLineId]);
 
   useEffect(() => {
     if (profileId) { void fetchDetail(); void fetchUsers(); }

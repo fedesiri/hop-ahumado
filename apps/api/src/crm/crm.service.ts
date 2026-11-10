@@ -239,7 +239,7 @@ export class CrmService {
     return buildPaginatedResponse(data, total, page, limit);
   }
 
-  async getCrmCustomerDetail(profileId: string) {
+  async getCrmCustomerDetail(profileId: string, businessLineId?: string) {
     const profile = await this.prisma.customerProfile.findUnique({
       where: { id: profileId },
       include: {
@@ -253,7 +253,12 @@ export class CrmService {
       throw new NotFoundException(`Perfil de cliente con id "${profileId}" no encontrado`);
     }
     const agg = await this.prisma.order.aggregate({
-      where: { customerId: profile.customerId },
+      where: {
+        customerId: profile.customerId,
+        ...(businessLineId
+          ? { orderItems: { some: { product: { businessLineId } } } }
+          : {}),
+      },
       _max: { deliveryDate: true },
     });
     const lastOrderDeliveryAt = agg._max.deliveryDate ?? null;
