@@ -885,6 +885,7 @@ export interface CrmDashboardResponse {
   interactionCount: number;
   opportunityCount: number;
   byStatus: { status: string | null; count: number }[];
+  byChannel: { channel: string | null; count: number }[];
 }
 
 export interface CreatePriceRequest {

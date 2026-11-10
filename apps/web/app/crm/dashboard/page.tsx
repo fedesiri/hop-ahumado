@@ -1,7 +1,8 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
-import type { CrmCustomerListItem, CrmDashboardResponse, CustomerInteraction } from "@/lib/types";
+import { useLineContext } from "@/lib/line-context";
+import type { CrmCustomerListItem, CrmDashboardResponse } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
 import { MessageSquare, Users, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -34,28 +35,20 @@ function statusStyle(status: string | null): StatusStyle {
 
 export default function CrmDashboardPage() {
   const router = useRouter();
+  const { selectedLineId } = useLineContext();
   const [data, setData] = useState<CrmDashboardResponse | null>(null);
   const [stale, setStale] = useState<CrmCustomerListItem[]>([]);
   const [byChannel, setByChannel] = useState<{ channel: string; label: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchAllInteractions = async (): Promise<CustomerInteraction[]> => {
-      const first = await apiClient.getCustomerInteractions(1, 100);
-      const all = [...first.data];
-      for (let p = 2; p <= first.meta.totalPages; p++) {
-        const more = await apiClient.getCustomerInteractions(p, 100);
-        all.push(...more.data);
-      }
-      return all;
-    };
-
+    if (!selectedLineId) return;
     const load = async () => {
       try {
-        const [dashboard, customers, interactions] = await Promise.all([
-          apiClient.getCrmDashboard(),
-          apiClient.listCrmCustomers(1, 100),
-          fetchAllInteractions(),
+        setLoading(true);
+        const [dashboard, customers] = await Promise.all([
+          apiClient.getCrmDashboard(selectedLineId),
+          apiClient.listCrmCustomers(1, 100, undefined, undefined, undefined, undefined, undefined, undefined, undefined, selectedLineId),
         ]);
         setData(dashboard);
         const filtered = (customers.data ?? [])
@@ -64,9 +57,9 @@ export default function CrmDashboardPage() {
           .slice(0, 6);
         setStale(filtered);
         const channelMap = new Map<string, number>();
-        for (const i of interactions) {
+        for (const i of dashboard.byChannel) {
           const ch = i.channel ?? "OTHER";
-          channelMap.set(ch, (channelMap.get(ch) ?? 0) + 1);
+          channelMap.set(ch, (channelMap.get(ch) ?? 0) + i.count);
         }
         const channelRows = Array.from(channelMap.entries())
           .map(([channel, count]) => ({ channel, label: CHANNEL_LABEL[channel] ?? channel, count }))
@@ -79,7 +72,7 @@ export default function CrmDashboardPage() {
       }
     };
     void load();
-  }, []);
+  }, [selectedLineId]);
 
   if (loading) {
     return (

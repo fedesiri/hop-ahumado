@@ -20,8 +20,8 @@ export class CrmController {
   ) {}
 
   @Get("dashboard")
-  getDashboard() {
-    return this.crmService.getDashboard();
+  getDashboard(@Query("businessLineId") businessLineId?: string) {
+    return this.crmService.getDashboard(businessLineId || undefined);
   }
 
   @Get("customers")
@@ -36,6 +36,7 @@ export class CrmController {
       query.responsibleId,
       query.responsibleSearch,
       query.lapsedWholesale,
+      query.businessLineId,
     );
   }
 

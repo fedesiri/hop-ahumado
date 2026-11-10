@@ -101,6 +101,7 @@ export class CrmService {
     responsibleId?: string,
     responsibleSearch?: string,
     lapsedWholesale?: boolean,
+    businessLineId?: string,
   ): Promise<PaginatedResponse<CrmCustomerListItem>> {
     const skip = (page - 1) * limit;
 
@@ -116,6 +117,18 @@ export class CrmService {
     const responsibleSearchTrim = t(responsibleSearch);
 
     const where: any = {};
+
+    // Pedidos de la línea (por los productos de sus ítems). Los clientes sin ningún
+    // pedido (recién cargados) aparecen en ambas líneas.
+    const lineOrderWhere = businessLineId
+      ? { orderItems: { some: { product: { businessLineId } } } }
+      : {};
+    if (businessLineId) {
+      where.AND = [
+        ...(where.AND ?? []),
+        { OR: [{ orders: { some: lineOrderWhere } }, { orders: { none: {} } }] },
+      ];
+    }
 
     const or: any[] = [];
     if (searchTrim) {
@@ -153,7 +166,7 @@ export class CrmService {
     }
 
     if (lapsedWholesale) {
-      const lapsed = await findLapsedWholesaleCustomers(this.prisma);
+      const lapsed = await findLapsedWholesaleCustomers(this.prisma, new Date(), businessLineId);
       where.AND = [...(where.AND ?? []), { profile: { is: { id: { in: lapsed.map((l) => l.profileId) } } } }];
     }
 
@@ -185,7 +198,7 @@ export class CrmService {
         ? []
         : await this.prisma.order.groupBy({
             by: ["customerId"],
-            where: { customerId: { in: customerIds } },
+            where: { customerId: { in: customerIds }, ...lineOrderWhere },
             _max: { deliveryDate: true },
           });
     const lastDeliveryByCustomerId = new Map(
@@ -276,22 +289,40 @@ export class CrmService {
     return { customer, profile };
   }
 
-  async getDashboard() {
-    const [profileCount, interactionCount, opportunityCount, byStatus] = await Promise.all([
-      this.prisma.customerProfile.count(),
-      this.prisma.customerInteraction.count(),
-      this.prisma.customerOpportunity.count(),
-      this.prisma.customerProfile.groupBy({
-        by: ["status"],
-        _count: { id: true },
-        where: { status: { not: null } },
-      }),
-    ]);
+  async getDashboard(businessLineId?: string) {
+    // Mismo criterio que el listado: clientes con pedidos de la línea o sin pedidos.
+    const profileWhere = businessLineId
+      ? {
+          customer: {
+            OR: [
+              { orders: { some: { orderItems: { some: { product: { businessLineId } } } } } },
+              { orders: { none: {} } },
+            ],
+          },
+        }
+      : {};
+    const [profileCount, interactionCount, opportunityCount, byStatus, byChannel] =
+      await Promise.all([
+        this.prisma.customerProfile.count({ where: profileWhere }),
+        this.prisma.customerInteraction.count({ where: { profile: profileWhere } }),
+        this.prisma.customerOpportunity.count({ where: { customerProfile: profileWhere } }),
+        this.prisma.customerProfile.groupBy({
+          by: ["status"],
+          _count: { id: true },
+          where: { ...profileWhere, status: { not: null } },
+        }),
+        this.prisma.customerInteraction.groupBy({
+          by: ["channel"],
+          _count: { id: true },
+          where: { profile: profileWhere },
+        }),
+      ]);
     return {
       profileCount,
       interactionCount,
       opportunityCount,
       byStatus: byStatus.map((s) => ({ status: s.status, count: s._count.id })),
+      byChannel: byChannel.map((c) => ({ channel: c.channel, count: c._count.id })),
     };
   }
 }

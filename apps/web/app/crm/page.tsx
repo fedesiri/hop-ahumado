@@ -9,6 +9,7 @@ import {
   normalizeCrmStatusForForm,
 } from "@/lib/crm-profile-options";
 import dayjs from "@/lib/dayjs";
+import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import type { CreateCrmCustomerRequest, CrmCustomerListItem, PaginationMeta, User } from "@/lib/types";
 import { formatStatusLabel } from "@/lib/utils";
@@ -61,6 +62,7 @@ export default function CrmPage() {
 function CrmContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { selectedLineId } = useLineContext();
   const [list, setList] = useState<CrmCustomerListItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -173,6 +175,7 @@ function CrmContent() {
   );
 
   const fetchList = useCallback(async () => {
+    if (!selectedLineId) return;
     try {
       setLoading(true);
       const response = await apiClient.listCrmCustomers(
@@ -185,6 +188,7 @@ function CrmContent() {
         responsibleIdFilter || undefined,
         undefined,
         lapsedFilter,
+        selectedLineId,
       );
       setList(response.data);
       setMeta(response.meta);
@@ -193,7 +197,9 @@ function CrmContent() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, statusFilter, sourceFilter, customerTypeFilter, responsibleIdFilter, lapsedFilter]);
+  }, [pagination.page, pagination.limit, search, statusFilter, sourceFilter, customerTypeFilter, responsibleIdFilter, lapsedFilter, selectedLineId]);
+
+  useEffect(() => { setPagination((p) => ({ ...p, page: 1 })); }, [selectedLineId]);
 
   useEffect(() => { void fetchList(); void fetchUsers(); }, [fetchList]);
 

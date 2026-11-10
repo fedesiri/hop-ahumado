@@ -35,4 +35,9 @@ export class GetCrmCustomersQueryDto extends PaginationQueryDto {
   @IsBoolean()
   /** Solo clientes mayoristas con 30+ días sin comprar (misma regla que el aviso de la campanita). */
   lapsedWholesale?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  /** Línea de negocio (Hop / Alumo): filtra clientes y métricas de pedidos por esa línea. */
+  businessLineId?: string;
 }

@@ -24,13 +24,20 @@ export type LapsedWholesaleCustomer = {
 export async function findLapsedWholesaleCustomers(
   prisma: PrismaService,
   now: Date = new Date(),
+  businessLineId?: string,
 ): Promise<LapsedWholesaleCustomer[]> {
   const customers = await prisma.customer.findMany({
     where: { profile: { isNot: null } },
     select: {
       name: true,
       profile: { select: { id: true, customerType: true, createdAt: true } },
-      orders: { where: { cancelledAt: null }, select: { deliveryDate: true, priceListType: true } },
+      orders: {
+        where: {
+          cancelledAt: null,
+          ...(businessLineId ? { orderItems: { some: { product: { businessLineId } } } } : {}),
+        },
+        select: { deliveryDate: true, priceListType: true },
+      },
     },
   });
 

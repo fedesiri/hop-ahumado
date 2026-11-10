@@ -339,6 +339,7 @@ export class ApiClient {
     responsibleId?: string,
     responsibleSearch?: string,
     lapsedWholesale?: boolean,
+    businessLineId?: string,
   ): Promise<PaginatedResponse<CrmCustomerListItem>> {
     return this.request(
       `/crm/customers${this.buildParams({
@@ -351,6 +352,7 @@ export class ApiClient {
         responsibleId,
         responsibleSearch,
         lapsedWholesale: lapsedWholesale || undefined,
+        businessLineId,
       })}`,
     );
   }
@@ -419,8 +421,8 @@ export class ApiClient {
     });
   }
 
-  async getCrmDashboard(): Promise<CrmDashboardResponse> {
-    return this.request("/crm/dashboard");
+  async getCrmDashboard(businessLineId?: string): Promise<CrmDashboardResponse> {
+    return this.request(`/crm/dashboard${this.buildParams({ businessLineId })}`);
   }
 
   // Prices
