@@ -71,6 +71,9 @@ function StockContent() {
   const [fFromLocationId, setFFromLocationId] = useState("");
   const [fToLocationId, setFToLocationId] = useState("");
   const [fReason, setFReason] = useState("");
+  const [fDate, setFDate] = useState("");
+  const [fSupplier, setFSupplier] = useState("");
+  const [fPayLater, setFPayLater] = useState(false);
   const [fProductsCashAmount, setFProductsCashAmount] = useState("");
   const [fProductsCardAmount, setFProductsCardAmount] = useState("");
   const [rows, setRows] = useState<Array<{ productId: string; quantity: string }>>([{ productId: "", quantity: "" }]);
@@ -167,6 +170,9 @@ function StockContent() {
     setFFromLocationId(defaultLocationId);
     setFToLocationId("");
     setFReason("");
+    setFDate(new Date().toLocaleDateString("en-CA"));
+    setFSupplier("");
+    setFPayLater(false);
     setFProductsCashAmount("");
     setFProductsCardAmount("");
     setRows([{ productId: "", quantity: "" }]);
@@ -183,24 +189,37 @@ function StockContent() {
     let productsCashAmount = 0;
     let productsCardAmount = 0;
     let productsDescription = "";
+    const supplier = fSupplier.trim();
+    const reasonText = type === "IN"
+      ? [supplier ? `Proveedor: ${supplier}` : "", fReason].filter(Boolean).join(" - ")
+      : fReason;
+    const movementDay = type === "IN" ? fDate : "";
 
     if (type === "IN") {
       if (hasMissingCostForSelectedProducts) {
         toast.error(`Falta costo para: ${missingCostProductNames.join(", ")}.`);
         return;
       }
-      productsCashAmount = Number(fProductsCashAmount) || 0;
-      productsCardAmount = Number(fProductsCardAmount) || 0;
-      const productsTotalPaid = productsCashAmount + productsCardAmount;
-      if (productsTotalPaid <= 0) {
-        toast.error("Para una entrada de stock, informá el pago de los productos (efectivo y/o transferencia).");
-        return;
-      }
-      if (computedProductsCostTotal > 0 && !hasMissingCostForSelectedProducts) {
-        const diff = Math.abs(productsTotalPaid - computedProductsCostTotal);
-        if (diff > 0.01) {
-          toast.error(`El pago informado para productos no coincide con el costo calculado (${computedProductsCostTotal.toFixed(2)}).`);
+      if (!fDate) { toast.error("Elegí la fecha del movimiento."); return; }
+      if (fPayLater) {
+        if (computedProductsCostTotal <= 0) {
+          toast.error("Para dejar el pago pendiente, los productos tienen que tener costo cargado.");
           return;
+        }
+      } else {
+        productsCashAmount = Number(fProductsCashAmount) || 0;
+        productsCardAmount = Number(fProductsCardAmount) || 0;
+        const productsTotalPaid = productsCashAmount + productsCardAmount;
+        if (productsTotalPaid <= 0) {
+          toast.error("Informá el pago de los productos (efectivo y/o transferencia), o tildá \"Pagar después\".");
+          return;
+        }
+        if (computedProductsCostTotal > 0 && !hasMissingCostForSelectedProducts) {
+          const diff = Math.abs(productsTotalPaid - computedProductsCostTotal);
+          if (diff > 0.01) {
+            toast.error(`El pago informado para productos no coincide con el costo calculado (${computedProductsCostTotal.toFixed(2)}).`);
+            return;
+          }
         }
       }
       const invalidExtra = extraExpenseRows.find((r) => (Number(r.cash) > 0 || Number(r.card) > 0) && !r.description.trim());
@@ -208,7 +227,7 @@ function StockContent() {
         toast.error("Si cargás un egreso variable con monto, tenés que ponerle una descripción.");
         return;
       }
-      productsDescription = fReason ? `Productos (costo) - ${fReason}` : "Productos (costo)";
+      productsDescription = reasonText ? `Productos (costo) - ${reasonText}` : "Productos (costo)";
     }
 
     if (type === "TRANSFER") {
@@ -226,7 +245,8 @@ function StockContent() {
             productId: r.productId,
             quantity: Number(r.quantity),
             type,
-            reason: fReason || undefined,
+            reason: reasonText || undefined,
+            date: movementDay || undefined,
             ...(type === "TRANSFER"
               ? { fromLocationId: fFromLocationId, toLocationId: fToLocationId }
               : { locationId: fLocationId }),
@@ -239,30 +259,44 @@ function StockContent() {
           toast.error("Seleccioná una línea de negocio antes de registrar una entrada.");
           return;
         }
-        await apiClient.createExpense({ description: productsDescription, cashAmount: productsCashAmount, cardAmount: productsCardAmount, businessLineId: selectedLineId ?? "" });
+        if (!fPayLater) {
+          await apiClient.createExpense({ description: productsDescription, cashAmount: productsCashAmount, cardAmount: productsCardAmount, businessLineId: selectedLineId ?? "", date: movementDay });
+        }
         const validExtras = extraExpenseRows.filter((r) => Number(r.cash) > 0 || Number(r.card) > 0);
         for (const extra of validExtras) {
           const desc = extra.description.trim();
           await apiClient.createExpense({
-            description: fReason ? `${desc} - ${fReason}` : desc,
+            description: reasonText ? `${desc} - ${reasonText}` : desc,
             cashAmount: Number(extra.cash) || 0,
             cardAmount: Number(extra.card) || 0,
             businessLineId: selectedLineId ?? "",
+            date: movementDay,
           });
         }
 
-        const today = new Date();
-        const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        const date = movementDay;
         const cashFlowRows = [
           { category: "Materia prima", description: productsDescription, cash: productsCashAmount, card: productsCardAmount },
           ...validExtras.map((e) => ({
             category: "Otros gastos",
-            description: fReason ? `${e.description.trim()} - ${fReason}` : e.description.trim(),
+            description: reasonText ? `${e.description.trim()} - ${reasonText}` : e.description.trim(),
             cash: Number(e.cash) || 0,
             card: Number(e.card) || 0,
           })),
         ];
         try {
+          if (fPayLater) {
+            // Sin pago todavía: queda como deuda pendiente en Flujo de caja.
+            await apiClient.createCashMovement(selectedLineId, {
+              date,
+              type: "EXPENSE",
+              category: "Materia prima",
+              description: productsDescription,
+              counterparty: supplier || undefined,
+              amount: computedProductsCostTotal,
+              status: "PENDING",
+            });
+          }
           for (const row of cashFlowRows) {
             for (const [amount, paymentMethod] of [[row.cash, "Efectivo"], [row.card, "Transferencia"]] as const) {
               if (amount <= 0) continue;
@@ -476,22 +510,40 @@ function StockContent() {
 
               {fType === "IN" && (
                 <>
+                  <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                    <div className="ha-field" style={{ minWidth: 160, flex: 1 }}>
+                      <label className="ha-label">Fecha</label>
+                      <input type="date" className="ha-input" value={fDate} onChange={(e) => setFDate(e.target.value)} />
+                    </div>
+                    <div className="ha-field" style={{ minWidth: 200, flex: 2 }}>
+                      <label className="ha-label">Proveedor</label>
+                      <input className="ha-input" placeholder="A quién se le compra" value={fSupplier} onChange={(e) => setFSupplier(e.target.value)} />
+                    </div>
+                  </div>
+
                   <div style={{ marginBottom: 16, paddingTop: 12, borderTop: "1px solid var(--ha-border)" }}>
                     <p style={{ margin: "0 0 8px 0", color: "var(--ha-text)", fontWeight: 600 }}>Pago de productos</p>
                     <p style={{ margin: "0 0 12px 0", color: "var(--ha-text-3)", fontSize: 13 }}>
                       Costo total calculado: <span style={{ color: "var(--ha-green)" }}>{formatCurrency(computedProductsCostTotal)}</span>
                     </p>
-                    <div className="ha-field" style={{ marginBottom: 12 }}>
-                      <label className="ha-label">Efectivo</label>
-                      <input type="number" className="ha-input" min={0} step={0.01} placeholder="Monto en efectivo" value={fProductsCashAmount} onChange={(e) => setFProductsCashAmount(e.target.value)} />
-                    </div>
-                    <div className="ha-field">
-                      <label className="ha-label">Transferencia</label>
-                      <input type="number" className="ha-input" min={0} step={0.01} placeholder="Monto por transferencia" value={fProductsCardAmount} onChange={(e) => setFProductsCardAmount(e.target.value)} />
-                    </div>
-                    <p style={{ margin: "8px 0 0 0", color: "var(--ha-text-3)", fontSize: 13 }}>
-                      Efectivo + transferencia debe coincidir con el costo calculado.
-                    </p>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, fontSize: 13 }}>
+                      <input type="checkbox" checked={fPayLater} onChange={(e) => setFPayLater(e.target.checked)} /> Pagar después (queda pendiente en Flujo de caja)
+                    </label>
+                    {!fPayLater && (
+                      <>
+                        <div className="ha-field" style={{ marginBottom: 12 }}>
+                          <label className="ha-label">Efectivo</label>
+                          <input type="number" className="ha-input" min={0} step={0.01} placeholder="Monto en efectivo" value={fProductsCashAmount} onChange={(e) => setFProductsCashAmount(e.target.value)} />
+                        </div>
+                        <div className="ha-field">
+                          <label className="ha-label">Transferencia</label>
+                          <input type="number" className="ha-input" min={0} step={0.01} placeholder="Monto por transferencia" value={fProductsCardAmount} onChange={(e) => setFProductsCardAmount(e.target.value)} />
+                        </div>
+                        <p style={{ margin: "8px 0 0 0", color: "var(--ha-text-3)", fontSize: 13 }}>
+                          Efectivo + transferencia debe coincidir con el costo calculado.
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   <div style={{ marginBottom: 16, paddingTop: 12, borderTop: "1px solid var(--ha-border)" }}>

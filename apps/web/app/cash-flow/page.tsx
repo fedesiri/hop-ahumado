@@ -325,6 +325,11 @@ function MovementsTab({ lineId, config, onChanged }: { lineId: string; config: C
   };
 
   const settle = async (m: CashMovement) => {
+    // Sin medio de pago no se puede saber de qué caja sale: se abre la edición para elegirlo.
+    if (!m.paymentMethod) {
+      setEditing({ ...m, status: "SETTLED" });
+      return;
+    }
     try {
       await apiClient.updateCashMovement(m.id, { status: "SETTLED" });
       toast.success(m.type === "INCOME" ? "Marcado como cobrado" : "Marcado como pagado");

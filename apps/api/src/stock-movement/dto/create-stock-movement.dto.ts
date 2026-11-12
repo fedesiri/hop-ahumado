@@ -1,6 +1,6 @@
 import { StockMovementType } from "@prisma/client";
 import { Type } from "class-transformer";
-import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
+import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, Matches, MaxLength } from "class-validator";
 
 export class CreateStockMovementDto {
   @IsUUID("4", { message: "productId debe ser un UUID válido" })
@@ -32,4 +32,9 @@ export class CreateStockMovementDto {
   @IsString()
   @MaxLength(500)
   reason?: string;
+
+  /** Fecha del movimiento (YYYY-MM-DD). Si no se envía, es ahora. */
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "date debe tener formato YYYY-MM-DD" })
+  date?: string;
 }

@@ -15,6 +15,11 @@ type StockMovementWithProduct = StockMovement & {
   toLocation?: { id: string; name: string } | null;
 };
 
+/** YYYY-MM-DD → mediodía UTC de ese día (evita corrimientos de zona horaria). */
+function movementDate(date?: string): Date | undefined {
+  return date ? new Date(`${date}T12:00:00.000Z`) : undefined;
+}
+
 @Injectable()
 export class StockMovementService {
   constructor(
@@ -111,6 +116,7 @@ export class StockMovementService {
             quantity: dto.quantity,
             type: StockMovementType.TRANSFER,
             reason: dto.reason ?? undefined,
+            createdAt: movementDate(dto.date),
             fromLocationId: fromId,
             toLocationId: toId,
           },
@@ -158,6 +164,7 @@ export class StockMovementService {
           quantity: dto.quantity,
           type: dto.type,
           reason: dto.reason ?? undefined,
+          createdAt: movementDate(dto.date),
           locationId,
         },
         include: {

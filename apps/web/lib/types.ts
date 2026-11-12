@@ -934,6 +934,8 @@ export interface CreateExpenseRequest {
   description?: string;
   cashAmount?: number;
   cardAmount?: number;
+  /** YYYY-MM-DD; si falta, es hoy. */
+  date?: string;
 }
 
 export interface UpdateCostRequest {
@@ -964,6 +966,8 @@ export interface CreateStockMovementRequest {
   locationId?: string;
   fromLocationId?: string;
   toLocationId?: string;
+  /** YYYY-MM-DD; si falta, es hoy. */
+  date?: string;
 }
 
 export interface CreateStockLocationRequest {

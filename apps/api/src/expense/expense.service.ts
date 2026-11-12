@@ -28,7 +28,7 @@ export class ExpenseService {
     }
 
     const groupId = randomUUID();
-    const now = new Date();
+    const now = dto.date ? new Date(`${dto.date}T12:00:00.000Z`) : new Date();
 
     const created = await this.prisma.$transaction(async (tx) => {
       const records: ExpenseRecord[] = [];
