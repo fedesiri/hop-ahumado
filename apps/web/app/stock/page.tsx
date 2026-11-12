@@ -1,6 +1,7 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client";
+import { compressImage } from "@/lib/compress-image";
 import { formatCurrency, formatQuantity } from "@/lib/format-currency";
 import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
@@ -74,6 +75,7 @@ function StockContent() {
   const [fDate, setFDate] = useState("");
   const [fSupplier, setFSupplier] = useState("");
   const [fPayLater, setFPayLater] = useState(false);
+  const [fReceipt, setFReceipt] = useState<File | null>(null);
   const [fProductsCashAmount, setFProductsCashAmount] = useState("");
   const [fProductsCardAmount, setFProductsCardAmount] = useState("");
   const [rows, setRows] = useState<Array<{ productId: string; quantity: string }>>([{ productId: "", quantity: "" }]);
@@ -173,6 +175,7 @@ function StockContent() {
     setFDate(new Date().toLocaleDateString("en-CA"));
     setFSupplier("");
     setFPayLater(false);
+    setFReceipt(null);
     setFProductsCashAmount("");
     setFProductsCardAmount("");
     setRows([{ productId: "", quantity: "" }]);
@@ -284,10 +287,12 @@ function StockContent() {
             card: Number(e.card) || 0,
           })),
         ];
+        // Movimientos de Flujo de caja de los productos: ahí se adjunta el ticket.
+        const productMovementIds: string[] = [];
         try {
           if (fPayLater) {
             // Sin pago todavía: queda como deuda pendiente en Flujo de caja.
-            await apiClient.createCashMovement(selectedLineId, {
+            const pending = await apiClient.createCashMovement(selectedLineId, {
               date,
               type: "EXPENSE",
               category: "Materia prima",
@@ -296,22 +301,34 @@ function StockContent() {
               amount: computedProductsCostTotal,
               status: "PENDING",
             });
+            productMovementIds.push(pending.id);
           }
-          for (const row of cashFlowRows) {
+          for (const [rowIndex, row] of cashFlowRows.entries()) {
             for (const [amount, paymentMethod] of [[row.cash, "Efectivo"], [row.card, "Transferencia"]] as const) {
               if (amount <= 0) continue;
-              await apiClient.createCashMovement(selectedLineId, {
+              const created = await apiClient.createCashMovement(selectedLineId, {
                 date,
                 type: "EXPENSE",
                 category: row.category,
                 description: row.description,
+                counterparty: supplier || undefined,
                 amount,
                 paymentMethod,
               });
+              if (rowIndex === 0) productMovementIds.push(created.id);
             }
           }
         } catch {
           toast.error("El stock se registró, pero no se pudo cargar el gasto en Flujo de caja. Cargalo a mano.");
+        }
+
+        if (fReceipt && productMovementIds.length > 0) {
+          try {
+            const photo = await compressImage(fReceipt);
+            for (const id of productMovementIds) await apiClient.uploadCashReceipt(id, photo);
+          } catch {
+            toast.error("El stock se registró, pero no se pudo subir el ticket. Adjuntalo desde Flujo de caja.");
+          }
         }
       }
 
@@ -519,6 +536,18 @@ function StockContent() {
                       <label className="ha-label">Proveedor</label>
                       <input className="ha-input" placeholder="A quién se le compra" value={fSupplier} onChange={(e) => setFSupplier(e.target.value)} />
                     </div>
+                  </div>
+
+                  <div className="ha-field" style={{ marginBottom: 16 }}>
+                    <label className="ha-label">Ticket / foto del detalle (opcional)</label>
+                    {fReceipt ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                        <span>{fReceipt.name}</span>
+                        <button type="button" className="ha-btn ha-btn--secondary ha-btn--sm" onClick={() => setFReceipt(null)}>Quitar</button>
+                      </div>
+                    ) : (
+                      <input type="file" accept="image/*" className="ha-input" onChange={(e) => { setFReceipt(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+                    )}
                   </div>
 
                   <div style={{ marginBottom: 16, paddingTop: 12, borderTop: "1px solid var(--ha-border)" }}>
