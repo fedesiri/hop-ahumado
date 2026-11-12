@@ -113,7 +113,9 @@ export class ApiClient {
       throw new Error(error.message || `API Error: ${response.status}`);
     }
 
-    return response.json();
+    // Los DELETE devuelven cuerpo vacío: no se puede parsear como JSON.
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   private buildParams(params?: Record<string, any>): string {
