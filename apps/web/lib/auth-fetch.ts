@@ -1,6 +1,6 @@
 import { getFirebaseAuth, waitForFirebaseAuthReady } from "@/lib/firebase";
 
-export async function getAuthHeaders(headers?: HeadersInit) {
+export async function getAuthHeaders(headers?: HeadersInit, options: { json?: boolean } = {}) {
   await waitForFirebaseAuthReady();
 
   const mergedHeaders = new Headers(headers);
@@ -8,7 +8,7 @@ export async function getAuthHeaders(headers?: HeadersInit) {
   const user = auth.currentUser;
   const idToken = user ? await user.getIdToken() : null;
 
-  if (!mergedHeaders.has("Content-Type")) {
+  if (options.json !== false && !mergedHeaders.has("Content-Type")) {
     mergedHeaders.set("Content-Type", "application/json");
   }
 

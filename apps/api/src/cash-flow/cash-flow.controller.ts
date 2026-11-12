@@ -1,5 +1,21 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { IsUUID } from "class-validator";
+import type { Response } from "express";
 import { toLimit, toPage } from "../common/pagination";
 import { CashFlowService } from "./cash-flow.service";
 import { CreateCashMovementDto } from "./dto/create-cash-movement.dto";
@@ -45,6 +61,28 @@ export class CashFlowController {
   @Delete("movements/:id")
   remove(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string) {
     return this.cashFlowService.remove(id);
+  }
+
+  @Post("movements/:id/receipt")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 8 * 1024 * 1024 } }))
+  uploadReceipt(
+    @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
+    @UploadedFile() file: { buffer: Buffer; mimetype: string } | undefined,
+  ) {
+    return this.cashFlowService.uploadReceipt(id, file);
+  }
+
+  @Get("movements/:id/receipt")
+  async getReceipt(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string, @Res() res: Response) {
+    const { buffer, contentType } = await this.cashFlowService.getReceipt(id);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.send(buffer);
+  }
+
+  @Delete("movements/:id/receipt")
+  removeReceipt(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string) {
+    return this.cashFlowService.removeReceipt(id);
   }
 
   @Get("snapshot")

@@ -7,6 +7,8 @@ if (!admin.apps.length) {
   try {
     admin.initializeApp({
       credential: admin.credential.applicationDefault(),
+      // Bucket de Firebase Storage para tickets (ej. hop-ahumado.firebasestorage.app).
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined,
     });
   } catch (e) {
     console.warn(

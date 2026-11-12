@@ -581,6 +581,36 @@ export class ApiClient {
     });
   }
 
+  async uploadCashReceipt(id: string, file: Blob): Promise<CashMovement> {
+    const body = new FormData();
+    body.append("file", file, "ticket.jpg");
+    const headers = await getAuthHeaders(undefined, { json: false });
+    const response = await fetch(`${this.baseUrl}/cash-flow/movements/${id}/receipt`, {
+      method: "POST",
+      headers,
+      body,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || `API Error: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getCashReceiptBlob(id: string): Promise<Blob> {
+    const headers = await getAuthHeaders(undefined, { json: false });
+    const response = await fetch(`${this.baseUrl}/cash-flow/movements/${id}/receipt`, { headers });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || `API Error: ${response.status}`);
+    }
+    return response.blob();
+  }
+
+  async deleteCashReceipt(id: string): Promise<CashMovement> {
+    return this.request(`/cash-flow/movements/${id}/receipt`, { method: "DELETE" });
+  }
+
   async deleteCashMovement(id: string): Promise<void> {
     return this.request(`/cash-flow/movements/${id}`, { method: "DELETE" });
   }

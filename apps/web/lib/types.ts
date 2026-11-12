@@ -1098,6 +1098,7 @@ export interface CashMovement {
   reimbursementStatus: string | null;
   notes: string | null;
   needsReview: boolean;
+  hasReceipt: boolean;
 }
 
 export interface CashMovementsResponse extends PaginatedResponse<CashMovement> {

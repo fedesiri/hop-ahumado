@@ -419,6 +419,8 @@ model CashMovement {
   reimbursementStatus String?
   notes               String?
   needsReview         Boolean              @default(false)
+  /// Ruta del ticket/foto en Firebase Storage (null si no tiene).
+  receiptPath         String?
   /// Clave de idempotencia para importaciones (ej. xlsx:alumo:<fila>).
   externalKey         String?              @unique
   createdAt           DateTime             @default(now())

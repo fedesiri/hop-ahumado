@@ -15,7 +15,7 @@ import type {
   CashMovementType,
   CashSummary,
 } from "@/lib/types";
-import { Check, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Check, Paperclip, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 type Tab = "summary" | "movements" | "cash";
@@ -219,6 +219,22 @@ function CategoryTable({ title, rows, total }: { title: string; rows: CashSummar
 
 // ── Movimientos ────────────────────────────────────────────────────────────
 
+/** Reduce la foto (lado mayor 1600px, JPEG) antes de subirla; si falla, sube la original. */
+async function compressImage(file: File): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+    return blob ?? file;
+  } catch {
+    return file;
+  }
+}
+
 type FormState = {
   date: string;
   type: CashMovementType;
@@ -252,6 +268,19 @@ function MovementsTab({ lineId, config, onChanged }: { lineId: string; config: C
 
   const [editing, setEditing] = useState<CashMovement | "new" | null>(null);
   const [deleting, setDeleting] = useState<CashMovement | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+
+  const openReceipt = async (id: string) => {
+    try {
+      setReceiptUrl(URL.createObjectURL(await apiClient.getCashReceiptBlob(id)));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo abrir el ticket");
+    }
+  };
+  const closeReceipt = () => {
+    if (receiptUrl) URL.revokeObjectURL(receiptUrl);
+    setReceiptUrl(null);
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -404,6 +433,11 @@ function MovementsTab({ lineId, config, onChanged }: { lineId: string; config: C
                             <Check size={14} />
                           </button>
                         )}
+                        {m.hasReceipt && (
+                          <button className="pc-btn pc-btn--ghost pc-btn--sm" title="Ver ticket" onClick={() => void openReceipt(m.id)}>
+                            <Paperclip size={14} />
+                          </button>
+                        )}
                         <button className="pc-btn pc-btn--ghost pc-btn--sm" title="Editar" onClick={() => setEditing(m)}>
                           <Pencil size={14} />
                         </button>
@@ -446,6 +480,21 @@ function MovementsTab({ lineId, config, onChanged }: { lineId: string; config: C
         />
       )}
 
+      {receiptUrl && (
+        <div className="ha-modal-backdrop" onClick={closeReceipt}>
+          <div className="ha-modal" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ha-modal__head">
+              <span className="ha-modal__title">Ticket</span>
+              <button className="ha-iconbtn" onClick={closeReceipt} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="ha-modal__body" style={{ textAlign: "center" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={receiptUrl} alt="Ticket" style={{ maxWidth: "100%", maxHeight: "75vh" }} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {deleting && (
         <ConfirmDialog
           title="¿Eliminar movimiento?"
@@ -472,6 +521,8 @@ function MovementModal({
   onSaved: () => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [removeReceipt, setRemoveReceipt] = useState(false);
   const [f, setF] = useState<FormState>(() => ({
     date: movement?.date ?? todayStr(),
     type: movement?.type ?? "EXPENSE",
@@ -513,9 +564,18 @@ function MovementModal({
     };
     setSaving(true);
     try {
-      if (movement) await apiClient.updateCashMovement(movement.id, input);
-      else await apiClient.createCashMovement(lineId, input);
-      toast.success(movement ? "Movimiento actualizado" : "Movimiento registrado");
+      const saved = movement
+        ? await apiClient.updateCashMovement(movement.id, input)
+        : await apiClient.createCashMovement(lineId, input);
+      let receiptError = false;
+      try {
+        if (receiptFile) await apiClient.uploadCashReceipt(saved.id, await compressImage(receiptFile));
+        else if (removeReceipt && movement?.hasReceipt) await apiClient.deleteCashReceipt(saved.id);
+      } catch {
+        receiptError = true;
+      }
+      if (receiptError) toast.error("El movimiento se guardó, pero no se pudo subir el ticket. Editalo y probá de nuevo.");
+      else toast.success(movement ? "Movimiento actualizado" : "Movimiento registrado");
       onSaved();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al guardar el movimiento");
@@ -612,6 +672,32 @@ function MovementModal({
           <div className="ha-field" style={{ marginTop: 12 }}>
             <label className="ha-label">Observaciones</label>
             <textarea className="ha-input" rows={2} value={f.notes} onChange={(e) => set("notes", e.target.value)} />
+          </div>
+          <div className="ha-field" style={{ marginTop: 12 }}>
+            <label className="ha-label">Ticket / foto del detalle</label>
+            {receiptFile ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                <span>{receiptFile.name}</span>
+                <button type="button" className="pc-btn pc-btn--ghost pc-btn--sm" onClick={() => setReceiptFile(null)}>Quitar</button>
+              </div>
+            ) : movement?.hasReceipt && !removeReceipt ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                <span>Ya tiene un ticket cargado</span>
+                <button type="button" className="pc-btn pc-btn--ghost pc-btn--sm" onClick={() => setRemoveReceipt(true)}>Quitar</button>
+              </div>
+            ) : null}
+            {!receiptFile && (
+              <input
+                type="file"
+                accept="image/*"
+                className="ha-input"
+                onChange={(e) => {
+                  setReceiptFile(e.target.files?.[0] ?? null);
+                  setRemoveReceipt(false);
+                  e.target.value = "";
+                }}
+              />
+            )}
           </div>
           <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, fontSize: 13 }}>
             <input type="checkbox" checked={f.needsReview} onChange={(e) => set("needsReview", e.target.checked)} /> Marcar para revisar

@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { CashMovement, PaymentMethod, Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { buildPaginatedResponse, PaginatedResponse } from "../common/pagination";
+import { firebaseAdmin } from "../auth/firebase-admin";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   CASH_BOX_PAYER,
@@ -34,6 +36,7 @@ export type CashMovementResponse = {
   reimbursementStatus: string | null;
   notes: string | null;
   needsReview: boolean;
+  hasReceipt: boolean;
 };
 
 export type CashSnapshotResponse = {
@@ -75,7 +78,23 @@ function toResponse(m: CashMovement): CashMovementResponse {
     reimbursementStatus: m.reimbursementStatus,
     notes: m.notes,
     needsReview: m.needsReview,
+    hasReceipt: !!m.receiptPath,
   };
+}
+
+const RECEIPT_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const RECEIPT_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+function receiptBucket() {
+  const name = process.env.FIREBASE_STORAGE_BUCKET;
+  if (!name) {
+    throw new BadRequestException("Falta configurar FIREBASE_STORAGE_BUCKET en el servidor");
+  }
+  return firebaseAdmin.storage().bucket(name);
 }
 
 const orderPaymentKey = (paymentId: string) => `order-payment:${paymentId}`;
@@ -205,9 +224,53 @@ export class CashFlowService {
   }
 
   async remove(id: string): Promise<void> {
-    const found = await this.prisma.cashMovement.findUnique({ where: { id }, select: { id: true } });
+    const found = await this.prisma.cashMovement.findUnique({ where: { id }, select: { id: true, receiptPath: true } });
     if (!found) throw new NotFoundException(`No existe el movimiento "${id}"`);
     await this.prisma.cashMovement.delete({ where: { id } });
+    if (found.receiptPath) await this.deleteReceiptFile(found.receiptPath);
+  }
+
+  async uploadReceipt(
+    id: string,
+    file: { buffer: Buffer; mimetype: string } | undefined,
+  ): Promise<CashMovementResponse> {
+    if (!file) throw new BadRequestException("Falta el archivo del ticket");
+    if (!RECEIPT_MIME_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException("El ticket debe ser una imagen JPG, PNG o WEBP");
+    }
+    const current = await this.prisma.cashMovement.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException(`No existe el movimiento "${id}"`);
+
+    const bucket = receiptBucket();
+    const path = `cash-receipts/${id}/${randomUUID()}.${RECEIPT_EXTENSIONS[file.mimetype]}`;
+    await bucket.file(path).save(file.buffer, { contentType: file.mimetype, resumable: false });
+    const row = await this.prisma.cashMovement.update({ where: { id }, data: { receiptPath: path } });
+    if (current.receiptPath) await this.deleteReceiptFile(current.receiptPath);
+    return toResponse(row);
+  }
+
+  async getReceipt(id: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const row = await this.prisma.cashMovement.findUnique({ where: { id }, select: { receiptPath: true } });
+    if (!row?.receiptPath) throw new NotFoundException("El movimiento no tiene ticket");
+    const file = receiptBucket().file(row.receiptPath);
+    const [[buffer], [meta]] = await Promise.all([file.download(), file.getMetadata()]);
+    return { buffer, contentType: String(meta.contentType ?? "image/jpeg") };
+  }
+
+  async removeReceipt(id: string): Promise<CashMovementResponse> {
+    const current = await this.prisma.cashMovement.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException(`No existe el movimiento "${id}"`);
+    const row = await this.prisma.cashMovement.update({ where: { id }, data: { receiptPath: null } });
+    if (current.receiptPath) await this.deleteReceiptFile(current.receiptPath);
+    return toResponse(row);
+  }
+
+  private async deleteReceiptFile(path: string): Promise<void> {
+    try {
+      await receiptBucket().file(path).delete({ ignoreNotFound: true });
+    } catch {
+      // Un archivo huérfano no debe romper la operación.
+    }
   }
 
   async getSnapshot(businessLineId: string): Promise<CashSnapshotResponse> {

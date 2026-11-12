@@ -22,6 +22,7 @@ env:
   ARTIFACT_REGISTRY_REPO: ${{ vars.ARTIFACT_REGISTRY_REPO }}
   CLOUD_RUN_SERVICE_API: ${{ vars.CLOUD_RUN_SERVICE_API }}
   CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+  FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
   WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
   WIF_SERVICE_ACCOUNT: ${{ vars.WIF_SERVICE_ACCOUNT }}
   # Opcional: email de hop-api-runtime@... (script scripts/gcp-iam-bootstrap.sh). Si está vacío, Cloud Run usa la default.
@@ -71,7 +72,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --set-secrets "DATABASE_URL=DATABASE_URL:latest" \
-            --set-env-vars "NODE_ENV=production,CORS_ORIGIN=${{ env.CORS_ORIGIN }}" \
+            --set-env-vars "NODE_ENV=production,CORS_ORIGIN=${{ env.CORS_ORIGIN }},FIREBASE_STORAGE_BUCKET=${{ env.FIREBASE_STORAGE_BUCKET }}" \
             --network default \
             --subnet default \
             --vpc-egress private-ranges-only \
