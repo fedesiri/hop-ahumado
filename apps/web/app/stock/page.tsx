@@ -250,6 +250,35 @@ function StockContent() {
             businessLineId: selectedLineId ?? "",
           });
         }
+
+        const today = new Date();
+        const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        const cashFlowRows = [
+          { category: "Materia prima", description: productsDescription, cash: productsCashAmount, card: productsCardAmount },
+          ...validExtras.map((e) => ({
+            category: "Otros gastos",
+            description: fReason ? `${e.description.trim()} - ${fReason}` : e.description.trim(),
+            cash: Number(e.cash) || 0,
+            card: Number(e.card) || 0,
+          })),
+        ];
+        try {
+          for (const row of cashFlowRows) {
+            for (const [amount, paymentMethod] of [[row.cash, "Efectivo"], [row.card, "Transferencia"]] as const) {
+              if (amount <= 0) continue;
+              await apiClient.createCashMovement(selectedLineId, {
+                date,
+                type: "EXPENSE",
+                category: row.category,
+                description: row.description,
+                amount,
+                paymentMethod,
+              });
+            }
+          }
+        } catch {
+          toast.error("El stock se registró, pero no se pudo cargar el gasto en Flujo de caja. Cargalo a mano.");
+        }
       }
 
       toast.success("Movimientos de stock registrados");
