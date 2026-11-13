@@ -85,7 +85,7 @@ function StockContent() {
     void fetchMovements();
     void fetchProducts();
     void (async () => {
-      try { setLocations(await apiClient.getStockLocations()); } catch { setLocations([]); }
+      try { setLocations(await apiClient.getStockLocations(selectedLineId ?? undefined)); } catch { setLocations([]); }
     })();
   }, [pagination.page, pagination.limit, selectedLineId, typeFilter]);
 

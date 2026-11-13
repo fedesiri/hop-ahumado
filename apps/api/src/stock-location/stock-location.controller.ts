@@ -10,8 +10,8 @@ export class StockLocationController {
   constructor(private readonly stockLocationService: StockLocationService) {}
 
   @Get()
-  findAll() {
-    return this.stockLocationService.findAll();
+  findAll(@Query("businessLineId") businessLineId?: string) {
+    return this.stockLocationService.findAll(businessLineId);
   }
 
   @Post()

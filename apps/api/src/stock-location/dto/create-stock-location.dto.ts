@@ -9,4 +9,8 @@ export class CreateStockLocationDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+  @IsOptional()
+  @IsString()
+  businessLineId?: string;
 }

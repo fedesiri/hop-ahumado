@@ -652,8 +652,8 @@ export class ApiClient {
   }
 
   // Stock locations (ubicaciones de inventario)
-  async getStockLocations(): Promise<StockLocation[]> {
-    return this.request("/stock-locations");
+  async getStockLocations(businessLineId?: string): Promise<StockLocation[]> {
+    return this.request(`/stock-locations${this.buildParams({ businessLineId })}`);
   }
 
   async createStockLocation(data: CreateStockLocationRequest): Promise<StockLocation> {

@@ -98,7 +98,7 @@ export class StockMovementService {
     const movement = await this.prisma.$transaction(async (tx) => {
       const product = await tx.product.findUnique({
         where: { id: dto.productId },
-        select: { id: true, name: true, stock: true },
+        select: { id: true, name: true, stock: true, businessLineId: true },
       });
       if (!product) {
         throw new BadRequestException(`Producto con id "${dto.productId}" no encontrado`);
@@ -140,7 +140,7 @@ export class StockMovementService {
         };
       }
 
-      const defaultId = await this.inventory.getDefaultLocationId(tx);
+      const defaultId = await this.inventory.getDefaultLocationId(tx, product.businessLineId);
       const locationId = dto.locationId ?? defaultId;
 
       const delta =

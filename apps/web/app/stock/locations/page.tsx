@@ -3,7 +3,7 @@
 import { LocationStockModal } from "@/components/stock/location-stock-modal";
 import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
-import type { StockBalanceRow, StockLocation } from "@/lib/types";
+import type { BusinessLineEntity, StockBalanceRow, StockLocation } from "@/lib/types";
 import { toast } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
@@ -29,6 +29,8 @@ function StockLocationsContent() {
 
   const [fname, setFname] = useState("");
   const [fisDefault, setFisDefault] = useState(false);
+  const [fLineId, setFLineId] = useState("");
+  const [lines, setLines] = useState<BusinessLineEntity[]>([]);
   const [fnameErr, setFnameErr] = useState(false);
   const [fTransferTo, setFTransferTo] = useState("");
   const [fTransferErr, setFTransferErr] = useState(false);
@@ -57,7 +59,7 @@ function StockLocationsContent() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const locs = await apiClient.getStockLocations();
+      const locs = await apiClient.getStockLocations(selectedLineId ?? undefined);
       setLocations(locs);
       void fetchStockCounts(locs);
     } catch {
@@ -66,18 +68,22 @@ function StockLocationsContent() {
     } finally {
       setLoading(false);
     }
-  }, [fetchStockCounts]);
+  }, [fetchStockCounts, selectedLineId]);
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    apiClient.getBusinessLines().then(setLines).catch(() => setLines([]));
+  }, []);
+
   const openCreate = () => {
-    setFname(""); setFisDefault(false); setFnameErr(false);
+    setFname(""); setFisDefault(false); setFnameErr(false); setFLineId(selectedLineId ?? "");
     setModalMode("create");
   };
 
   const openEdit = (loc: StockLocation) => {
     setEditingLocation(loc);
-    setFname(loc.name); setFisDefault(loc.isDefault); setFnameErr(false);
+    setFname(loc.name); setFisDefault(loc.isDefault); setFnameErr(false); setFLineId(loc.businessLineId ?? "");
     setModalMode("edit");
   };
 
@@ -108,10 +114,10 @@ function StockLocationsContent() {
     setFnameErr(false); setSubmitting(true);
     try {
       if (modalMode === "create") {
-        await apiClient.createStockLocation({ name: fname.trim(), isDefault: fisDefault });
+        await apiClient.createStockLocation({ name: fname.trim(), isDefault: fisDefault, businessLineId: fLineId || undefined });
         toast.success("Ubicación creada");
       } else if (editingLocation) {
-        await apiClient.updateStockLocation(editingLocation.id, { name: fname.trim(), isDefault: fisDefault });
+        await apiClient.updateStockLocation(editingLocation.id, { name: fname.trim(), isDefault: fisDefault, businessLineId: fLineId || null });
         toast.success("Ubicación actualizada");
       }
       closeModal();
@@ -323,6 +329,15 @@ function StockLocationsContent() {
                   autoFocus
                 />
                 {fnameErr && <span className="ha-error">Ingresá un nombre</span>}
+              </div>
+              <div className="ha-field" style={{ marginBottom: 16 }}>
+                <label className="ha-label">Línea de negocio</label>
+                <select className="ha-select" value={fLineId} onChange={(e) => setFLineId(e.target.value)}>
+                  <option value="">Sin asignar (se ve en todas las líneas)</option>
+                  {lines.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div

@@ -22,7 +22,7 @@ export class ProductService {
     const data = this.mapCreateDtoToPrisma(dto);
     return this.prisma.$transaction(async (tx) => {
       const product = await tx.product.create({ data });
-      const defaultLocId = await this.inventory.getDefaultLocationId(tx);
+      const defaultLocId = await this.inventory.getDefaultLocationId(tx, dto.businessLineId);
       const qty = dto.stock ?? 0;
       await tx.stockBalance.upsert({
         where: { productId_locationId: { productId: product.id, locationId: defaultLocId } },

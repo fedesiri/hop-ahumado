@@ -172,6 +172,7 @@ export interface StockLocation {
   id: string;
   name: string;
   isDefault: boolean;
+  businessLineId: string | null;
   createdAt: string;
 }
 
@@ -973,11 +974,13 @@ export interface CreateStockMovementRequest {
 export interface CreateStockLocationRequest {
   name: string;
   isDefault?: boolean;
+  businessLineId?: string;
 }
 
 export interface UpdateStockLocationRequest {
   name?: string;
   isDefault?: boolean;
+  businessLineId?: string | null;
 }
 
 export interface TransferAllStockRequest {

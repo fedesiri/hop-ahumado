@@ -11,4 +11,8 @@ export class UpdateStockLocationDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+  @IsOptional()
+  @IsString()
+  businessLineId?: string;
 }

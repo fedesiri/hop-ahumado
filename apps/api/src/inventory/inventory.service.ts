@@ -6,8 +6,14 @@ import { PrismaService } from "../prisma/prisma.service";
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getDefaultLocationId(tx: Prisma.TransactionClient = this.prisma): Promise<string> {
-    const loc = await tx.stockLocation.findFirst({ where: { isDefault: true } });
+  async getDefaultLocationId(
+    tx: Prisma.TransactionClient = this.prisma,
+    businessLineId?: string,
+  ): Promise<string> {
+    const forLine = businessLineId
+      ? await tx.stockLocation.findFirst({ where: { isDefault: true, businessLineId } })
+      : null;
+    const loc = forLine ?? (await tx.stockLocation.findFirst({ where: { isDefault: true } }));
     if (!loc) {
       throw new InternalServerErrorException("No hay ubicación de stock por defecto configurada");
     }

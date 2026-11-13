@@ -20,6 +20,7 @@ model BusinessLine {
   productionPlans       ProductionPlan[]
   quotes                Quote[]
   cashMovements         CashMovement[]
+  stockLocations        StockLocation[]
   cashSnapshots         CashSnapshot[]
 }
 
@@ -123,12 +124,17 @@ model StockLocation {
   id              String          @id @default(uuid())
   name            String
   isDefault       Boolean         @default(false)
+  /// Linea de negocio duena de la ubicacion. Null = sin asignar (visible en todas las lineas).
+  businessLineId  String?
+  businessLine    BusinessLine?   @relation(fields: [businessLineId], references: [id])
   createdAt       DateTime        @default(now())
   ordersFulfilled Order[]         @relation("OrderFulfillmentLocation")
   balances        StockBalance[]
   movementsFrom   StockMovement[] @relation("MovementFromLocation")
   movementsHere   StockMovement[] @relation("MovementAtLocation")
   movementsTo     StockMovement[] @relation("MovementToLocation")
+
+  @@index([businessLineId])
 }
 
 model StockBalance {

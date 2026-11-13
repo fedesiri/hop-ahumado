@@ -13,39 +13,43 @@ export class StockLocationService {
     private readonly inventory: InventoryService,
   ) {}
 
-  findAll() {
+  /** Con linea: ubicaciones de esa linea y las sin asignar. */
+  findAll(businessLineId?: string) {
     return this.prisma.stockLocation.findMany({
+      where: businessLineId ? { OR: [{ businessLineId }, { businessLineId: null }] } : undefined,
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
     });
   }
 
   async create(dto: CreateStockLocationDto) {
     return this.prisma.$transaction(async (tx) => {
-      const existingCount = await tx.stockLocation.count();
+      const scope = { businessLineId: dto.businessLineId ?? null };
+      const existingCount = await tx.stockLocation.count({ where: scope });
       let isDefault = dto.isDefault === true;
       if (existingCount === 0) {
         isDefault = true;
       }
       if (isDefault) {
-        await tx.stockLocation.updateMany({ data: { isDefault: false } });
+        await tx.stockLocation.updateMany({ where: scope, data: { isDefault: false } });
       }
       return tx.stockLocation.create({
-        data: { name: dto.name.trim(), isDefault },
+        data: { name: dto.name.trim(), isDefault, ...scope },
       });
     });
   }
 
   async update(id: string, dto: UpdateStockLocationDto) {
-    if (dto.name === undefined && dto.isDefault === undefined) {
-      throw new BadRequestException("Enviá al menos name o isDefault para actualizar");
+    if (dto.name === undefined && dto.isDefault === undefined && dto.businessLineId === undefined) {
+      throw new BadRequestException("Enviá al menos name, isDefault o businessLineId para actualizar");
     }
     return this.prisma.$transaction(async (tx) => {
       const loc = await tx.stockLocation.findUnique({ where: { id } });
       if (!loc) {
         throw new NotFoundException(`Ubicación con id "${id}" no encontrada`);
       }
+      const lineId = dto.businessLineId !== undefined ? dto.businessLineId : loc.businessLineId;
       if (dto.isDefault === true) {
-        await tx.stockLocation.updateMany({ data: { isDefault: false } });
+        await tx.stockLocation.updateMany({ where: { businessLineId: lineId }, data: { isDefault: false } });
       }
       const wasDefault = loc.isDefault;
       await tx.stockLocation.update({
@@ -53,10 +57,11 @@ export class StockLocationService {
         data: {
           ...(dto.name !== undefined && { name: dto.name.trim() }),
           ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }),
+          ...(dto.businessLineId !== undefined && { businessLineId: dto.businessLineId }),
         },
       });
       if (dto.isDefault === false && wasDefault) {
-        await this.ensureOneDefaultLocation(tx);
+        await this.ensureOneDefaultLocation(tx, loc.businessLineId);
       }
       return tx.stockLocation.findUniqueOrThrow({ where: { id } });
     });
@@ -109,17 +114,17 @@ export class StockLocationService {
       await tx.stockLocation.delete({ where: { id } });
 
       if (wasDefault) {
-        await this.ensureOneDefaultLocation(tx);
+        await this.ensureOneDefaultLocation(tx, loc.businessLineId);
       }
 
       return { deleted: true, id };
     });
   }
 
-  private async ensureOneDefaultLocation(tx: Prisma.TransactionClient) {
-    const anyDefault = await tx.stockLocation.findFirst({ where: { isDefault: true } });
+  private async ensureOneDefaultLocation(tx: Prisma.TransactionClient, businessLineId: string | null) {
+    const anyDefault = await tx.stockLocation.findFirst({ where: { isDefault: true, businessLineId } });
     if (anyDefault) return;
-    const first = await tx.stockLocation.findFirst({ orderBy: { name: "asc" } });
+    const first = await tx.stockLocation.findFirst({ where: { businessLineId }, orderBy: { name: "asc" } });
     if (first) {
       await tx.stockLocation.update({ where: { id: first.id }, data: { isDefault: true } });
     }
