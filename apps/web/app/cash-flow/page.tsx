@@ -174,6 +174,18 @@ function SummaryTab({ lineId, version }: { lineId: string; version: number }) {
                 </tbody>
               </table>
             </div>
+            <div className="pc-cardlist" style={{ padding: 12 }}>
+              {data.monthly.map((m) => (
+                <div key={m.month} className="pc-pcard">
+                  <div className="pc-pcard__name">{m.label}</div>
+                  <MobileRow label="Ingresos" value={formatCurrency(m.income)} />
+                  <MobileRow label="Gastos operativos" value={formatCurrency(m.operatingExpense)} />
+                  <MobileRow label="Inversión" value={formatCurrency(m.investmentExpense)} />
+                  <MobileRow label="Resultado operativo" value={formatCurrency(m.operatingResult)} color={negative(m.operatingResult)} />
+                  <MobileRow label="Resultado total" value={formatCurrency(m.totalResult)} color={negative(m.totalResult)} bold />
+                </div>
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -187,6 +199,15 @@ function Kpi({ label, value, color, sub }: { label: string; value: number; color
       <div className="me-kpi__label">{label}</div>
       <div className="me-kpi__val" style={color ? { color } : undefined}>{formatCurrency(value)}</div>
       {sub && <div className="me-kpi__label">{sub}</div>}
+    </div>
+  );
+}
+
+function MobileRow({ label, value, color, bold }: { label: string; value: string; color?: string; bold?: boolean }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 8, fontSize: 13 }}>
+      <span style={{ color: "var(--ha-text-3)" }}>{label}</span>
+      <span style={{ color, fontWeight: bold ? 600 : 400, textAlign: "right" }}>{value}</span>
     </div>
   );
 }
@@ -213,6 +234,17 @@ function CategoryTable({ title, rows, total }: { title: string; rows: CashSummar
             <tr className="ex-foot"><td>Total</td><td>{formatCurrency(total)}</td><td /></tr>
           </tfoot>
         </table>
+      </div>
+      <div className="pc-cardlist" style={{ padding: 12 }}>
+        {rows.map((r) => (
+          <div key={r.category} className="pc-pcard">
+            <div className="pc-pcard__name">{r.category}{r.classification === "INVESTMENT" ? " (inversión)" : ""}</div>
+            <MobileRow label={total ? `${((r.amount / total) * 100).toFixed(1)}%` : "—"} value={formatCurrency(r.amount)} bold />
+          </div>
+        ))}
+        <div className="pc-pcard">
+          <MobileRow label="Total" value={formatCurrency(total)} bold />
+        </div>
       </div>
     </div>
   );
@@ -339,6 +371,32 @@ function MovementsTab({ lineId, config, onChanged }: { lineId: string; config: C
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  const actions = (m: CashMovement) => (
+    <div style={{ display: "flex", gap: 6 }}>
+      {m.status === "PENDING" && (
+        <button className="pc-btn pc-btn--ghost pc-btn--sm" title="Marcar como cobrado / pagado" onClick={() => void settle(m)}>
+          <Check size={14} />
+        </button>
+      )}
+      {m.hasReceipt && (
+        <button className="pc-btn pc-btn--ghost pc-btn--sm" title="Ver ticket" onClick={() => void openReceipt(m.id)}>
+          <Paperclip size={14} />
+        </button>
+      )}
+      <button className="pc-btn pc-btn--ghost pc-btn--sm" title="Editar" onClick={() => setEditing(m)}>
+        <Pencil size={14} />
+      </button>
+      <button
+        className="pc-btn pc-btn--ghost pc-btn--sm"
+        style={{ color: "var(--ha-red)", borderColor: "var(--ha-red)" }}
+        title="Eliminar"
+        onClick={() => setDeleting(m)}
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
@@ -417,34 +475,46 @@ function MovementsTab({ lineId, config, onChanged }: { lineId: string; config: C
                       {m.payer !== config.defaultPayer && m.reimbursementStatus ? ` (reembolso: ${m.reimbursementStatus})` : ""}
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {m.status === "PENDING" && (
-                          <button className="pc-btn pc-btn--ghost pc-btn--sm" title="Marcar como cobrado / pagado" onClick={() => void settle(m)}>
-                            <Check size={14} />
-                          </button>
-                        )}
-                        {m.hasReceipt && (
-                          <button className="pc-btn pc-btn--ghost pc-btn--sm" title="Ver ticket" onClick={() => void openReceipt(m.id)}>
-                            <Paperclip size={14} />
-                          </button>
-                        )}
-                        <button className="pc-btn pc-btn--ghost pc-btn--sm" title="Editar" onClick={() => setEditing(m)}>
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          className="pc-btn pc-btn--ghost pc-btn--sm"
-                          style={{ color: "var(--ha-red)", borderColor: "var(--ha-red)" }}
-                          title="Eliminar"
-                          onClick={() => setDeleting(m)}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                      {actions(m)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="pc-cardlist">
+            {rows.map((m) => (
+              <div key={m.id} className="pc-pcard">
+                <div className="pc-pcard__top">
+                  <div className="pc-pcard__name">
+                    {m.description}
+                    {m.needsReview && <span className="ha-badge ha-badge--overdue" style={{ marginLeft: 6 }}>revisar</span>}
+                  </div>
+                  <span className={`ha-badge ${m.status === "PENDING" ? "ha-badge--pending" : "ha-badge--paid"}`}>
+                    {m.status === "PENDING" ? "Pendiente" : m.type === "INCOME" ? "Cobrado" : "Pagado"}
+                  </span>
+                </div>
+                <div className="pc-pcard__mid">
+                  <span className={`pc-pcard__price ${m.type === "INCOME" ? "ex-cash" : "ex-total"}`}>
+                    {m.type === "EXPENSE" ? "-" : ""}{formatCurrency(m.amount)}
+                  </span>
+                  <span className="pc-pcard__cat">
+                    {m.category}{m.counterparty ? ` · ${m.counterparty}` : ""}
+                  </span>
+                </div>
+                <div className="pc-pcard__bot">
+                  <div style={{ fontSize: 12 }}>
+                    <span className="pc-vig">{formatDay(m.date)}</span>
+                    {m.paymentMethod ? ` · ${m.paymentMethod}` : ""}
+                    {m.payer ? ` · ${m.payer}` : ""}
+                    {m.payer !== config.defaultPayer && m.reimbursementStatus ? ` (reembolso: ${m.reimbursementStatus})` : ""}
+                  </div>
+                  {actions(m)}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -804,6 +874,19 @@ function CashTab({ lineId, version, onChanged }: { lineId: string; version: numb
             </tfoot>
           </table>
         </div>
+        <div className="pc-cardlist" style={{ padding: 12 }}>
+          {data.partnerDebts.map((p) => (
+            <div key={p.partner} className="pc-pcard">
+              <div className="pc-pcard__name">{p.partner}</div>
+              <MobileRow label="Gastos que pagó (reembolso pendiente)" value={formatCurrency(p.paidExpenses)} />
+              <MobileRow label="Ingresos que cobró (a rendir)" value={formatCurrency(p.collectedIncome)} />
+              <MobileRow label="Alumo le debe" value={formatCurrency(p.owed)} bold />
+            </div>
+          ))}
+          <div className="pc-pcard">
+            <MobileRow label="Total" value={formatCurrency(data.partnerDebtTotal)} bold />
+          </div>
+        </div>
       </div>
       <div className="pc-card" style={{ marginTop: 16 }}>
         <h2 style={{ margin: "12px 16px 0", fontSize: 15 }}>Capital parado: stock valuado al costo</h2>
@@ -829,6 +912,19 @@ function CashTab({ lineId, version, onChanged }: { lineId: string; version: numb
               <tr className="ex-foot"><td colSpan={3}>Total</td><td>{formatCurrency(data.inventoryValue)}</td></tr>
             </tfoot>
           </table>
+        </div>
+        <div className="pc-cardlist" style={{ padding: 12 }}>
+          {data.inventory.map((i) => (
+            <div key={i.productId} className="pc-pcard">
+              <div className="pc-pcard__name">{i.name}</div>
+              <MobileRow label="Cantidad" value={`${formatQuantity(i.quantity)} ${UNIT_LABELS[i.unit] ?? i.unit}`} />
+              <MobileRow label="Costo unitario" value={i.unitCost === null ? "sin costo" : formatCurrency(i.unitCost)} />
+              <MobileRow label="Valor" value={formatCurrency(i.value)} bold />
+            </div>
+          ))}
+          <div className="pc-pcard">
+            <MobileRow label="Total" value={formatCurrency(data.inventoryValue)} bold />
+          </div>
         </div>
       </div>
     </div>
