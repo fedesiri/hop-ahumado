@@ -90,7 +90,8 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
     let page = 1;
     let totalPages = 1;
     do {
-      const res = await apiClient.getProducts(page, 100, false, undefined, undefined, selectedLineId);
+      // incluye productos desactivados: la imagen puede seguir mostrándolos
+      const res = await apiClient.getProducts(page, 100, true, undefined, undefined, selectedLineId);
       all.push(...res.data);
       totalPages = res.meta.totalPages;
       page += 1;

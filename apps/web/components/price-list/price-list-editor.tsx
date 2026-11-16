@@ -447,6 +447,7 @@ export function PriceListEditor({ template, products, onClose, onSaved }: Props)
                       {sortedProducts.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
+                          {p.deactivationDate ? " (desactivado)" : ""}
                         </option>
                       ))}
                     </select>

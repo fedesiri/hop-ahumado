@@ -39,7 +39,8 @@ export function normalize(s: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9/½]+/g, " ")
+    .replace(/\b1\/2\b|½/g, "medio")
+    .replace(/[^a-z0-9]+/g, " ") // "Estuche/Copa", "Estuche + Copa" y "Estuche-Copa" quedan iguales
     .trim();
 }
 
