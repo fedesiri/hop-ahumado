@@ -4,6 +4,7 @@ import { PriceListEditor } from "@/components/price-list/price-list-editor";
 import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
 import { PRICE_TYPES, PRICE_TYPE_LABELS, type PriceType } from "@/lib/order-calculator/price-types";
+import { autoDetectSlots } from "@/lib/price-list-autodetect";
 import { generatePriceListPdf, loadImage } from "@/lib/price-list-pdf";
 import { toast } from "@/lib/toast";
 import type { PriceListTemplate, Product } from "@/lib/types";
@@ -12,6 +13,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 interface Props {
   initialListType?: PriceType | "";
   onClose: () => void;
+}
+
+interface Result {
+  pdfUrl: string;
+  previewUrl: string;
+  file: File;
+  missing: number;
 }
 
 function slugify(s: string) {
@@ -28,27 +36,27 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
   const [templates, setTemplates] = useState<PriceListTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [templateId, setTemplateId] = useState("");
-  const [listType, setListType] = useState<PriceType>(
-    initialListType === "minorista" ? "minorista" : initialListType || "mayorista",
-  );
-  const [generating, setGenerating] = useState(false);
+  const [listType, setListType] = useState<PriceType>(initialListType || "mayorista");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<Result | null>(null);
+  const [note, setNote] = useState<{ found: number; unmatched: string[] } | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
-  const [result, setResult] = useState<{ url: string; file: File; missing: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [editing, setEditing] = useState<PriceListTemplate | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [newName, setNewName] = useState("");
 
   const loadTemplates = useCallback(async () => {
-    if (!selectedLineId) return;
+    if (!selectedLineId) return [];
     setLoading(true);
     try {
       const list = await apiClient.getPriceListTemplates(selectedLineId);
       setTemplates(list);
       setTemplateId((cur) => (cur && list.some((t) => t.id === cur) ? cur : (list[0]?.id ?? "")));
+      return list;
     } catch {
-      toast.error("Error al cargar las plantillas");
+      toast.error("Error al cargar las imágenes");
+      return [];
     } finally {
       setLoading(false);
     }
@@ -60,16 +68,18 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
 
   useEffect(() => {
     return () => {
-      if (result) URL.revokeObjectURL(result.url);
+      if (result) {
+        URL.revokeObjectURL(result.pdfUrl);
+        URL.revokeObjectURL(result.previewUrl);
+      }
     };
   }, [result]);
 
-  // Al terminar de generar, mostrar el recuadro con los botones de descarga.
   useEffect(() => {
-    if (result) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (result) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [result]);
 
-  const loadAllProducts = async () => {
+  const loadAllProducts = async (): Promise<Product[]> => {
     if (products.length || !selectedLineId) return products;
     const all: Product[] = [];
     let page = 1;
@@ -84,6 +94,70 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
     return all;
   };
 
+  const generate = async (target: PriceListTemplate | undefined, list: PriceType = listType) => {
+    if (!target) return;
+    if (target.slots.length === 0) {
+      toast.error("Esta imagen todavía no tiene precios marcados. Tocá “Ajustar precios marcados”.");
+      return;
+    }
+    setBusy("Generando el PDF…");
+    setResult(null);
+    try {
+      const { pdf, jpeg, missing } = await generatePriceListPdf(target, list);
+      const file = new File([pdf], `lista-${list}-${slugify(target.name) || "precios"}.pdf`, {
+        type: "application/pdf",
+      });
+      setResult({ pdfUrl: URL.createObjectURL(pdf), previewUrl: URL.createObjectURL(jpeg), file, missing });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Subir imagen: se crea, se leen los precios, se emparejan con productos y se genera el PDF, todo seguido. */
+  const handleFile = async (file: File | undefined) => {
+    if (!file || !selectedLineId) return;
+    const name = file.name.replace(/\.[^.]+$/, "") || "Lista de precios";
+    setResult(null);
+    setNote(null);
+    try {
+      setBusy("Subiendo la imagen…");
+      const img = await loadImage(file);
+      const created = await apiClient.createPriceListTemplate({
+        file,
+        name,
+        businessLineId: selectedLineId,
+        imageWidth: img.naturalWidth,
+        imageHeight: img.naturalHeight,
+      });
+
+      setBusy("Preparando lector de texto…");
+      const prods = await loadAllProducts();
+      const detected = await autoDetectSlots(file, img, prods, (pct, label) =>
+        setBusy(pct > 0 ? `${label} ${pct}%` : `${label}…`),
+      );
+
+      await loadTemplates();
+      setTemplateId(created.id);
+
+      if (detected.slots.length === 0) {
+        toast.error("No pude detectar los precios solos. Marcalos a mano.");
+        setBusy(null);
+        setEditing(created);
+        return;
+      }
+      setBusy("Guardando…");
+      const saved = await apiClient.updatePriceListTemplate(created.id, { slots: detected.slots });
+      setTemplates((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
+      setNote({ found: detected.slots.length, unmatched: detected.unmatched });
+      await generate(saved);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo procesar la imagen");
+      setBusy(null);
+    }
+  };
+
   const openEditor = async (t: PriceListTemplate) => {
     try {
       await loadAllProducts();
@@ -93,62 +167,15 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
     }
   };
 
-  const handleFile = async (file: File | undefined) => {
-    if (!file || !selectedLineId) return;
-    const name = newName.trim() || file.name.replace(/\.[^.]+$/, "");
-    setUploading(true);
-    try {
-      const img = await loadImage(file);
-      const created = await apiClient.createPriceListTemplate({
-        file,
-        name,
-        businessLineId: selectedLineId,
-        imageWidth: img.naturalWidth,
-        imageHeight: img.naturalHeight,
-      });
-      setNewName("");
-      await loadTemplates();
-      setTemplateId(created.id);
-      toast.success("Imagen subida. Detectando los precios…");
-      await openEditor(created);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo subir la imagen");
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const handleDelete = async (t: PriceListTemplate) => {
-    if (!window.confirm(`¿Eliminar la plantilla "${t.name}"?`)) return;
+    if (!window.confirm(`¿Eliminar "${t.name}"? Se borra la imagen y los precios marcados.`)) return;
     try {
       await apiClient.deletePriceListTemplate(t.id);
-      toast.success("Plantilla eliminada");
+      toast.success("Imagen eliminada");
+      setResult(null);
       await loadTemplates();
     } catch {
       toast.error("No se pudo eliminar");
-    }
-  };
-
-  const template = templates.find((t) => t.id === templateId) ?? null;
-
-  const generate = async (target: PriceListTemplate | null = template) => {
-    if (!target) return;
-    if (target.slots.length === 0) {
-      toast.error("Esta plantilla todavía no tiene precios marcados. Tocá “Editar”.");
-      return;
-    }
-    setGenerating(true);
-    setResult(null);
-    try {
-      const { pdf, missing } = await generatePriceListPdf(target, listType);
-      const file = new File([pdf], `lista-${listType}-${slugify(target.name) || "precios"}.pdf`, {
-        type: "application/pdf",
-      });
-      setResult({ url: URL.createObjectURL(pdf), file, missing });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF");
-    } finally {
-      setGenerating(false);
     }
   };
 
@@ -161,6 +188,7 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
     }
   };
 
+  const template = templates.find((t) => t.id === templateId);
   const canShare =
     typeof navigator !== "undefined" &&
     typeof navigator.canShare === "function" &&
@@ -177,133 +205,191 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
           setEditing(null);
           setTemplates((prev) => prev.map((p) => (p.id === t.id ? t : p)));
           setTemplateId(t.id);
-          // Al guardar las zonas, generar el PDF enseguida para que aparezca el botón de descarga.
           void generate(t);
         }}
       />
     );
   }
 
+  const stepTitle = (n: number, text: string) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 8px", fontWeight: 600, fontSize: 14 }}>
+      <span
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 11,
+          background: "var(--ha-amber)",
+          color: "#0f1117",
+          display: "inline-grid",
+          placeItems: "center",
+          fontSize: 12,
+        }}
+      >
+        {n}
+      </span>
+      {text}
+    </div>
+  );
+
   return (
-    <div className="ha-modal-backdrop" onClick={onClose}>
-      <div className="ha-modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+    <div className="ha-modal-backdrop" onClick={busy ? undefined : onClose}>
+      <div className="ha-modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
         <div className="ha-modal__head">
           <span className="ha-modal__title">Generar PDF de precios</span>
-          <button className="ha-iconbtn" onClick={onClose} aria-label="Cerrar">✕</button>
+          <button className="ha-iconbtn" onClick={onClose} aria-label="Cerrar" disabled={!!busy}>
+            ✕
+          </button>
         </div>
 
         <div className="ha-modal__body">
-          <div className="ha-field" style={{ marginBottom: 16 }}>
-            <label className="ha-label">Imagen</label>
+          {/* Paso 1: lista */}
+          <div style={{ marginBottom: 20 }}>
+            {stepTitle(1, "¿Qué lista de precios?")}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {PRICE_TYPES.map((t) => (
+                <button
+                  key={t}
+                  className={`ha-btn ${listType === t ? "ha-btn--primary" : "ha-btn--secondary"}`}
+                  onClick={() => setListType(t)}
+                  disabled={!!busy}
+                >
+                  {PRICE_TYPE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Paso 2: imagen */}
+          <div style={{ marginBottom: 20 }}>
+            {stepTitle(2, "¿Sobre qué imagen?")}
             {loading ? (
               <div style={{ fontSize: 13 }}>Cargando…</div>
-            ) : templates.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--ha-text-2)" }}>
-                Todavía no hay imágenes. Subí la primera abajo.
-              </div>
             ) : (
-              <select className="ha-input" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.slots.length} precios)
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: "grid", gap: 8 }}>
+                {templates.map((t) => {
+                  const active = t.id === templateId;
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => !busy && setTemplateId(t.id)}
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        border: `2px solid ${active ? "var(--ha-amber)" : "var(--ha-border-2)"}`,
+                        background: active ? "var(--ha-amber-soft)" : "transparent",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <span style={{ fontWeight: 500 }}>{t.name}</span>
+                      <span style={{ fontSize: 12, color: "var(--ha-text-2)", whiteSpace: "nowrap" }}>
+                        {t.slots.length} precios
+                      </span>
+                    </div>
+                  );
+                })}
+                <button
+                  className="ha-btn ha-btn--secondary"
+                  style={{ height: 44, borderStyle: "dashed" }}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!!busy}
+                >
+                  ＋ Subir imagen nueva
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    void handleFile(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+                {templates.length === 0 && (
+                  <div style={{ fontSize: 12, color: "var(--ha-text-2)" }}>
+                    Subí la imagen de tu lista: la app lee sola los precios y los empareja con tus productos.
+                  </div>
+                )}
+              </div>
+            )}
+            {template && !busy && (
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <button className="ha-btn ha-btn--secondary" onClick={() => void openEditor(template)}>
+                  Ajustar precios marcados
+                </button>
+                <button className="ha-btn ha-btn--secondary" onClick={() => void handleDelete(template)}>
+                  Eliminar
+                </button>
+              </div>
             )}
           </div>
 
-          <div className="ha-field" style={{ marginBottom: 16 }}>
-            <label className="ha-label">Lista de precios</label>
-            <select className="ha-input" value={listType} onChange={(e) => setListType(e.target.value as PriceType)}>
-              {PRICE_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {PRICE_TYPE_LABELS[t]}
-                </option>
-              ))}
-            </select>
+          {/* Paso 3: generar */}
+          <div style={{ marginBottom: 8 }}>
+            {stepTitle(3, "Generar")}
+            <button
+              className="ha-btn ha-btn--primary"
+              style={{ width: "100%", height: 48, fontSize: 15 }}
+              onClick={() => void generate(template)}
+              disabled={!template || !!busy}
+            >
+              {busy ?? `Generar PDF de lista ${PRICE_TYPE_LABELS[listType].toLowerCase()}`}
+            </button>
           </div>
 
-          {template && (
-            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-              <button className="ha-btn ha-btn--secondary" onClick={() => void openEditor(template)}>
-                Editar precios marcados
-              </button>
-              <button className="ha-btn ha-btn--secondary" onClick={() => void handleDelete(template)}>
-                Eliminar imagen
-              </button>
+          {note && (
+            <div style={{ fontSize: 13, color: "var(--ha-text-2)", marginTop: 12 }}>
+              <b style={{ color: "var(--ha-text)" }}>{note.found} precios detectados.</b>
+              {note.unmatched.length > 0 && <> No encontré producto para: {note.unmatched.join(", ")}.</>} Revisá abajo que
+              quedó bien; si algo no coincide, tocá “Ajustar precios marcados”.
             </div>
           )}
 
+          {/* Resultado */}
           {result && (
-            <div
-              ref={resultRef}
-              style={{
-                marginBottom: 16,
-                padding: 12,
-                border: "2px solid var(--ha-amber)",
-                borderRadius: 8,
-                display: "grid",
-                gap: 8,
-              }}
-            >
-              <strong>PDF listo</strong>
+            <div ref={resultRef} style={{ marginTop: 20, display: "grid", gap: 10 }}>
+              <strong>Listo. Revisá que los precios estén bien:</strong>
               {result.missing > 0 && (
                 <span style={{ fontSize: 13, color: "var(--ha-amber)" }}>
                   {result.missing} producto(s) no tienen precio en esta lista y quedaron con “—”.
                 </span>
               )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={result.previewUrl}
+                alt="Vista previa de la lista"
+                style={{ width: "100%", borderRadius: 8, border: "1px solid var(--ha-border-2)" }}
+              />
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <a className="ha-btn ha-btn--primary" href={result.url} download={result.file.name}>
-                  Descargar
-                </a>
-                <a className="ha-btn ha-btn--secondary" href={result.url} target="_blank" rel="noreferrer">
-                  Abrir
+                <a
+                  className="ha-btn ha-btn--primary"
+                  style={{ flex: 1, height: 48 }}
+                  href={result.pdfUrl}
+                  download={result.file.name}
+                >
+                  ⬇ Descargar PDF
                 </a>
                 {canShare && (
-                  <button className="ha-btn ha-btn--secondary" onClick={() => void share()}>
+                  <button className="ha-btn ha-btn--secondary" style={{ height: 48 }} onClick={() => void share()}>
                     Compartir
                   </button>
                 )}
+                <a
+                  className="ha-btn ha-btn--secondary"
+                  style={{ height: 48 }}
+                  href={result.pdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Abrir
+                </a>
               </div>
             </div>
           )}
-
-          <div
-            style={{
-              borderTop: "1px solid var(--ha-border)",
-              paddingTop: 16,
-              display: "grid",
-              gap: 8,
-            }}
-          >
-            <label className="ha-label">Subir imagen nueva</label>
-            <input
-              className="ha-input"
-              placeholder="Nombre (opcional)"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-            />
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              disabled={uploading}
-              onChange={(e) => {
-                void handleFile(e.target.files?.[0]);
-                e.target.value = "";
-              }}
-            />
-            {uploading && <div style={{ fontSize: 13 }}>Subiendo…</div>}
-          </div>
-
-        </div>
-
-        <div className="ha-modal__foot">
-          <button className="ha-btn ha-btn--secondary" onClick={onClose}>
-            Cerrar
-          </button>
-          <button className="ha-btn ha-btn--primary" onClick={() => void generate(template)} disabled={!template || generating}>
-            {generating ? "Generando…" : "Generar PDF"}
-          </button>
         </div>
       </div>
     </div>
