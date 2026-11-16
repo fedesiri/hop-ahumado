@@ -1191,6 +1191,8 @@ export interface PriceListSlot {
   h: number;
   /** Color con el que se tapa el precio viejo. */
   coverColor: string;
+  /** "blend" reconstruye el fondo interpolando los bordes; "flat" usa coverColor liso. */
+  coverMode?: "flat" | "blend";
   textColor: string;
   align: "left" | "center" | "right";
   fontScale: number;

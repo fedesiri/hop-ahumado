@@ -2,12 +2,14 @@
 
 import { apiClient } from "@/lib/api-client";
 import { PRICE_TYPES, PRICE_TYPE_LABELS, type PriceType } from "@/lib/order-calculator/price-types";
+import { autoDetectSlots } from "@/lib/price-list-autodetect";
 import {
   contrastTextColor,
   fetchPriceMap,
   loadImage,
   renderPriceListJpeg,
   sampleCoverColor,
+  sampleTextColor,
 } from "@/lib/price-list-pdf";
 import { toast } from "@/lib/toast";
 import type { PriceListSlot, PriceListTemplate, Product } from "@/lib/types";
@@ -42,6 +44,11 @@ export function PriceListEditor({ template, products, onClose, onSaved }: Props)
 
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const imageBlobRef = useRef<Blob | null>(null);
+  const autoRanRef = useRef(false);
+  const [detecting, setDetecting] = useState(false);
+  const [progress, setProgress] = useState<{ pct: number; label: string } | null>(null);
+  const [report, setReport] = useState<{ found: number; unmatched: string[] } | null>(null);
   const areaRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
 
@@ -58,6 +65,7 @@ export function PriceListEditor({ template, products, onClose, onSaved }: Props)
         const img = await loadImage(blob);
         if (revoked) return;
         imageRef.current = img;
+        imageBlobRef.current = blob;
         url = URL.createObjectURL(blob);
         setImageUrl(url);
       } catch {
@@ -75,6 +83,41 @@ export function PriceListEditor({ template, products, onClose, onSaved }: Props)
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
+
+  const runDetection = useCallback(async () => {
+    const blob = imageBlobRef.current;
+    const img = imageRef.current;
+    if (!blob || !img) return;
+    setDetecting(true);
+    setReport(null);
+    setProgress({ pct: 0, label: "Preparando lector de texto" });
+    try {
+      const result = await autoDetectSlots(blob, img, products, (pct, label) => setProgress({ pct, label }));
+      setSlots(result.slots as EditSlot[]);
+      setSelectedId(null);
+      setDirty(true);
+      setReport({ found: result.slots.length, unmatched: result.unmatched });
+      if (result.slots.length === 0) toast.error("No encontré precios para emparejar. Marcalos a mano.");
+      else toast.success(`Encontré ${result.slots.length} precios`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo leer la imagen");
+    } finally {
+      setDetecting(false);
+      setProgress(null);
+    }
+  }, [products]);
+
+  // Primera vez que se abre una imagen sin zonas: detectar sola.
+  useEffect(() => {
+    if (!imageUrl || autoRanRef.current || template.slots.length > 0) return;
+    autoRanRef.current = true;
+    void runDetection();
+  }, [imageUrl, template.slots.length, runDetection]);
+
+  const redetect = () => {
+    if (slots.length > 0 && !window.confirm("Esto reemplaza las zonas actuales. ¿Seguir?")) return;
+    void runDetection();
+  };
 
   const sortedProducts = useMemo(
     () => [...products].sort((a, b) => a.name.localeCompare(b.name, "es")),
@@ -187,9 +230,12 @@ export function PriceListEditor({ template, products, onClose, onSaved }: Props)
       }
       const img = imageRef.current;
       const cover = img ? sampleCoverColor(img, s) : "#ffffff";
+      const text = img ? sampleTextColor(img, s) : contrastTextColor(cover);
       setDirty(true);
       setSlots((prev) =>
-        prev.map((p) => (p.id === s.id ? { ...p, coverColor: cover, textColor: contrastTextColor(cover) } : p)),
+        prev.map((p) =>
+          p.id === s.id ? { ...p, coverColor: cover, coverMode: "blend", textColor: text, align: "right" } : p,
+        ),
       );
     }
   };
@@ -197,7 +243,7 @@ export function PriceListEditor({ template, products, onClose, onSaved }: Props)
   const detectColor = () => {
     if (!selected || !imageRef.current) return;
     const cover = sampleCoverColor(imageRef.current, selected);
-    patchSlot(selected.id, { coverColor: cover, textColor: contrastTextColor(cover) });
+    patchSlot(selected.id, { coverColor: cover, coverMode: "flat", textColor: contrastTextColor(cover) });
   };
 
   const removeSelected = () => {
@@ -271,6 +317,26 @@ export function PriceListEditor({ template, products, onClose, onSaved }: Props)
             </div>
           ) : (
             <>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+                <button className="ha-btn ha-btn--primary" onClick={redetect} disabled={detecting || !imageUrl}>
+                  {detecting ? "Detectando…" : "✨ Detectar precios automáticamente"}
+                </button>
+                {progress && (
+                  <span style={{ fontSize: 13, color: "var(--ha-text-2)" }}>
+                    {progress.label}
+                    {progress.pct > 0 ? ` ${progress.pct}%` : "…"}
+                  </span>
+                )}
+              </div>
+              {report && (
+                <div style={{ fontSize: 13, margin: "0 0 10px", color: "var(--ha-text-2)" }}>
+                  <b style={{ color: "var(--ha-text)" }}>{report.found} precios detectados y emparejados.</b>
+                  {report.unmatched.length > 0 && (
+                    <> No encontré producto para: {report.unmatched.join(", ")}. Si falta alguno, marcalo a mano.</>
+                  )}{" "}
+                  Revisá que cada zona tenga el producto correcto.
+                </div>
+              )}
               <p style={{ fontSize: 13, color: "var(--ha-text-2)", margin: "0 0 10px" }}>
                 Arrastrá sobre cada precio de la imagen para marcarlo. Tocá una zona para moverla; la manija de la
                 esquina inferior derecha cambia su tamaño. En el celular, apagá “Marcar” para desplazarte por la imagen.
@@ -392,7 +458,7 @@ export function PriceListEditor({ template, products, onClose, onSaved }: Props)
                       <input
                         type="color"
                         value={selected.coverColor}
-                        onChange={(e) => patchSlot(selected.id, { coverColor: e.target.value })}
+                        onChange={(e) => patchSlot(selected.id, { coverColor: e.target.value, coverMode: "flat" })}
                         style={{ width: 56, height: 40 }}
                       />
                     </div>

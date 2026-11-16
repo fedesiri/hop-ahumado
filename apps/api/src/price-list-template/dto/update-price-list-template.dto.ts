@@ -33,6 +33,10 @@ export class PriceListSlotDto {
   @Matches(HEX_COLOR, { message: "coverColor debe ser un color #RRGGBB" })
   coverColor: string;
 
+  @IsOptional()
+  @IsIn(["flat", "blend"])
+  coverMode?: "flat" | "blend";
+
   @Matches(HEX_COLOR, { message: "textColor debe ser un color #RRGGBB" })
   textColor: string;
 

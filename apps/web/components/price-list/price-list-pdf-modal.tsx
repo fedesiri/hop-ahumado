@@ -103,7 +103,7 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
       setNewName("");
       await loadTemplates();
       setTemplateId(created.id);
-      toast.success("Imagen subida. Ahora marcá los precios.");
+      toast.success("Imagen subida. Detectando los precios…");
       await openEditor(created);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo subir la imagen");
