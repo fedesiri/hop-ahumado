@@ -46,6 +46,8 @@ import type {
   BulkReplacePriceRequest,
   BulkReplacePriceResponse,
   PaginatedResponse,
+  PriceListSlot,
+  PriceListTemplate,
   Price,
   Product,
   ProductionPlan,
@@ -611,6 +613,54 @@ export class ApiClient {
 
   async deleteCashReceipt(id: string): Promise<CashMovement> {
     return this.request(`/cash-flow/movements/${id}/receipt`, { method: "DELETE" });
+  }
+
+  // Plantillas de lista de precios (imagen + zonas de precio)
+  async getPriceListTemplates(businessLineId: string): Promise<PriceListTemplate[]> {
+    return this.request(`/price-list-templates${this.buildParams({ businessLineId })}`);
+  }
+
+  async createPriceListTemplate(input: {
+    file: Blob;
+    name: string;
+    businessLineId: string;
+    imageWidth: number;
+    imageHeight: number;
+  }): Promise<PriceListTemplate> {
+    const body = new FormData();
+    body.append("name", input.name);
+    body.append("businessLineId", input.businessLineId);
+    body.append("imageWidth", String(input.imageWidth));
+    body.append("imageHeight", String(input.imageHeight));
+    body.append("file", input.file, "lista.jpg");
+    const headers = await getAuthHeaders(undefined, { json: false });
+    const response = await fetch(`${this.baseUrl}/price-list-templates`, { method: "POST", headers, body });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || `API Error: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async updatePriceListTemplate(
+    id: string,
+    data: { name?: string; slots?: PriceListSlot[] },
+  ): Promise<PriceListTemplate> {
+    return this.request(`/price-list-templates/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+  }
+
+  async getPriceListTemplateImage(id: string): Promise<Blob> {
+    const headers = await getAuthHeaders(undefined, { json: false });
+    const response = await fetch(`${this.baseUrl}/price-list-templates/${id}/image`, { headers });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || `API Error: ${response.status}`);
+    }
+    return response.blob();
+  }
+
+  async deletePriceListTemplate(id: string): Promise<{ id: string }> {
+    return this.request(`/price-list-templates/${id}`, { method: "DELETE" });
   }
 
   async deleteCashMovement(id: string): Promise<void> {

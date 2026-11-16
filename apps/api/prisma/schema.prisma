@@ -22,6 +22,7 @@ model BusinessLine {
   cashMovements         CashMovement[]
   stockLocations        StockLocation[]
   cashSnapshots         CashSnapshot[]
+  priceListTemplates    PriceListTemplate[]
 }
 
 model User {
@@ -516,4 +517,21 @@ enum InteractionChannel {
   WHATSAPP
   MEETING
   OTHER
+}
+
+/// Imagen de lista de precios (fondo con precios impresos) + zonas donde se pisan los precios nuevos.
+model PriceListTemplate {
+  id             String       @id @default(uuid())
+  businessLineId String
+  name           String
+  imagePath      String
+  imageWidth     Int
+  imageHeight    Int
+  /// [{ id, productId, x, y, w, h (fracciones 0-1), coverColor, textColor, align, fontScale }]
+  slots          Json         @default("[]")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  businessLine   BusinessLine @relation(fields: [businessLineId], references: [id])
+
+  @@index([businessLineId])
 }

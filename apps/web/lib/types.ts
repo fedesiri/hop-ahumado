@@ -1180,3 +1180,29 @@ export interface CashSummary {
   }[];
   reviewCount: number;
 }
+
+export interface PriceListSlot {
+  id: string;
+  productId: string;
+  /** Posición y tamaño como fracción de la imagen (0-1). */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Color con el que se tapa el precio viejo. */
+  coverColor: string;
+  textColor: string;
+  align: "left" | "center" | "right";
+  fontScale: number;
+}
+
+export interface PriceListTemplate {
+  id: string;
+  businessLineId: string;
+  name: string;
+  imageWidth: number;
+  imageHeight: number;
+  slots: PriceListSlot[];
+  createdAt: string;
+  updatedAt: string;
+}

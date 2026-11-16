@@ -13,6 +13,7 @@ import type { CreatePriceRequest, Price, Product, UpdatePriceRequest } from "@/l
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Paginator } from "@/components/paginator";
+import { PriceListPdfModal } from "@/components/price-list/price-list-pdf-modal";
 import { Spinner } from "@/components/spinner";
 import { Check, Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -81,6 +82,8 @@ function PricesContent() {
   const [fProductId, setFProductId] = useState("");
   const [fValue, setFValue] = useState("");
   const [fDescription, setFDescription] = useState("");
+
+  const [pdfOpen, setPdfOpen] = useState(false);
 
   // Delete dialog
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -299,6 +302,9 @@ function PricesContent() {
         </select>
         <button className="pc-btn pc-btn--primary" onClick={handleCreate}>
           + Nuevo precio
+        </button>
+        <button className="pc-btn pc-btn--ghost" onClick={() => setPdfOpen(true)}>
+          Generar PDF
         </button>
         <span className="pc-count">
           {meta?.total ?? prices.length} precios activos
@@ -582,6 +588,8 @@ function PricesContent() {
           </div>
         </div>
       )}
+
+      {pdfOpen && <PriceListPdfModal initialListType={listTypeFilter} onClose={() => setPdfOpen(false)} />}
 
       {/* Delete dialog */}
       {deleteId && (

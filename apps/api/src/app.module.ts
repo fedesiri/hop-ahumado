@@ -26,6 +26,7 @@ import { InventoryModule } from "./inventory/inventory.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { OperationalParametersModule } from "./operational-parameters/operational-parameters.module";
 import { OrderModule } from "./order/order.module";
+import { PriceListTemplateModule } from "./price-list-template/price-list-template.module";
 import { PriceModule } from "./price/price.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductModule } from "./product/product.module";
@@ -83,6 +84,7 @@ import { UserModule } from "./user/user.module";
     DistributorSuggestedOrderModule,
     OrderModule,
     PriceModule,
+    PriceListTemplateModule,
     CostModule,
     ExpenseModule,
     CashFlowModule,
