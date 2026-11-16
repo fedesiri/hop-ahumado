@@ -131,17 +131,17 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
 
   const template = templates.find((t) => t.id === templateId) ?? null;
 
-  const generate = async () => {
-    if (!template) return;
-    if (template.slots.length === 0) {
+  const generate = async (target: PriceListTemplate | null = template) => {
+    if (!target) return;
+    if (target.slots.length === 0) {
       toast.error("Esta plantilla todavía no tiene precios marcados. Tocá “Editar”.");
       return;
     }
     setGenerating(true);
     setResult(null);
     try {
-      const { pdf, missing } = await generatePriceListPdf(template, listType);
-      const file = new File([pdf], `lista-${listType}-${slugify(template.name) || "precios"}.pdf`, {
+      const { pdf, missing } = await generatePriceListPdf(target, listType);
+      const file = new File([pdf], `lista-${listType}-${slugify(target.name) || "precios"}.pdf`, {
         type: "application/pdf",
       });
       setResult({ url: URL.createObjectURL(pdf), file, missing });
@@ -176,6 +176,9 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
         onSaved={(t) => {
           setEditing(null);
           setTemplates((prev) => prev.map((p) => (p.id === t.id ? t : p)));
+          setTemplateId(t.id);
+          // Al guardar las zonas, generar el PDF enseguida para que aparezca el botón de descarga.
+          void generate(t);
         }}
       />
     );
@@ -298,7 +301,7 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
           <button className="ha-btn ha-btn--secondary" onClick={onClose}>
             Cerrar
           </button>
-          <button className="ha-btn ha-btn--primary" onClick={() => void generate()} disabled={!template || generating}>
+          <button className="ha-btn ha-btn--primary" onClick={() => void generate(template)} disabled={!template || generating}>
             {generating ? "Generando…" : "Generar PDF"}
           </button>
         </div>

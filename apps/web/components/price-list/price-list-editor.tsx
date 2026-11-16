@@ -262,7 +262,7 @@ export function PriceListEditor({ template, products, onClose, onSaved }: Props)
     setSaving(true);
     try {
       const updated = await apiClient.updatePriceListTemplate(template.id, { slots: slots as PriceListSlot[] });
-      toast.success("Plantilla guardada");
+      toast.success("Plantilla guardada. Generando el PDF…");
       setDirty(false);
       onSaved(updated);
     } catch (e) {
