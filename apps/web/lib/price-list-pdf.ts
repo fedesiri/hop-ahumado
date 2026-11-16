@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api-client";
 import { normalizePriceListKey, type PriceType } from "@/lib/order-calculator/price-types";
 import { jpegToPdf, loadImage, renderPriceListJpeg } from "@/lib/price-list-render";
+import { voteListByPrices, type ListName } from "@/lib/price-list-detect";
 import type { PriceListTemplate } from "@/lib/types";
 
 export {
@@ -48,4 +49,15 @@ export async function generatePriceListPdf(
   const pdf = await jpegToPdf(blob, width, height);
   const missing = template.slots.filter((s) => !prices.has(s.productId)).length;
   return { pdf, jpeg: blob, missing };
+}
+
+export async function inferListFromPrices(
+  oldPrices: { productId: string; value: number }[],
+  businessLineId: string,
+): Promise<ListName | null> {
+  const [mayorista, minorista] = await Promise.all([
+    fetchPriceMap("mayorista", businessLineId),
+    fetchPriceMap("minorista", businessLineId),
+  ]);
+  return voteListByPrices(oldPrices, { mayorista, minorista });
 }

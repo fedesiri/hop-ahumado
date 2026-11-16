@@ -626,12 +626,14 @@ export class ApiClient {
     businessLineId: string;
     imageWidth: number;
     imageHeight: number;
+    priceList?: PriceType | null;
   }): Promise<PriceListTemplate> {
     const body = new FormData();
     body.append("name", input.name);
     body.append("businessLineId", input.businessLineId);
     body.append("imageWidth", String(input.imageWidth));
     body.append("imageHeight", String(input.imageHeight));
+    if (input.priceList) body.append("priceList", input.priceList);
     body.append("file", input.file, "lista.jpg");
     const headers = await getAuthHeaders(undefined, { json: false });
     const response = await fetch(`${this.baseUrl}/price-list-templates`, { method: "POST", headers, body });
@@ -644,7 +646,7 @@ export class ApiClient {
 
   async updatePriceListTemplate(
     id: string,
-    data: { name?: string; slots?: PriceListSlot[] },
+    data: { name?: string; slots?: PriceListSlot[]; priceList?: PriceType | null },
   ): Promise<PriceListTemplate> {
     return this.request(`/price-list-templates/${id}`, { method: "PATCH", body: JSON.stringify(data) });
   }

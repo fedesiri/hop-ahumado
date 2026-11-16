@@ -5,7 +5,7 @@ import { apiClient } from "@/lib/api-client";
 import { useLineContext } from "@/lib/line-context";
 import { PRICE_TYPES, PRICE_TYPE_LABELS, type PriceType } from "@/lib/order-calculator/price-types";
 import { autoDetectSlots } from "@/lib/price-list-autodetect";
-import { generatePriceListPdf, loadImage } from "@/lib/price-list-pdf";
+import { generatePriceListPdf, inferListFromPrices, loadImage } from "@/lib/price-list-pdf";
 import { toast } from "@/lib/toast";
 import type { PriceListTemplate, Product } from "@/lib/types";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -39,7 +39,12 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
   const [listType, setListType] = useState<PriceType>(initialListType || "mayorista");
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
-  const [note, setNote] = useState<{ found: number; unmatched: string[] } | null>(null);
+  const [note, setNote] = useState<{
+    found: number;
+    unmatched: string[];
+    list: PriceType | null;
+    reason: "alumo" | "titulo" | "precios" | null;
+  } | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -94,8 +99,10 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
     return all;
   };
 
-  const generate = async (target: PriceListTemplate | undefined, list: PriceType = listType) => {
+  const generate = async (target: PriceListTemplate | undefined, listOverride?: PriceType) => {
     if (!target) return;
+    // si la imagen tiene lista fija (ej. las de Alumo son siempre mayorista), se usa esa
+    const list: PriceType = listOverride ?? target.priceList ?? listType;
     if (target.slots.length === 0) {
       toast.error("Esta imagen todavía no tiene precios marcados. Tocá “Ajustar precios marcados”.");
       return;
@@ -147,10 +154,29 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
         setEditing(created);
         return;
       }
+      // Lista de la imagen: por su texto (Alumo, MAYORISTA, MINORISTA) o, si no se lee, comparando sus precios con la base.
+      setBusy("Detectando la lista de precios…");
+      let detectedList: PriceType | null = detected.listHint?.list ?? null;
+      if (!detectedList) {
+        try {
+          detectedList = await inferListFromPrices(detected.oldPrices, selectedLineId);
+        } catch {
+          detectedList = null;
+        }
+      }
+
       setBusy("Guardando…");
-      const saved = await apiClient.updatePriceListTemplate(created.id, { slots: detected.slots });
+      const saved = await apiClient.updatePriceListTemplate(created.id, {
+        slots: detected.slots,
+        priceList: detectedList,
+      });
       setTemplates((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
-      setNote({ found: detected.slots.length, unmatched: detected.unmatched });
+      setNote({
+        found: detected.slots.length,
+        unmatched: detected.unmatched,
+        list: detectedList,
+        reason: detected.listHint?.reason ?? (detectedList ? "precios" : null),
+      });
       await generate(saved);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo procesar la imagen");
@@ -179,6 +205,16 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
     }
   };
 
+  const changeFixedList = async (t: PriceListTemplate, value: string) => {
+    try {
+      const saved = await apiClient.updatePriceListTemplate(t.id, { priceList: (value || null) as PriceType | null });
+      setTemplates((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+      setResult(null);
+    } catch {
+      toast.error("No se pudo cambiar la lista");
+    }
+  };
+
   const share = async () => {
     if (!result) return;
     try {
@@ -189,6 +225,8 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
   };
 
   const template = templates.find((t) => t.id === templateId);
+  const effectiveList: PriceType = template?.priceList ?? listType;
+  const listLocked = !!template?.priceList;
   const canShare =
     typeof navigator !== "undefined" &&
     typeof navigator.canShare === "function" &&
@@ -249,14 +287,20 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
               {PRICE_TYPES.map((t) => (
                 <button
                   key={t}
-                  className={`ha-btn ${listType === t ? "ha-btn--primary" : "ha-btn--secondary"}`}
+                  className={`ha-btn ${effectiveList === t ? "ha-btn--primary" : "ha-btn--secondary"}`}
                   onClick={() => setListType(t)}
-                  disabled={!!busy}
+                  disabled={!!busy || listLocked}
                 >
                   {PRICE_TYPE_LABELS[t]}
                 </button>
               ))}
             </div>
+            {listLocked && (
+              <div style={{ fontSize: 12, color: "var(--ha-text-2)", marginTop: 6 }}>
+                Esta imagen usa siempre la lista {PRICE_TYPE_LABELS[effectiveList].toLowerCase()}. Podés cambiarlo abajo,
+                en “Lista de esta imagen”.
+              </div>
+            )}
           </div>
 
           {/* Paso 2: imagen */}
@@ -286,6 +330,7 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
                     >
                       <span style={{ fontWeight: 500 }}>{t.name}</span>
                       <span style={{ fontSize: 12, color: "var(--ha-text-2)", whiteSpace: "nowrap" }}>
+                        {t.priceList ? `${PRICE_TYPE_LABELS[t.priceList]} · ` : ""}
                         {t.slots.length} precios
                       </span>
                     </div>
@@ -317,7 +362,23 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
               </div>
             )}
             {template && !busy && (
-              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                  Lista de esta imagen
+                  <select
+                    className="ha-input"
+                    style={{ width: "auto", height: 36 }}
+                    value={template.priceList ?? ""}
+                    onChange={(e) => void changeFixedList(template, e.target.value)}
+                  >
+                    <option value="">La elijo cada vez</option>
+                    {PRICE_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        Siempre {PRICE_TYPE_LABELS[t].toLowerCase()}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button className="ha-btn ha-btn--secondary" onClick={() => void openEditor(template)}>
                   Ajustar precios marcados
                 </button>
@@ -337,13 +398,23 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
               onClick={() => void generate(template)}
               disabled={!template || !!busy}
             >
-              {busy ?? `Generar PDF de lista ${PRICE_TYPE_LABELS[listType].toLowerCase()}`}
+              {busy ?? `Generar PDF de lista ${PRICE_TYPE_LABELS[effectiveList].toLowerCase()}`}
             </button>
           </div>
 
           {note && (
             <div style={{ fontSize: 13, color: "var(--ha-text-2)", marginTop: 12 }}>
               <b style={{ color: "var(--ha-text)" }}>{note.found} precios detectados.</b>
+              {note.list && (
+                <>
+                  {" "}
+                  Lista: <b style={{ color: "var(--ha-text)" }}>{PRICE_TYPE_LABELS[note.list]}</b>
+                  {note.reason === "alumo" && " (la imagen menciona a Alumo)"}
+                  {note.reason === "titulo" && " (según el título de la imagen)"}
+                  {note.reason === "precios" && " (según sus precios)"}.
+                </>
+              )}
+              {!note.list && " No pude saber a qué lista corresponde: elegila arriba."}
               {note.unmatched.length > 0 && <> No encontré producto para: {note.unmatched.join(", ")}.</>} Revisá abajo que
               quedó bien; si algo no coincide, tocá “Ajustar precios marcados”.
             </div>

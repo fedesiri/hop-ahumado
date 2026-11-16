@@ -5,6 +5,7 @@ import { firebaseAdmin } from "../auth/firebase-admin";
 import { PrismaService } from "../prisma/prisma.service";
 import { UpdatePriceListTemplateDto } from "./dto/update-price-list-template.dto";
 
+const PRICE_LISTS = ["mayorista", "minorista", "fabrica", "catering"];
 const MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const EXTENSIONS: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 
@@ -35,7 +36,7 @@ export class PriceListTemplateService {
 
   async create(
     file: { buffer: Buffer; mimetype: string } | undefined,
-    body: { name?: string; businessLineId?: string; imageWidth?: string; imageHeight?: string },
+    body: { name?: string; businessLineId?: string; imageWidth?: string; imageHeight?: string; priceList?: string },
   ): Promise<PriceListTemplateResponse> {
     if (!file) throw new BadRequestException("Falta la imagen");
     if (!MIME_TYPES.includes(file.mimetype)) throw new BadRequestException("La imagen debe ser JPG, PNG o WEBP");
@@ -54,7 +55,14 @@ export class PriceListTemplateService {
     const path = `price-list-templates/${line.id}/${randomUUID()}.${EXTENSIONS[file.mimetype]}`;
     await bucket().file(path).save(file.buffer, { contentType: file.mimetype, resumable: false });
     const row = await this.prisma.priceListTemplate.create({
-      data: { businessLineId: line.id, name, imagePath: path, imageWidth: width, imageHeight: height },
+      data: {
+        businessLineId: line.id,
+        name,
+        imagePath: path,
+        imageWidth: width,
+        imageHeight: height,
+        priceList: body.priceList && PRICE_LISTS.includes(body.priceList) ? body.priceList : null,
+      },
     });
     return toResponse(row);
   }
@@ -65,6 +73,7 @@ export class PriceListTemplateService {
       where: { id },
       data: {
         name: dto.name?.trim() || undefined,
+        priceList: dto.priceList,
         slots: dto.slots ? (dto.slots as unknown as Prisma.InputJsonValue) : undefined,
       },
     });

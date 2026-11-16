@@ -527,6 +527,8 @@ model PriceListTemplate {
   imagePath      String
   imageWidth     Int
   imageHeight    Int
+  /// Lista de precios fija de esta imagen (mayorista, minorista…). Null = se elige cada vez.
+  priceList      String?
   /// [{ id, productId, x, y, w, h (fracciones 0-1), coverColor, textColor, align, fontScale }]
   slots          Json         @default("[]")
   createdAt      DateTime     @default(now())

@@ -268,3 +268,58 @@ export function matchRows<P extends MatchableProduct>(rows: DetectedRow[], produ
   }
   return { matched: [...bestByProduct.values()], unmatched };
 }
+
+// ───────────────────────── Lista de precios de la imagen ─────────────────────────
+
+export type ListName = "mayorista" | "minorista";
+
+export interface ListHint {
+  list: ListName;
+  /** "alumo": la imagen menciona a Alumo (siempre mayorista). "titulo": dice MAYORISTA / MINORISTA. */
+  reason: "alumo" | "titulo";
+}
+
+/**
+ * Qué lista de precios corresponde a la imagen según su texto:
+ * - si menciona a Alumo ("ALUMO" o "Disponible contratando … para tu evento"), siempre es mayorista;
+ * - si no, el título MAYORISTA / MINORISTA.
+ */
+export function detectListHint(words: OcrWord[]): ListHint | null {
+  const tokens = words.map((w) => normalize(w.text)).filter(Boolean);
+  const has = (pred: (t: string) => boolean) => tokens.some(pred);
+
+  const alumo =
+    has((t) => t.length >= 4 && t.length <= 6 && tokensEqual(t, "alumo")) ||
+    (has((t) => t.startsWith("contrat")) && has((t) => t.startsWith("evento")));
+  if (alumo) return { list: "mayorista", reason: "alumo" };
+
+  const may = has((t) => t.length >= 7 && tokensEqual(t, "mayorista"));
+  const min = has((t) => t.length >= 7 && tokensEqual(t, "minorista"));
+  if (may && !min) return { list: "mayorista", reason: "titulo" };
+  if (min && !may) return { list: "minorista", reason: "titulo" };
+  return null;
+}
+
+/**
+ * Respaldo cuando el título no se lee: compara los precios viejos de la imagen con las listas
+ * mayorista y minorista actuales de cada producto, y elige la que más se parece.
+ */
+export function voteListByPrices(
+  rows: { productId: string; value: number }[],
+  prices: Record<ListName, Map<string, number>>,
+): ListName | null {
+  const votes: Record<ListName, number> = { mayorista: 0, minorista: 0 };
+  for (const { productId, value } of rows) {
+    const may = prices.mayorista.get(productId);
+    const min = prices.minorista.get(productId);
+    if (!value || !may || !min) continue;
+    const dMay = Math.abs(value - may) / may;
+    const dMin = Math.abs(value - min) / min;
+    if (dMay < dMin) votes.mayorista++;
+    else if (dMin < dMay) votes.minorista++;
+  }
+  const total = votes.mayorista + votes.minorista;
+  if (total < 3) return null;
+  const winner: ListName = votes.mayorista >= votes.minorista ? "mayorista" : "minorista";
+  return votes[winner] / total >= 0.7 ? winner : null;
+}

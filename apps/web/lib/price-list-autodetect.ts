@@ -1,6 +1,8 @@
 import {
+  detectListHint,
   detectRows,
   matchRows,
+  type ListHint,
   type DetectedRow,
   type MatchableProduct,
   type OcrWord,
@@ -12,6 +14,10 @@ export interface AutoDetectResult {
   slots: PriceListSlot[];
   /** Filas con precio que no se pudieron emparejar con un producto (ej. teléfonos, "compra mínima"). */
   unmatched: string[];
+  /** Lista que indica el propio texto de la imagen (Alumo, MAYORISTA, MINORISTA), si se pudo leer. */
+  listHint: ListHint | null;
+  /** Precio viejo leído de cada producto emparejado (para deducir la lista comparando con la base). */
+  oldPrices: { productId: string; value: number }[];
 }
 
 /** Lee la imagen con OCR (en el navegador, sin enviarla a ningún servicio) y devuelve las palabras con su posición. */
@@ -82,5 +88,10 @@ export async function autoDetectSlots<P extends MatchableProduct>(
     matched.map((m) => ({ row: m.row, productId: m.product.id })),
     image,
   );
-  return { slots, unmatched: unmatched.map((r) => r.name) };
+  return {
+    slots,
+    unmatched: unmatched.map((r) => r.name),
+    listHint: detectListHint(words),
+    oldPrices: matched.map((m) => ({ productId: m.product.id, value: m.row.value })),
+  };
 }

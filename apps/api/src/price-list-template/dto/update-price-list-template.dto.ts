@@ -55,6 +55,11 @@ export class UpdatePriceListTemplateDto {
   @MaxLength(80)
   name?: string;
 
+  /** Lista fija de la imagen; null la desactiva (se elige cada vez). */
+  @IsOptional()
+  @IsIn(["mayorista", "minorista", "fabrica", "catering"])
+  priceList?: "mayorista" | "minorista" | "fabrica" | "catering" | null;
+
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(300)

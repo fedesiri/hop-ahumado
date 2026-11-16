@@ -36,7 +36,7 @@ export class PriceListTemplateController {
   @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 12 * 1024 * 1024 } }))
   create(
     @UploadedFile() file: { buffer: Buffer; mimetype: string } | undefined,
-    @Body() body: { name?: string; businessLineId?: string; imageWidth?: string; imageHeight?: string },
+    @Body() body: { name?: string; businessLineId?: string; imageWidth?: string; imageHeight?: string; priceList?: string },
   ) {
     return this.service.create(file, body);
   }

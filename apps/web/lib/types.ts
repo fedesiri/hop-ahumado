@@ -1204,6 +1204,8 @@ export interface PriceListTemplate {
   name: string;
   imageWidth: number;
   imageHeight: number;
+  /** Lista fija de la imagen; null = se elige cada vez. */
+  priceList: "mayorista" | "minorista" | "fabrica" | "catering" | null;
   slots: PriceListSlot[];
   createdAt: string;
   updatedAt: string;
