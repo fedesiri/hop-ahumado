@@ -7,7 +7,7 @@ import { PRICE_TYPES, PRICE_TYPE_LABELS, type PriceType } from "@/lib/order-calc
 import { generatePriceListPdf, loadImage } from "@/lib/price-list-pdf";
 import { toast } from "@/lib/toast";
 import type { PriceListTemplate, Product } from "@/lib/types";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Props {
   initialListType?: PriceType | "";
@@ -32,6 +32,7 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
     initialListType === "minorista" ? "minorista" : initialListType || "mayorista",
   );
   const [generating, setGenerating] = useState(false);
+  const resultRef = useRef<HTMLDivElement | null>(null);
   const [result, setResult] = useState<{ url: string; file: File; missing: number } | null>(null);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -61,6 +62,11 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
     return () => {
       if (result) URL.revokeObjectURL(result.url);
     };
+  }, [result]);
+
+  // Al terminar de generar, mostrar el recuadro con los botones de descarga.
+  useEffect(() => {
+    if (result) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [result]);
 
   const loadAllProducts = async () => {
@@ -225,6 +231,40 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
             </div>
           )}
 
+          {result && (
+            <div
+              ref={resultRef}
+              style={{
+                marginBottom: 16,
+                padding: 12,
+                border: "2px solid var(--ha-amber)",
+                borderRadius: 8,
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <strong>PDF listo</strong>
+              {result.missing > 0 && (
+                <span style={{ fontSize: 13, color: "var(--ha-amber)" }}>
+                  {result.missing} producto(s) no tienen precio en esta lista y quedaron con “—”.
+                </span>
+              )}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <a className="ha-btn ha-btn--primary" href={result.url} download={result.file.name}>
+                  Descargar
+                </a>
+                <a className="ha-btn ha-btn--secondary" href={result.url} target="_blank" rel="noreferrer">
+                  Abrir
+                </a>
+                {canShare && (
+                  <button className="ha-btn ha-btn--secondary" onClick={() => void share()}>
+                    Compartir
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div
             style={{
               borderTop: "1px solid var(--ha-border)",
@@ -252,38 +292,6 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
             {uploading && <div style={{ fontSize: 13 }}>Subiendo…</div>}
           </div>
 
-          {result && (
-            <div
-              style={{
-                marginTop: 16,
-                padding: 12,
-                border: "1px solid var(--ha-border-2)",
-                borderRadius: 8,
-                display: "grid",
-                gap: 8,
-              }}
-            >
-              <strong>PDF listo</strong>
-              {result.missing > 0 && (
-                <span style={{ fontSize: 13, color: "var(--ha-amber)" }}>
-                  {result.missing} producto(s) no tienen precio en esta lista y quedaron con “—”.
-                </span>
-              )}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <a className="ha-btn ha-btn--primary" href={result.url} download={result.file.name}>
-                  Descargar
-                </a>
-                <a className="ha-btn ha-btn--secondary" href={result.url} target="_blank" rel="noreferrer">
-                  Abrir
-                </a>
-                {canShare && (
-                  <button className="ha-btn ha-btn--secondary" onClick={() => void share()}>
-                    Compartir
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="ha-modal__foot">
