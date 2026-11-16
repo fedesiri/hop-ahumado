@@ -163,14 +163,30 @@ function levenshtein(a: string, b: string): number {
 
 function tokensEqual(a: string, b: string): boolean {
   if (a === b) return true;
-  if (a.length >= 4 && b.length >= 4) return levenshtein(a, b) <= 1;
+  // la tolerancia a errores del OCR solo se aplica a palabras largas: "dipa" y "sipa" son productos distintos
+  if (a.length >= 5 && b.length >= 5) return levenshtein(a, b) <= 1;
   return false;
 }
 
-function baseTokens(s: string): string[] {
+/** Abreviaturas habituales en los nombres de producto: "Session IPA" = "SIPA", "Doble IPA" = "DIPA". */
+function canonicalize(s: string): string {
   return normalize(s)
+    .replace(/\bsessions? ipa\b/g, "sipa")
+    .replace(/\b(doble|double|dobles) ipa\b/g, "dipa");
+}
+
+function baseTokens(s: string): string[] {
+  return canonicalize(s)
     .split(" ")
     .filter((t) => t.length >= 2 && !SIZE_TOKENS.has(t));
+}
+
+/**
+ * El OCR a veces pega basura delante del nombre (partes de una botella, íconos). Se descartan las palabras
+ * cortas que no aparecen en ningún producto; las largas se conservan para no emparejar mal un nombre desconocido.
+ */
+function dropNoise(tokens: string[], vocabulary: string[]): string[] {
+  return tokens.filter((t) => t.length > 3 || vocabulary.some((v) => tokensEqual(t, v)));
 }
 
 export function productSize(name: string): Section {
@@ -194,7 +210,8 @@ export function matchProduct<P extends MatchableProduct>(
   row: Pick<DetectedRow, "name" | "section">,
   products: P[],
 ): MatchResult<P> | null {
-  const rowTokens = baseTokens(row.name);
+  const vocabulary = [...new Set(products.flatMap((p) => baseTokens(p.name)))];
+  const rowTokens = dropNoise(baseTokens(row.name), vocabulary);
   if (rowTokens.length === 0) return null;
   let best: MatchResult<P> | null = null;
 
