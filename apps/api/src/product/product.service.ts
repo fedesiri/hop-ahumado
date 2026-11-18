@@ -182,6 +182,7 @@ export class ProductService {
       barcode: dto.barcode ?? undefined,
       stock: dto.stock ?? 0,
       unit: dto.unit ?? "UNIT",
+      producedToStock: dto.producedToStock ?? false,
       deactivationDate: dto.deactivationDate ? new Date(dto.deactivationDate) : undefined,
     };
   }
@@ -220,6 +221,7 @@ export class ProductService {
       ...(dto.barcode !== undefined && { barcode: dto.barcode }),
       ...(dto.stock !== undefined && { stock }),
       ...(dto.unit !== undefined && { unit: dto.unit }),
+      ...(dto.producedToStock !== undefined && { producedToStock: dto.producedToStock }),
       ...(dto.deactivationDate !== undefined && {
         deactivationDate,
       }),

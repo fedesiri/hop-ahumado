@@ -29,6 +29,8 @@ import type {
   CreateRecipeItemRequest,
   CreateStockLocationRequest,
   CreateStockMovementRequest,
+  CreateProductionRequest,
+  ProductionTemplate,
   CreateUserRequest,
   CrmCustomerListItem,
   CrmDashboardResponse,
@@ -774,6 +776,15 @@ export class ApiClient {
       method: "POST",
       body: JSON.stringify(data),
     });
+  }
+
+  // Producción
+  async getProductionTemplates(businessLineId: string): Promise<ProductionTemplate[]> {
+    return this.request(`/production/templates${this.buildParams({ businessLineId })}`);
+  }
+
+  async createProduction(data: CreateProductionRequest): Promise<{ product: { id: string; name: string; stock: number }; inputs: number }> {
+    return this.request("/production", { method: "POST", body: JSON.stringify(data) });
   }
 
   // Recipe Items

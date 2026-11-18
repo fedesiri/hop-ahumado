@@ -162,6 +162,8 @@ model Product {
   deactivationDate       DateTime?
   createdAt              DateTime             @default(now())
   unit                   ProductUnit          @default(UNIT)
+  /// true = se produce antes de vender (registro de Producción): al vender solo baja el propio producto, no los ingredientes de su receta.
+  producedToStock        Boolean              @default(false)
   businessLineId         String
   costs                  Cost[]
   orderItems             OrderItem[]

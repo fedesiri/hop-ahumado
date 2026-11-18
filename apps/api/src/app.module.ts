@@ -30,6 +30,7 @@ import { PriceListTemplateModule } from "./price-list-template/price-list-templa
 import { PriceModule } from "./price/price.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductModule } from "./product/product.module";
+import { ProductionModule } from "./production/production.module";
 import { ProductionPlanModule } from "./production-plan/production-plan.module";
 import { QuoteModule } from "./quote/quote.module";
 import { RecipeCostProfileModule } from "./recipe-cost-profile/recipe-cost-profile.module";
@@ -75,6 +76,7 @@ import { UserModule } from "./user/user.module";
     BusinessLineModule,
     CategoryModule,
     ProductModule,
+    ProductionModule,
     UserModule,
     CustomerModule,
     CustomerProfileModule,

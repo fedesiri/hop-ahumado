@@ -968,13 +968,18 @@ export class OrderService {
 
   /**
    * Si `productId` tiene filas en `RecipeItem`, el pedido descuenta esos ingredientes (cantidad línea × cantidad receta).
-   * Si no hay receta, se descuenta el propio producto (comportamiento clásico).
+   * Si no hay receta, o el producto está marcado como producido antes de vender, se descuenta el propio producto.
    */
   private async stockTargetsForOrderLine(
     tx: Prisma.TransactionClient,
     productId: string,
     lineQuantity: number,
   ): Promise<{ productId: string; quantity: number }[]> {
+    // Producido antes de vender (registro de Producción): sus ingredientes ya se descontaron al producirlo.
+    const product = await tx.product.findUnique({ where: { id: productId }, select: { producedToStock: true } });
+    if (product?.producedToStock) {
+      return [{ productId, quantity: lineQuantity }];
+    }
     const recipe = await tx.recipeItem.findMany({ where: { productId } });
     if (recipe.length === 0) {
       return [{ productId, quantity: lineQuantity }];

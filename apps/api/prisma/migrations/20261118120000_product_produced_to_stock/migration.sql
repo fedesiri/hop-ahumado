@@ -1,0 +1,1 @@
+ALTER TABLE "Product" ADD COLUMN "producedToStock" BOOLEAN NOT NULL DEFAULT false;

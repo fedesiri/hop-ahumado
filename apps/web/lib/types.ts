@@ -186,6 +186,8 @@ export interface Product {
   sku?: string | null;
   barcode?: string | null;
   stock: number;
+  /** Se produce antes de vender: al vender solo baja el propio producto. */
+  producedToStock?: boolean;
   deactivationDate?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1209,4 +1211,33 @@ export interface PriceListTemplate {
   slots: PriceListSlot[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProductionTemplateItem {
+  productId: string;
+  name: string;
+  unit: ProductUnit;
+  stock: number;
+  /** Cantidad de este insumo por 1 unidad producida (según la receta). */
+  perUnit: number;
+}
+
+export interface ProductionTemplate {
+  id: string;
+  name: string;
+  unit: ProductUnit;
+  stock: number;
+  isCooking: boolean;
+  mainIngredientId: string | null;
+  cookingLossPct: number;
+  items: ProductionTemplateItem[];
+}
+
+export interface CreateProductionRequest {
+  productId: string;
+  quantity: number;
+  inputs: { productId: string; quantity: number }[];
+  locationId?: string;
+  date?: string;
+  notes?: string;
 }
