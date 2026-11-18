@@ -7,6 +7,8 @@ import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import type { Cost, PaginationMeta, Product, StockLocation, StockMovement, StockMovementType } from "@/lib/types";
 import { Paginator } from "@/components/paginator";
+import { ScanReceiptButton } from "@/components/scan-receipt-button";
+import { matchReceiptProducts, type ParsedReceipt } from "@/lib/receipt-parse";
 import { Spinner } from "@/components/spinner";
 import { Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -181,6 +183,24 @@ function StockContent() {
     setRows([{ productId: "", quantity: "" }]);
     setExtraExpenseRows([{ description: "", cash: "", card: "" }]);
     setModalOpen(true);
+  };
+
+  const applyScan = (file: File, parsed: ParsedReceipt) => {
+    setFReceipt(file);
+    if (parsed.date) setFDate(parsed.date);
+    if (parsed.supplier) setFSupplier(parsed.supplier);
+    if (parsed.total != null) {
+      // efectivo → Efectivo; cualquier otro medio → Transferencia (como en el resto de esta pantalla)
+      const cash = parsed.paymentMethod === "Efectivo";
+      setFPayLater(false);
+      setFProductsCashAmount(cash ? String(parsed.total) : "");
+      setFProductsCardAmount(cash ? "" : String(parsed.total));
+    }
+    const matched = matchReceiptProducts(parsed.itemLines, products);
+    if (matched.length > 0) {
+      setRows(matched.map((m) => ({ productId: m.product.id, quantity: String(m.quantity) })));
+      toast.success(`Se reconocieron ${matched.length} producto(s). Revisá cantidades y costos.`);
+    }
   };
 
   const handleSubmit = async () => {
@@ -536,6 +556,13 @@ function StockContent() {
                       <label className="ha-label">Proveedor</label>
                       <input className="ha-input" placeholder="A quién se le compra" value={fSupplier} onChange={(e) => setFSupplier(e.target.value)} />
                     </div>
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <ScanReceiptButton onScanned={applyScan} disabled={submitting} />
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--ha-text-3)" }}>
+                      Sacale una foto al ticket: completa fecha, proveedor, pago y productos que reconozca. Revisalo antes de registrar.
+                    </p>
                   </div>
 
                   <div className="ha-field" style={{ marginBottom: 16 }}>

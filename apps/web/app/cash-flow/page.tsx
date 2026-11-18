@@ -1,6 +1,8 @@
 "use client";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ScanReceiptButton } from "@/components/scan-receipt-button";
+import type { ParsedReceipt } from "@/lib/receipt-parse";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
 import { apiClient } from "@/lib/api-client";
@@ -646,6 +648,25 @@ function MovementModal({
 
   const income = f.type === "INCOME";
 
+  const applyScan = (file: File, parsed: ParsedReceipt) => {
+    const category = config.categories.find((c) => c.type === "EXPENSE" && c.name === parsed.category)?.name ?? "";
+    const method = (config.paymentMethods as readonly string[]).includes(parsed.paymentMethod ?? "") ? parsed.paymentMethod! : "";
+    setReceiptFile(file);
+    setRemoveReceipt(false);
+    setF((prev) => ({
+      ...prev,
+      type: "EXPENSE",
+      date: parsed.date ?? prev.date,
+      amount: parsed.total != null ? String(parsed.total) : prev.amount,
+      counterparty: parsed.supplier ?? prev.counterparty,
+      description: prev.description || (parsed.supplier ? `Compra en ${parsed.supplier}` : "Compra (ticket)"),
+      category: category || prev.category,
+      paymentMethod: method || prev.paymentMethod,
+      // lo que no se pudo leer con seguridad queda marcado para revisar
+      needsReview: parsed.total == null || !parsed.date || !category,
+    }));
+  };
+
   return (
     <div className="ha-modal-backdrop" onClick={onClose}>
       <div className="ha-modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
@@ -654,6 +675,14 @@ function MovementModal({
           <button className="ha-iconbtn" onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
         <div className="ha-modal__body">
+          {!movement && (
+            <div style={{ marginBottom: 12 }}>
+              <ScanReceiptButton onScanned={applyScan} disabled={saving} />
+              <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--ha-text-3)" }}>
+                Sacale una foto al ticket y se completan los datos. Revisalos y corregí lo que haga falta antes de guardar.
+              </p>
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div className="ha-field">
               <label className="ha-label">Tipo</label>
