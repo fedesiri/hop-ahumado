@@ -98,6 +98,65 @@ function blendCover(
   ctx.putImageData(out, x0, y0);
 }
 
+const FONT = (s: number) => `700 ${s}px "Poppins", "Helvetica Neue", Arial, sans-serif`;
+
+interface ColumnLayout {
+  /** Tamaño de letra común a toda la columna (px). */
+  size: number;
+  /** Borde izquierdo de la columna: ahí se dibuja el "$". */
+  left: number;
+  /** Borde derecho: ahí terminan los números. */
+  right: number;
+}
+
+/**
+ * Agrupa los precios en columnas (mismo borde derecho) para que todos usen el mismo tamaño de letra,
+ * el "$" quede alineado a la izquierda de la columna y los números alineados a la derecha.
+ * El tamaño sale de la mediana de las alturas leídas (el OCR da cajas de alturas dispares) y se achica
+ * solo si el número más ancho de la columna no entra.
+ */
+function layoutColumns(
+  ctx: CanvasRenderingContext2D,
+  slots: PriceListSlot[],
+  prices: Map<string, number>,
+  W: number,
+  H: number,
+): Map<PriceListSlot, ColumnLayout> {
+  const out = new Map<PriceListSlot, ColumnLayout>();
+  const tol = W * 0.03;
+  const right = slots.filter((s) => s.align === "right").sort((p, q) => p.x + p.w - (q.x + q.w));
+  const groups: PriceListSlot[][] = [];
+  for (const sl of right) {
+    const g = groups[groups.length - 1];
+    const edge = (t: PriceListSlot) => (t.x + t.w) * W;
+    if (g && Math.abs(edge(sl) - edge(g[g.length - 1])) <= tol) g.push(sl);
+    else groups.push([sl]);
+  }
+  for (const g of groups) {
+    const medianH = medianOf(g.map((s) => s.h * H));
+    const colLeft = Math.min(...g.map((s) => s.x * W));
+    const colRight = medianOf(g.map((s) => (s.x + s.w) * W));
+    // ancho disponible: lo que ocupaba el precio viejo más ancho (con un poco de aire)
+    const span = (colRight - colLeft) * 1.25;
+    let size = medianH;
+    ctx.font = FONT(size);
+    const gap = size * 0.25;
+    const widest = Math.max(
+      ...g.map((s) => {
+        const v = prices.get(s.productId);
+        return ctx.measureText("$").width + gap + ctx.measureText(v === undefined ? "—" : numberText(v)).width;
+      }),
+    );
+    if (widest > span) size *= span / widest;
+    for (const sl of g) out.set(sl, { size, left: colLeft, right: colRight });
+  }
+  return out;
+}
+
+function numberText(value: number): string {
+  return formatCurrency(value).replace(/^\$/, "");
+}
+
 function drawSlot(
   ctx: CanvasRenderingContext2D,
   src: CanvasRenderingContext2D,
@@ -105,6 +164,7 @@ function drawSlot(
   W: number,
   H: number,
   value: number | undefined,
+  col?: ColumnLayout,
 ) {
   const x = slot.x * W;
   const y = slot.y * H;
@@ -114,25 +174,39 @@ function drawSlot(
   // El OCR devuelve la caja ajustada al texto: se tapa un poco más para no dejar bordes del precio viejo.
   const padX = h * 0.3;
   const padY = h * 0.18;
+  // Con columna, la zona tapada se extiende hasta el borde izquierdo de la columna (donde va el "$").
+  const coverX = col ? Math.min(x, col.left) : x;
+  const coverW = col ? Math.max(x + w, col.right) - coverX : w;
   if (slot.coverMode === "blend") {
-    blendCover(ctx, src, W, H, x - padX, y - padY, w + padX * 2, h + padY * 2);
+    blendCover(ctx, src, W, H, coverX - padX, y - padY, coverW + padX * 2, h + padY * 2);
   } else {
     ctx.fillStyle = slot.coverColor;
-    ctx.fillRect(x - padX, y - padY, w + padX * 2, h + padY * 2);
+    ctx.fillRect(coverX - padX, y - padY, coverW + padX * 2, h + padY * 2);
+  }
+
+  ctx.fillStyle = slot.textColor;
+  ctx.textBaseline = "middle";
+
+  if (col) {
+    // "$" pegado a la izquierda de la columna, número alineado a la derecha, mismo tamaño para todos.
+    const size = col.size * slot.fontScale;
+    ctx.font = FONT(size);
+    ctx.textAlign = "left";
+    ctx.fillText("$", col.left, y + h / 2);
+    ctx.textAlign = "right";
+    ctx.fillText(value === undefined ? "—" : numberText(value), col.right, y + h / 2);
+    return;
   }
 
   const text = value === undefined ? "—" : formatCurrency(value);
   let size = h * 1.0 * slot.fontScale;
-  const font = (s: number) => `700 ${s}px "Poppins", "Helvetica Neue", Arial, sans-serif`;
-  ctx.font = font(size);
+  ctx.font = FONT(size);
   const maxW = w * 1.3;
   const measured = ctx.measureText(text).width;
   if (measured > maxW) {
     size *= maxW / measured;
-    ctx.font = font(size);
+    ctx.font = FONT(size);
   }
-  ctx.fillStyle = slot.textColor;
-  ctx.textBaseline = "middle";
   ctx.textAlign = slot.align;
   const tx = slot.align === "left" ? x : slot.align === "right" ? x + w : x + w / 2;
   ctx.fillText(text, tx, y + h / 2);
@@ -162,7 +236,8 @@ export async function renderPriceListJpeg(
   if (!src) throw new Error("Tu navegador no pudo preparar la imagen");
   src.drawImage(canvas, 0, 0);
 
-  for (const slot of slots) drawSlot(ctx, src, slot, W, H, prices.get(slot.productId));
+  const layout = layoutColumns(ctx, slots, prices, W, H);
+  for (const slot of slots) drawSlot(ctx, src, slot, W, H, prices.get(slot.productId), layout.get(slot));
   const blob = await canvasToBlob(canvas, "image/jpeg", 0.92);
   return { blob, width: W, height: H };
 }
