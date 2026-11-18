@@ -19,6 +19,7 @@ interface Result {
   pdfUrl: string;
   previewUrl: string;
   file: File;
+  imageFile: File;
   missing: number;
 }
 
@@ -115,7 +116,8 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
       const file = new File([pdf], `lista-${list}-${slugify(target.name) || "precios"}.pdf`, {
         type: "application/pdf",
       });
-      setResult({ pdfUrl: URL.createObjectURL(pdf), previewUrl: URL.createObjectURL(jpeg), file, missing });
+      const imageFile = new File([jpeg], file.name.replace(/\.pdf$/, ".jpg"), { type: "image/jpeg" });
+      setResult({ pdfUrl: URL.createObjectURL(pdf), previewUrl: URL.createObjectURL(jpeg), file, imageFile, missing });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF");
     } finally {
@@ -216,10 +218,11 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
     }
   };
 
-  const share = async () => {
+  const share = async (kind: "pdf" | "image" = "pdf") => {
     if (!result) return;
+    const f = kind === "image" ? result.imageFile : result.file;
     try {
-      await navigator.share({ files: [result.file], title: result.file.name });
+      await navigator.share({ files: [f], title: f.name });
     } catch {
       // el usuario canceló
     }
@@ -233,6 +236,11 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
     typeof navigator.canShare === "function" &&
     !!result &&
     navigator.canShare({ files: [result.file] });
+  const canShareImage =
+    typeof navigator !== "undefined" &&
+    typeof navigator.canShare === "function" &&
+    !!result &&
+    navigator.canShare({ files: [result.imageFile] });
 
   if (editing) {
     return (
@@ -446,8 +454,8 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
                   ⬇ Descargar PDF
                 </a>
                 {canShare && (
-                  <button className="ha-btn ha-btn--secondary" style={{ height: 48 }} onClick={() => void share()}>
-                    Compartir
+                  <button className="ha-btn ha-btn--secondary" style={{ height: 48 }} onClick={() => void share("pdf")}>
+                    Compartir PDF
                   </button>
                 )}
                 <a
@@ -459,6 +467,21 @@ export function PriceListPdfModal({ initialListType, onClose }: Props) {
                 >
                   Abrir
                 </a>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <a
+                  className="ha-btn ha-btn--secondary"
+                  style={{ flex: 1, height: 48 }}
+                  href={result.previewUrl}
+                  download={result.imageFile.name}
+                >
+                  ⬇ Descargar imagen
+                </a>
+                {canShareImage && (
+                  <button className="ha-btn ha-btn--secondary" style={{ height: 48 }} onClick={() => void share("image")}>
+                    Enviar imagen
+                  </button>
+                )}
               </div>
             </div>
           )}
