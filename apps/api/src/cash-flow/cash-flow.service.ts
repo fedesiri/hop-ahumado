@@ -4,6 +4,7 @@ import { CashMovement, PaymentMethod, Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { buildPaginatedResponse, PaginatedResponse } from "../common/pagination";
 import { firebaseAdmin } from "../auth/firebase-admin";
+import { InventoryService } from "../inventory/inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   CASH_BOX_PAYER,
@@ -37,6 +38,8 @@ export type CashMovementResponse = {
   notes: string | null;
   needsReview: boolean;
   hasReceipt: boolean;
+  /** Productos que sumaron stock al registrar este gasto (solo en la respuesta de la creación). */
+  stockAdded?: { productId: string; name: string; unit: string; quantity: number; stock: number }[];
 };
 
 export type CashSnapshotResponse = {
@@ -116,7 +119,10 @@ function parseDay(value: string): Date {
 
 @Injectable()
 export class CashFlowService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inventory: InventoryService,
+  ) {}
 
   getConfig() {
     return {
@@ -175,25 +181,56 @@ export class CashFlowService {
 
   async create(dto: CreateCashMovementDto): Promise<CashMovementResponse> {
     const category = this.resolveCategory(dto.category, dto.type);
-    const row = await this.prisma.cashMovement.create({
-      data: {
-        businessLineId: dto.businessLineId,
-        date: parseDay(dto.date),
-        type: dto.type,
-        category: category.name,
-        classification: category.classification,
-        description: dto.description.trim(),
-        counterparty: dto.counterparty?.trim() || null,
-        amount: new Decimal(dto.amount),
-        paymentMethod: dto.paymentMethod || null,
-        status: dto.status ?? "SETTLED",
-        payer: dto.payer?.trim() || CASH_BOX_PAYER,
-        reimbursementStatus: dto.reimbursementStatus || null,
-        notes: dto.notes?.trim() || null,
-        needsReview: dto.needsReview ?? false,
-      },
+    const items = dto.stockItems ?? [];
+    if (items.length > 0 && dto.type !== "EXPENSE") {
+      throw new BadRequestException("Solo los gastos pueden sumar stock");
+    }
+    const ids = items.map((i) => i.productId);
+    if (new Set(ids).size !== ids.length) throw new BadRequestException("Hay un producto repetido en la compra");
+
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.cashMovement.create({
+        data: {
+          businessLineId: dto.businessLineId,
+          date: parseDay(dto.date),
+          type: dto.type,
+          category: category.name,
+          classification: category.classification,
+          description: dto.description.trim(),
+          counterparty: dto.counterparty?.trim() || null,
+          amount: new Decimal(dto.amount),
+          paymentMethod: dto.paymentMethod || null,
+          status: dto.status ?? "SETTLED",
+          payer: dto.payer?.trim() || CASH_BOX_PAYER,
+          reimbursementStatus: dto.reimbursementStatus || null,
+          notes: dto.notes?.trim() || null,
+          needsReview: dto.needsReview ?? false,
+        },
+      });
+
+      const stockAdded: NonNullable<CashMovementResponse["stockAdded"]> = [];
+      if (items.length > 0) {
+        const products = await tx.product.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true, unit: true, businessLineId: true },
+        });
+        if (products.length !== ids.length) throw new BadRequestException("Algún producto de la compra no existe");
+        const locationId = await this.inventory.getDefaultLocationId(tx, dto.businessLineId);
+        const at = new Date(`${dto.date.slice(0, 10)}T12:00:00.000Z`);
+        const supplier = dto.counterparty?.trim();
+        const reason = `Compra: ${dto.description.trim()}${supplier ? ` - ${supplier}` : ""} (gasto de caja)`;
+        for (const item of items) {
+          const p = products.find((x) => x.id === item.productId)!;
+          await this.inventory.applyBalanceDelta(tx, p.id, locationId, item.quantity);
+          await tx.stockMovement.create({
+            data: { productId: p.id, quantity: item.quantity, type: "IN", reason, locationId, createdAt: at },
+          });
+          const fresh = await tx.product.findUnique({ where: { id: p.id }, select: { stock: true } });
+          stockAdded.push({ productId: p.id, name: p.name, unit: p.unit, quantity: item.quantity, stock: fresh?.stock ?? 0 });
+        }
+      }
+      return { ...toResponse(row), ...(stockAdded.length > 0 ? { stockAdded } : {}) };
     });
-    return toResponse(row);
   }
 
   async update(id: string, dto: UpdateCashMovementDto): Promise<CashMovementResponse> {

@@ -7,8 +7,6 @@ import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import { StockMovementType, type Cost, type PaginationMeta, type Product, type StockLocation, type StockMovement } from "@/lib/types";
 import { Paginator } from "@/components/paginator";
-import { ScanReceiptButton } from "@/components/scan-receipt-button";
-import { matchReceiptProducts, type ParsedReceipt } from "@/lib/receipt-parse";
 import { Spinner } from "@/components/spinner";
 import { Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -183,25 +181,6 @@ function StockContent() {
     setRows([{ productId: "", quantity: "" }]);
     setExtraExpenseRows([{ description: "", cash: "", card: "" }]);
     setModalOpen(true);
-  };
-
-  const applyScan = (file: File, parsed: ParsedReceipt) => {
-    setFType(StockMovementType.IN); // un ticket de compra siempre es una entrada de stock
-    setFReceipt(file);
-    if (parsed.date) setFDate(parsed.date);
-    if (parsed.supplier) setFSupplier(parsed.supplier);
-    if (parsed.total != null) {
-      // efectivo → Efectivo; cualquier otro medio → Transferencia (como en el resto de esta pantalla)
-      const cash = parsed.paymentMethod === "Efectivo";
-      setFPayLater(false);
-      setFProductsCashAmount(cash ? String(parsed.total) : "");
-      setFProductsCardAmount(cash ? "" : String(parsed.total));
-    }
-    const matched = matchReceiptProducts(parsed.itemLines, products);
-    if (matched.length > 0) {
-      setRows(matched.map((m) => ({ productId: m.product.id, quantity: String(m.quantity) })));
-      toast.success(`Se reconocieron ${matched.length} producto(s). Revisá cantidades y costos.`);
-    }
   };
 
   const handleSubmit = async () => {
@@ -467,12 +446,6 @@ function StockContent() {
               <button className="ha-iconbtn" onClick={() => setModalOpen(false)} aria-label="Cerrar">✕</button>
             </div>
             <div className="ha-modal__body" style={{ maxHeight: "75vh", overflowY: "auto" }}>
-              <div style={{ marginBottom: 16 }}>
-                <ScanReceiptButton onScanned={applyScan} disabled={submitting} />
-                <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--ha-text-3)" }}>
-                  Sacale una foto al ticket de una compra: se elige &quot;Entrada&quot; y se completan fecha, proveedor, pago y los productos que reconozca. Revisalo antes de registrar.
-                </p>
-              </div>
               <div className="ha-field" style={{ marginBottom: 16 }}>
                 <label className="ha-label">Tipo de movimiento <span style={{ color: "var(--ha-red)" }}>*</span></label>
                 <select className="ha-input" value={fType} onChange={(e) => setFType(e.target.value as StockMovementType | "")}>

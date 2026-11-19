@@ -1,8 +1,7 @@
 "use client";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ScanReceiptButton } from "@/components/scan-receipt-button";
-import type { ParsedReceipt } from "@/lib/receipt-parse";
+import { PurchaseStockSection, STOCK_CATEGORIES, isSuspiciousQuantity, validPurchaseRows, type PurchaseStockRow } from "@/components/purchase-stock-section";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
 import { apiClient } from "@/lib/api-client";
@@ -17,6 +16,7 @@ import type {
   CashMovementStatus,
   CashMovementType,
   CashSummary,
+  Product,
 } from "@/lib/types";
 import { Check, Paperclip, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -55,7 +55,7 @@ export default function CashFlowPage() {
           </p>
           <ol style={{ margin: "0 0 8px 0", paddingLeft: 20 }}>
             <li><strong>Resumen:</strong> muestra cuánto entró, cuánto salió y cuánto quedó. Podés elegir un mes y un año.</li>
-            <li><strong>Movimientos:</strong> la lista de cada ingreso y egreso. Tocá <strong>+ Nuevo movimiento</strong> para anotar uno. Si algo estaba pendiente y ya se cobró o se pagó, tocá el tilde verde de esa fila; no hace falta cargarlo de nuevo.</li>
+            <li><strong>Movimientos:</strong> la lista de cada ingreso y egreso. Tocá <strong>+ Nuevo movimiento</strong> para anotar uno. Si es un gasto de mercadería (carne, insumos, packaging), elegí en el mismo formulario qué producto y cuánto compraste: <strong>el stock sube solo</strong>. Si algo estaba pendiente y ya se cobró o se pagó, tocá el tilde verde de esa fila; no hace falta cargarlo de nuevo.</li>
             <li><strong>Caja y deudas:</strong> acá actualizás cuánta plata hay hoy en efectivo y en Mercado Pago, y ves cuánto hay que devolverle a cada socio.</li>
           </ol>
           <p style={{ margin: 0 }}>
@@ -585,6 +585,9 @@ function MovementModal({
   const [saving, setSaving] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [removeReceipt, setRemoveReceipt] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [stockRows, setStockRows] = useState<PurchaseStockRow[]>([]);
+  const [askNoStock, setAskNoStock] = useState(false);
   const [f, setF] = useState<FormState>(() => ({
     date: movement?.date ?? todayStr(),
     type: movement?.type ?? "EXPENSE",
@@ -601,16 +604,52 @@ function MovementModal({
   }));
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setF((prev) => ({ ...prev, [key]: value }));
 
+  // Productos de la línea para poder elegir qué entra a stock con la compra (solo al crear un gasto).
+  useEffect(() => {
+    if (movement) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const all: Product[] = [];
+        for (let page = 1; page <= 10; page++) {
+          const r = await apiClient.getProducts(page, 100, false, undefined, undefined, lineId);
+          all.push(...r.data);
+          if (page >= (r.meta?.totalPages ?? 1)) break;
+        }
+        if (!cancelled) setProducts(all.sort((a, b) => a.name.localeCompare(b.name, "es")));
+      } catch {
+        if (!cancelled) toast.error("No se pudieron cargar los productos de stock");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lineId, movement]);
+
   const categories = config.categories.filter((c) => c.type === f.type);
   const thirdParty = f.payer !== config.defaultPayer;
 
-  const submit = async () => {
+  const submit = async (skipStockCheck = false) => {
     const amount = Number(f.amount);
     if (!f.category) return toast.error("Elegí una categoría");
     if (!f.description.trim()) return toast.error("Escribí una descripción");
     if (f.amount === "" || Number.isNaN(amount)) return toast.error("Ingresá un monto válido");
     if (f.status === "SETTLED" && !f.paymentMethod) return toast.error("Elegí el medio de pago, o dejalo como Pendiente");
+    const stockItems = !movement && f.type === "EXPENSE" ? validPurchaseRows(stockRows) : [];
+    if (!movement && f.type === "EXPENSE" && stockRows.length > stockItems.length) {
+      return toast.error("Hay un producto de stock sin elegir o sin cantidad. Completalo o quitalo con la ✕.");
+    }
+    const byId = new Map(products.map((p) => [p.id, p]));
+    const bad = stockItems.find((i) => isSuspiciousQuantity(byId.get(i.productId)?.unit, i.quantity) && i.quantity >= 1000);
+    if (bad) {
+      return toast.error(`${byId.get(bad.productId)?.name}: ${bad.quantity} parece estar en gramos. Se carga en kg o litros (ej. 3,1 y no 3100).`);
+    }
+    if (!skipStockCheck && !movement && f.type === "EXPENSE" && STOCK_CATEGORIES.includes(f.category) && stockItems.length === 0) {
+      setAskNoStock(true);
+      return;
+    }
     const input: CashMovementInput = {
+      stockItems: stockItems.length > 0 ? stockItems : undefined,
       date: f.date,
       type: f.type,
       category: f.category,
@@ -637,7 +676,14 @@ function MovementModal({
         receiptError = true;
       }
       if (receiptError) toast.error("El movimiento se guardó, pero no se pudo subir el ticket. Editalo y probá de nuevo.");
-      else toast.success(movement ? "Movimiento actualizado" : "Movimiento registrado");
+      else if (saved.stockAdded && saved.stockAdded.length > 0) {
+        const units: Record<string, string> = UNIT_LABELS;
+        toast.success(
+          `Gasto registrado. Stock actualizado: ${saved.stockAdded
+            .map((s) => `${s.name} +${formatQuantity(s.quantity)} ${units[s.unit] ?? ""} (ahora ${formatQuantity(s.stock)})`)
+            .join(", ")}`,
+        );
+      } else toast.success(movement ? "Movimiento actualizado" : "Movimiento registrado");
       onSaved();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al guardar el movimiento");
@@ -648,25 +694,6 @@ function MovementModal({
 
   const income = f.type === "INCOME";
 
-  const applyScan = (file: File, parsed: ParsedReceipt) => {
-    const category = config.categories.find((c) => c.type === "EXPENSE" && c.name === parsed.category)?.name ?? "";
-    const method = (config.paymentMethods as readonly string[]).includes(parsed.paymentMethod ?? "") ? parsed.paymentMethod! : "";
-    setReceiptFile(file);
-    setRemoveReceipt(false);
-    setF((prev) => ({
-      ...prev,
-      type: "EXPENSE",
-      date: parsed.date ?? prev.date,
-      amount: parsed.total != null ? String(parsed.total) : prev.amount,
-      counterparty: parsed.supplier ?? prev.counterparty,
-      description: prev.description || (parsed.supplier ? `Compra en ${parsed.supplier}` : "Compra (ticket)"),
-      category: category || prev.category,
-      paymentMethod: method || prev.paymentMethod,
-      // lo que no se pudo leer con seguridad queda marcado para revisar
-      needsReview: parsed.total == null || !parsed.date || !category,
-    }));
-  };
-
   return (
     <div className="ha-modal-backdrop" onClick={onClose}>
       <div className="ha-modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
@@ -675,14 +702,6 @@ function MovementModal({
           <button className="ha-iconbtn" onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
         <div className="ha-modal__body">
-          {!movement && (
-            <div style={{ marginBottom: 12 }}>
-              <ScanReceiptButton onScanned={applyScan} disabled={saving} />
-              <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--ha-text-3)" }}>
-                Sacale una foto al ticket y se completan los datos. Revisalos y corregí lo que haga falta antes de guardar.
-              </p>
-            </div>
-          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div className="ha-field">
               <label className="ha-label">Tipo</label>
@@ -758,6 +777,20 @@ function MovementModal({
               </div>
             )}
           </div>
+          {!movement && f.type === "EXPENSE" && (
+            <PurchaseStockSection
+              products={products}
+              rows={stockRows}
+              onChange={setStockRows}
+              category={f.category}
+              amount={Number(f.amount) || 0}
+            />
+          )}
+          {movement && f.type === "EXPENSE" && STOCK_CATEGORIES.includes(f.category) && (
+            <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--ha-text-3)" }}>
+              Editar este gasto no cambia el stock. Si hay que corregir cantidades, hacelo desde Stock → Movimientos.
+            </p>
+          )}
           <div className="ha-field" style={{ marginTop: 12 }}>
             <label className="ha-label">Observaciones</label>
             <textarea className="ha-input" rows={2} value={f.notes} onChange={(e) => set("notes", e.target.value)} />
@@ -799,6 +832,19 @@ function MovementModal({
           </button>
         </div>
       </div>
+      {askNoStock && (
+        <ConfirmDialog
+          title="Esta compra no suma stock"
+          description={<>Elegiste una categoría de mercadería (<strong>{f.category}</strong>) pero no agregaste ningún producto de stock. Si guardás así, el stock no va a subir.</>}
+          confirmLabel="Guardar sin sumar stock"
+          destructive={false}
+          onCancel={() => setAskNoStock(false)}
+          onConfirm={() => {
+            setAskNoStock(false);
+            void submit(true);
+          }}
+        />
+      )}
     </div>
   );
 }

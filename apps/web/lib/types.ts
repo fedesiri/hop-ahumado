@@ -1108,6 +1108,8 @@ export interface CashMovement {
   notes: string | null;
   needsReview: boolean;
   hasReceipt: boolean;
+  /** Solo al crear un gasto con productos de stock: lo que sumó al stock. */
+  stockAdded?: { productId: string; name: string; unit: string; quantity: number; stock: number }[];
 }
 
 export interface CashMovementsResponse extends PaginatedResponse<CashMovement> {
@@ -1135,6 +1137,8 @@ export interface CashMovementInput {
   reimbursementStatus?: string;
   notes?: string;
   needsReview?: boolean;
+  /** Productos de stock que entran con esta compra (solo al crear un gasto). */
+  stockItems?: { productId: string; quantity: number }[];
 }
 
 export interface CashSnapshot {
