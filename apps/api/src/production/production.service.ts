@@ -4,6 +4,9 @@ import { InventoryService } from "../inventory/inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateProductionDto } from "./dto/create-production.dto";
 
+/** Tope por producción en productos medidos en kg/L: por encima casi seguro se cargaron gramos/ml. */
+const MAX_KG_L = 1000;
+
 /** YYYY-MM-DD → mediodía UTC de ese día (evita corrimientos de zona horaria). */
 function movementDate(date?: string): Date | undefined {
   return date ? new Date(`${date}T12:00:00.000Z`) : undefined;
@@ -85,11 +88,27 @@ export class ProductionService {
     return this.prisma.$transaction(async (tx) => {
       const product = await tx.product.findUnique({
         where: { id: dto.productId },
-        select: { id: true, name: true, businessLineId: true },
+        select: { id: true, name: true, businessLineId: true, unit: true },
       });
       if (!product) throw new BadRequestException("Producto no encontrado");
-      const found = await tx.product.findMany({ where: { id: { in: ids } }, select: { id: true } });
+      const found = await tx.product.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, unit: true } });
       if (found.length !== ids.length) throw new BadRequestException("Algún insumo no existe");
+
+      // Guarda contra cargar gramos en un producto medido en kg (o ml en uno medido en litros).
+      const checks = [
+        { name: product.name, unit: product.unit, quantity: dto.quantity },
+        ...dto.inputs.map((i) => {
+          const f = found.find((x) => x.id === i.productId)!;
+          return { name: f.name, unit: f.unit, quantity: i.quantity };
+        }),
+      ];
+      for (const c of checks) {
+        if ((c.unit === "KG" || c.unit === "L") && c.quantity > MAX_KG_L) {
+          throw new BadRequestException(
+            `${c.name}: ${c.quantity} ${c.unit === "KG" ? "kg" : "L"} parece demasiado. ¿Lo cargaste en ${c.unit === "KG" ? "gramos" : "ml"}? Se carga en ${c.unit === "KG" ? "kg" : "litros"} (ej. 3,1 y no 3100).`,
+          );
+        }
+      }
 
       const locationId = dto.locationId ?? (await this.inventory.getDefaultLocationId(tx, product.businessLineId));
       const createdAt = movementDate(dto.date);

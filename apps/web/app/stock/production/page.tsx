@@ -21,6 +21,12 @@ function num(s: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Cantidad sospechosa: en kg/L, 200 o más casi siempre es un valor cargado en gramos/ml. */
+const SUSPICIOUS = 200;
+function isSuspicious(unit: string, qty: number): boolean {
+  return (unit === "KG" || unit === "L") && qty >= SUSPICIOUS;
+}
+
 function today(): string {
   const d = new Date();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -117,6 +123,10 @@ export default function ProductionPage() {
   }, [template, extras, removed, overrides, outQty, rawQty, driver]);
 
   const realLoss = template?.isCooking && num(rawQty) > 0 && outQty > 0 ? 1 - outQty / num(rawQty) : null;
+  const suspiciousNames = [
+    ...(template && isSuspicious(template.unit, outQty) ? [template.name] : []),
+    ...lines.filter((l) => isSuspicious(l.unit, l.qty)).map((l) => l.name),
+  ];
   const canSave = !!template && outQty > 0 && lines.some((l) => l.qty > 0) && !saving;
 
   const addable = products.filter(
@@ -125,6 +135,7 @@ export default function ProductionPage() {
 
   const submit = async () => {
     if (!template || !canSave) return;
+    if (suspiciousNames.length > 0 && !window.confirm(`Revisá las cantidades: ${suspiciousNames.join(", ")}. ¿Están en kg/litros y no en gramos/ml? ¿Registrar igual?`)) return;
     try {
       setSaving(true);
       await apiClient.createProduction({
@@ -324,6 +335,11 @@ export default function ProductionPage() {
               </div>
             </div>
 
+            {suspiciousNames.length > 0 && (
+              <div style={{ fontSize: 13, color: "var(--ha-red)", background: "var(--ha-surface-2, transparent)", padding: "8px 10px", border: "1px solid var(--ha-red)", borderRadius: 8 }}>
+                ⚠ Cantidad muy grande en {suspiciousNames.join(", ")}. Acá se carga en <b>kg o litros</b> (3,1 y no 3100). Revisalo antes de registrar.
+              </div>
+            )}
             <div style={{ fontSize: 14 }}>
               Va a sumar <b>{fmt(outQty) || 0} {unitLabel}</b> de <b>{template.name}</b>.
             </div>
