@@ -778,6 +778,15 @@ export class ApiClient {
     });
   }
 
+  /** Actualiza el costo de los productos con el precio pagado en una compra (importe / cantidad). */
+  async applyPurchaseCosts(
+    items: { productId: string; quantity: number; amount: number }[],
+  ): Promise<
+    Array<{ productId: string; kind: "updated"; from: number | null; to: number } | { productId: string; kind: "skipped"; note: string }>
+  > {
+    return this.request("/purchase-costs", { method: "POST", body: JSON.stringify({ items }) });
+  }
+
   // Producción
   async getProductionTemplates(businessLineId: string): Promise<ProductionTemplate[]> {
     return this.request(`/production/templates${this.buildParams({ businessLineId })}`);

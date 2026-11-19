@@ -31,6 +31,7 @@ import { PriceModule } from "./price/price.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductModule } from "./product/product.module";
 import { ProductionModule } from "./production/production.module";
+import { PurchaseCostModule } from "./purchase-cost/purchase-cost.module";
 import { ProductionPlanModule } from "./production-plan/production-plan.module";
 import { QuoteModule } from "./quote/quote.module";
 import { RecipeCostProfileModule } from "./recipe-cost-profile/recipe-cost-profile.module";
@@ -77,6 +78,7 @@ import { UserModule } from "./user/user.module";
     CategoryModule,
     ProductModule,
     ProductionModule,
+    PurchaseCostModule,
     UserModule,
     CustomerModule,
     CustomerProfileModule,

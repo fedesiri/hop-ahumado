@@ -7,6 +7,7 @@ import { useLineContext } from "@/lib/line-context";
 import { toast } from "@/lib/toast";
 import { StockMovementType, type Cost, type PaginationMeta, type Product, type StockLocation, type StockMovement } from "@/lib/types";
 import { Paginator } from "@/components/paginator";
+import { isSuspiciousQuantity } from "@/components/purchase-stock-section";
 import { Spinner } from "@/components/spinner";
 import { Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -78,7 +79,8 @@ function StockContent() {
   const [fReceipt, setFReceipt] = useState<File | null>(null);
   const [fProductsCashAmount, setFProductsCashAmount] = useState("");
   const [fProductsCardAmount, setFProductsCardAmount] = useState("");
-  const [rows, setRows] = useState<Array<{ productId: string; quantity: string }>>([{ productId: "", quantity: "" }]);
+  const [fUpdateCosts, setFUpdateCosts] = useState(true);
+  const [rows, setRows] = useState<Array<{ productId: string; quantity: string; amount?: string }>>([{ productId: "", quantity: "" }]);
   const [extraExpenseRows, setExtraExpenseRows] = useState<Array<{ description: string; cash: string; card: string }>>([{ description: "", cash: "", card: "" }]);
 
   useEffect(() => {
@@ -162,6 +164,15 @@ function StockContent() {
   );
   const hasMissingCostForSelectedProducts = validRows.some((r) => !costsByProductId[r.productId]);
   const missingCostProductNames = validRows.filter((r) => !costsByProductId[r.productId]).map((r) => products.find((p) => p.id === r.productId)?.name ?? r.productId);
+  const multiRows = validRows.length > 1;
+  const rowAmountsGiven = validRows.length > 0 && validRows.every((r) => Number(r.amount) > 0);
+  const rowAmountsTotal = roundMoney(validRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0));
+  const paidTotal = (Number(fProductsCashAmount) || 0) + (Number(fProductsCardAmount) || 0);
+  /** Importe pagado por cada producto: con uno solo es el pago total; con varios, el que se cargó en cada fila. */
+  const paidForRow = (r: { quantity: string; amount?: string }): number =>
+    multiRows ? Number(r.amount) || 0 : fPayLater ? 0 : paidTotal;
+  /** Total a deber si se paga después: lo cargado por producto, o el costo actual de cada uno. */
+  const payLaterTotal = rowAmountsGiven ? rowAmountsTotal : computedProductsCostTotal;
   const defaultLocationId = locations.find((l) => l.isDefault)?.id ?? locations[0]?.id ?? "";
 
   const totalPages = meta ? Math.ceil(meta.total / pagination.limit) : 1;
@@ -178,6 +189,7 @@ function StockContent() {
     setFReceipt(null);
     setFProductsCashAmount("");
     setFProductsCardAmount("");
+    setFUpdateCosts(true);
     setRows([{ productId: "", quantity: "" }]);
     setExtraExpenseRows([{ description: "", cash: "", card: "" }]);
     setModalOpen(true);
@@ -199,14 +211,18 @@ function StockContent() {
     const movementDay = type === "IN" ? fDate : "";
 
     if (type === "IN") {
-      if (hasMissingCostForSelectedProducts) {
-        toast.error(`Falta costo para: ${missingCostProductNames.join(", ")}.`);
+      if (!fDate) { toast.error("Elegí la fecha del movimiento."); return; }
+      const tooBig = submitRows.find((r) => {
+        const pr = products.find((p) => p.id === r.productId);
+        return isSuspiciousQuantity(pr?.unit, Number(r.quantity)) && Number(r.quantity) >= 1000;
+      });
+      if (tooBig) {
+        toast.error(`${products.find((p) => p.id === tooBig.productId)?.name}: ${tooBig.quantity} parece estar en gramos. Se carga en kg o litros (ej. 3,1 y no 3100).`);
         return;
       }
-      if (!fDate) { toast.error("Elegí la fecha del movimiento."); return; }
       if (fPayLater) {
-        if (computedProductsCostTotal <= 0) {
-          toast.error("Para dejar el pago pendiente, los productos tienen que tener costo cargado.");
+        if (payLaterTotal <= 0) {
+          toast.error("Para dejar el pago pendiente, cargá el $ de cada producto o que tengan costo cargado.");
           return;
         }
       } else {
@@ -217,12 +233,9 @@ function StockContent() {
           toast.error("Informá el pago de los productos (efectivo y/o transferencia), o tildá \"Pagar después\".");
           return;
         }
-        if (computedProductsCostTotal > 0 && !hasMissingCostForSelectedProducts) {
-          const diff = Math.abs(productsTotalPaid - computedProductsCostTotal);
-          if (diff > 0.01) {
-            toast.error(`El pago informado para productos no coincide con el costo calculado (${computedProductsCostTotal.toFixed(2)}).`);
-            return;
-          }
+        if (multiRows && rowAmountsGiven && Math.abs(rowAmountsTotal - productsTotalPaid) > 0.01) {
+          toast.error(`Los $ por producto suman ${formatCurrency(rowAmountsTotal)} pero el pago informado es ${formatCurrency(productsTotalPaid)}. Tienen que coincidir.`);
+          return;
         }
       }
       const invalidExtra = extraExpenseRows.find((r) => (Number(r.cash) > 0 || Number(r.card) > 0) && !r.description.trim());
@@ -298,7 +311,7 @@ function StockContent() {
               category: "Materia prima",
               description: productsDescription,
               counterparty: supplier || undefined,
-              amount: computedProductsCostTotal,
+              amount: payLaterTotal,
               status: "PENDING",
             });
             productMovementIds.push(pending.id);
@@ -332,7 +345,28 @@ function StockContent() {
         }
       }
 
-      toast.success("Movimientos de stock registrados");
+      let costNote = "";
+      if (type === "IN" && fUpdateCosts) {
+        const costItems = submitRows
+          .map((r) => ({ productId: r.productId, quantity: Number(r.quantity), amount: paidForRow(r) }))
+          .filter((i) => i.amount > 0 && i.quantity > 0);
+        if (costItems.length > 0) {
+          try {
+            const outcomes = await apiClient.applyPurchaseCosts(costItems);
+            const name = (id: string) => products.find((p) => p.id === id)?.name ?? "producto";
+            const updated = outcomes.flatMap((o) => (o.kind === "updated" ? [`${name(o.productId)} ${formatCurrency(o.to)}`] : []));
+            const skipped = outcomes.flatMap((o) =>
+              o.kind === "skipped" && o.note !== "El costo ya era ese" ? [`${name(o.productId)} (${o.note})`] : [],
+            );
+            if (updated.length > 0) costNote += `. Costo actualizado: ${updated.join(", ")}`;
+            if (skipped.length > 0) costNote += `. Sin cambio de costo: ${skipped.join("; ")}`;
+          } catch {
+            costNote = ". No se pudo actualizar el costo: hacelo desde Costos";
+          }
+        }
+      }
+
+      toast.success(`Movimientos de stock registrados${costNote}`);
       setModalOpen(false);
       void fetchMovements();
     } catch {
@@ -498,7 +532,7 @@ function StockContent() {
                       onChange={(v) => { const next = [...rows]; next[index].productId = v.target.value; setRows(next); }}
                     >
                       <option value="">Producto</option>
-                      {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({UNIT_LABELS[p.unit] ?? ""}) · stock {formatQuantity(p.stock)}</option>)}
                     </select>
                     <input
                       type="number"
@@ -510,6 +544,19 @@ function StockContent() {
                       value={row.quantity}
                       onChange={(e) => { const next = [...rows]; next[index].quantity = e.target.value; setRows(next); }}
                     />
+                    {fType === "IN" && multiRows && row.productId && (
+                      <input
+                        type="number"
+                        className="ha-input"
+                        style={{ width: 150 }}
+                        placeholder="$ de este producto"
+                        min={0}
+                        step={0.01}
+                        value={row.amount ?? ""}
+                        onChange={(e) => { const next = [...rows]; next[index].amount = e.target.value; setRows(next); }}
+                        aria-label="Importe de este producto"
+                      />
+                    )}
                     {rows.length > 1 && (
                       <button
                         onClick={() => { const next = rows.filter((_, i) => i !== index); setRows(next.length ? next : [{ productId: "", quantity: "" }]); }}
@@ -520,6 +567,25 @@ function StockContent() {
                     )}
                   </div>
                 ))}
+                {rows.map((row, index) => {
+                  const pr = products.find((p) => p.id === row.productId);
+                  const q = Number(row.quantity);
+                  if (!pr || !(q > 0)) return null;
+                  const suspicious = isSuspiciousQuantity(pr.unit, q);
+                  const paid = fType === "IN" ? paidForRow(row) : 0;
+                  const oldCost = costsByProductId[pr.id] ? Number(costsByProductId[pr.id].value) : null;
+                  const newCost = paid > 0 ? paid / q : null;
+                  const sign = fType === "OUT" ? -1 : fType === "IN" ? 1 : 0;
+                  return (
+                    <div key={`info-${index}`} style={{ fontSize: 12, marginBottom: 6, color: suspicious ? "var(--ha-red)" : "var(--ha-text-3)" }}>
+                      <b>{pr.name}:</b> {suspicious ? `⚠ ${formatQuantity(q)} ${UNIT_LABELS[pr.unit]} es mucho, ¿lo pusiste en gramos? Acá va en kg o litros. ` : ""}
+                      {sign !== 0 && <>stock {formatQuantity(pr.stock)} → <b>{formatQuantity(pr.stock + sign * q)} {UNIT_LABELS[pr.unit]}</b></>}
+                      {fType === "IN" && fUpdateCosts && newCost !== null && (
+                        <> · costo por {UNIT_LABELS[pr.unit]}: {oldCost !== null ? `${formatCurrency(oldCost)} → ` : "nuevo: "}<b>{formatCurrency(newCost)}</b></>
+                      )}
+                    </div>
+                  );
+                })}
                 <button className="ha-btn ha-btn--secondary ha-btn--sm" onClick={() => setRows([...rows, { productId: "", quantity: "" }])}>
                   + Agregar producto
                 </button>
@@ -552,8 +618,18 @@ function StockContent() {
 
                   <div style={{ marginBottom: 16, paddingTop: 12, borderTop: "1px solid var(--ha-border)" }}>
                     <p style={{ margin: "0 0 8px 0", color: "var(--ha-text)", fontWeight: 600 }}>Pago de productos</p>
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 12, fontSize: 13 }}>
+                      <input type="checkbox" checked={fUpdateCosts} onChange={(e) => setFUpdateCosts(e.target.checked)} style={{ marginTop: 3 }} />
+                      <span>
+                        Actualizar el costo de estos productos con el precio de esta compra
+                        {multiRows && !rowAmountsGiven && fUpdateCosts && (
+                          <span style={{ display: "block", fontSize: 12, color: "var(--ha-text-3)" }}>Completá el $ de cada producto para que se actualice su costo.</span>
+                        )}
+                      </span>
+                    </label>
                     <p style={{ margin: "0 0 12px 0", color: "var(--ha-text-3)", fontSize: 13 }}>
-                      Costo total calculado: <span style={{ color: "var(--ha-green)" }}>{formatCurrency(computedProductsCostTotal)}</span>
+                      {computedProductsCostTotal > 0 ? <>Con los costos actuales serían: <span style={{ color: "var(--ha-green)" }}>{formatCurrency(computedProductsCostTotal)}</span>. </> : null}
+                      Cargá lo que realmente pagaste.
                     </p>
                     <label style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, fontSize: 13 }}>
                       <input type="checkbox" checked={fPayLater} onChange={(e) => setFPayLater(e.target.checked)} /> Pagar después (queda pendiente en Flujo de caja)
@@ -569,7 +645,9 @@ function StockContent() {
                           <input type="number" className="ha-input" min={0} step={0.01} placeholder="Monto por transferencia" value={fProductsCardAmount} onChange={(e) => setFProductsCardAmount(e.target.value)} />
                         </div>
                         <p style={{ margin: "8px 0 0 0", color: "var(--ha-text-3)", fontSize: 13 }}>
-                          Efectivo + transferencia debe coincidir con el costo calculado.
+                          {paidTotal > 0 && computedProductsCostTotal > 0 && Math.abs(paidTotal - computedProductsCostTotal) > 0.01
+                            ? `Pagaste ${formatCurrency(paidTotal)} y con los costos actuales serían ${formatCurrency(computedProductsCostTotal)}: se actualiza el costo con lo que pagaste.`
+                            : "Efectivo + transferencia es lo que pagaste por los productos."}
                         </p>
                       </>
                     )}
