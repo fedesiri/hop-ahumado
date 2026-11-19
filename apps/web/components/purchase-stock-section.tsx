@@ -6,6 +6,8 @@ import type { Product } from "@/lib/types";
 export interface PurchaseStockRow {
   productId: string;
   quantity: string;
+  /** $ pagados por este producto; solo se pide cuando la compra tiene varios productos. */
+  amount?: string;
 }
 
 const UNIT: Record<string, string> = { UNIT: "un", KG: "kg", G: "g", L: "L", ML: "ml" };
@@ -26,8 +28,9 @@ export function isSuspiciousQuantity(unit: string | undefined, qty: number): boo
 /** Filas válidas (producto elegido y cantidad mayor a 0) listas para enviar. */
 export function validPurchaseRows(rows: PurchaseStockRow[]) {
   return rows
-    .map((r) => ({ productId: r.productId, quantity: num(r.quantity) }))
-    .filter((r) => r.productId && r.quantity > 0);
+    .map((r) => ({ productId: r.productId, quantity: num(r.quantity), amount: r.amount ? num(r.amount) : undefined }))
+    .filter((r) => r.productId && r.quantity > 0)
+    .map((r) => (r.amount && r.amount > 0 ? r : { productId: r.productId, quantity: r.quantity }));
 }
 
 /**
@@ -40,12 +43,19 @@ export function PurchaseStockSection({
   onChange,
   category,
   amount,
+  costs,
+  updateCosts,
+  onUpdateCosts,
 }: {
   products: Product[];
   rows: PurchaseStockRow[];
   onChange: (rows: PurchaseStockRow[]) => void;
   category: string;
   amount: number;
+  /** Costo activo por unidad de cada producto (para mostrar cómo cambia). */
+  costs: Record<string, number>;
+  updateCosts: boolean;
+  onUpdateCosts: (v: boolean) => void;
 }) {
   const expectsStock = STOCK_CATEGORIES.includes(category);
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -53,8 +63,14 @@ export function PurchaseStockSection({
   const update = (i: number, patch: Partial<PurchaseStockRow>) =>
     onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   const filled = validPurchaseRows(rows);
-  const singleCost =
-    filled.length === 1 && amount > 0 ? { unit: byId.get(filled[0].productId)?.unit, value: amount / filled[0].quantity } : null;
+  const multi = rows.length > 1;
+  /** Costo por unidad que resultaría de esta compra para una fila (null si no se puede calcular). */
+  const newUnitCost = (r: PurchaseStockRow): number | null => {
+    const q = num(r.quantity);
+    const paid = multi ? num(r.amount ?? "") : amount;
+    return q > 0 && paid > 0 ? paid / q : null;
+  };
+  const anyCost = rows.some((r) => newUnitCost(r) !== null);
 
   if (rows.length === 0) {
     return (
@@ -133,6 +149,26 @@ export function PurchaseStockSection({
                   ✕
                 </button>
               </div>
+              {multi && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                  <input
+                    className="ha-input"
+                    style={{ width: 130, textAlign: "right" }}
+                    inputMode="decimal"
+                    placeholder="$ de este producto"
+                    value={r.amount ?? ""}
+                    onChange={(e) => update(i, { amount: e.target.value })}
+                    aria-label="Importe de este producto"
+                  />
+                  <span style={{ fontSize: 12, color: "var(--ha-text-3)" }}>opcional · sirve para actualizar su costo</span>
+                </div>
+              )}
+              {p && q > 0 && newUnitCost(r) !== null && updateCosts && (
+                <div style={{ fontSize: 12, marginTop: 4, color: "var(--ha-text-3)" }}>
+                  Costo por {UNIT[p.unit] ?? "unidad"}: {costs[p.id] != null ? `${formatCurrency(costs[p.id])} → ` : "nuevo: "}
+                  <b>{formatCurrency(newUnitCost(r)!)}</b>
+                </div>
+              )}
               {p && q > 0 && (
                 <div style={{ fontSize: 12, marginTop: 4, color: suspicious ? "var(--ha-red)" : "var(--ha-text-3)" }}>
                   {suspicious ? (
@@ -153,17 +189,23 @@ export function PurchaseStockSection({
         >
           ＋ Otro producto
         </button>
-        {singleCost && singleCost.value > 0 && (
-          <span style={{ fontSize: 12, color: "var(--ha-text-3)" }}>
-            Sale ≈ {formatCurrency(singleCost.value)} por {UNIT[singleCost.unit ?? ""] ?? "unidad"}
-          </span>
-        )}
         {filled.length > 1 && (
           <span style={{ fontSize: 12, color: "var(--ha-text-3)" }}>
             Con varios productos, el monto del gasto es el total de la compra.
           </span>
         )}
       </div>
+      <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 12, fontSize: 13 }}>
+        <input type="checkbox" checked={updateCosts} onChange={(e) => onUpdateCosts(e.target.checked)} style={{ marginTop: 3 }} />
+        <span>
+          Actualizar el costo de estos productos con el precio de esta compra
+          {!anyCost && updateCosts && (
+            <span style={{ display: "block", fontSize: 12, color: "var(--ha-text-3)" }}>
+              {multi ? "Completá el $ de cada producto para que se actualice su costo." : "Completá el monto del gasto para calcularlo."}
+            </span>
+          )}
+        </span>
+      </label>
     </div>
   );
 }

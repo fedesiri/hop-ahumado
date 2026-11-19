@@ -26,6 +26,13 @@ export class StockPurchaseItemDto {
   @IsNumber()
   @Min(0.000001, { message: "La cantidad comprada debe ser mayor a 0" })
   quantity!: number;
+
+  /** Importe pagado por este producto (si es el único de la compra, se toma el monto del gasto). Sirve para actualizar su costo. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
 }
 
 export class CreateCashMovementDto {
@@ -85,4 +92,9 @@ export class CreateCashMovementDto {
   @ValidateNested({ each: true })
   @Type(() => StockPurchaseItemDto)
   stockItems?: StockPurchaseItemDto[];
+
+  /** Actualizar el costo de los productos con el precio de esta compra (por defecto sí). */
+  @IsOptional()
+  @IsBoolean()
+  updateCosts?: boolean;
 }

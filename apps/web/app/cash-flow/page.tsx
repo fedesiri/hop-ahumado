@@ -569,6 +569,18 @@ function MovementsTab({ lineId, config, onChanged }: { lineId: string; config: C
   );
 }
 
+/** Resumen de costos actualizados (o por qué no) para el aviso de éxito. */
+function costSummary(items: NonNullable<CashMovement["stockAdded"]>): string {
+  const updated = items.filter((i) => i.cost);
+  const notes = items.filter((i) => i.costNote && !i.cost && i.costNote !== "El costo ya era ese");
+  const parts: string[] = [];
+  if (updated.length > 0) {
+    parts.push(`Costo actualizado: ${updated.map((i) => `${i.name} ${formatCurrency(i.cost!.to)}`).join(", ")}`);
+  }
+  if (notes.length > 0) parts.push(`Sin cambio de costo: ${notes.map((i) => `${i.name} (${i.costNote})`).join("; ")}`);
+  return parts.length > 0 ? `. ${parts.join(". ")}` : "";
+}
+
 function MovementModal({
   lineId,
   config,
@@ -588,6 +600,8 @@ function MovementModal({
   const [products, setProducts] = useState<Product[]>([]);
   const [stockRows, setStockRows] = useState<PurchaseStockRow[]>([]);
   const [askNoStock, setAskNoStock] = useState(false);
+  const [updateCosts, setUpdateCosts] = useState(true);
+  const [costs, setCosts] = useState<Record<string, number>>({});
   const [f, setF] = useState<FormState>(() => ({
     date: movement?.date ?? todayStr(),
     type: movement?.type ?? "EXPENSE",
@@ -617,6 +631,13 @@ function MovementModal({
           if (page >= (r.meta?.totalPages ?? 1)) break;
         }
         if (!cancelled) setProducts(all.sort((a, b) => a.name.localeCompare(b.name, "es")));
+        const map: Record<string, number> = {};
+        for (let page = 1; page <= 20; page++) {
+          const r = await apiClient.getCosts(page, 100, undefined, true);
+          for (const c of r.data) if (!(c.productId in map)) map[c.productId] = Number(c.value);
+          if (page >= (r.meta?.totalPages ?? 1)) break;
+        }
+        if (!cancelled) setCosts(map);
       } catch {
         if (!cancelled) toast.error("No se pudieron cargar los productos de stock");
       }
@@ -650,6 +671,7 @@ function MovementModal({
     }
     const input: CashMovementInput = {
       stockItems: stockItems.length > 0 ? stockItems : undefined,
+      updateCosts: stockItems.length > 0 ? updateCosts : undefined,
       date: f.date,
       type: f.type,
       category: f.category,
@@ -681,7 +703,7 @@ function MovementModal({
         toast.success(
           `Gasto registrado. Stock actualizado: ${saved.stockAdded
             .map((s) => `${s.name} +${formatQuantity(s.quantity)} ${units[s.unit] ?? ""} (ahora ${formatQuantity(s.stock)})`)
-            .join(", ")}`,
+            .join(", ")}${costSummary(saved.stockAdded)}`,
         );
       } else toast.success(movement ? "Movimiento actualizado" : "Movimiento registrado");
       onSaved();
@@ -784,6 +806,9 @@ function MovementModal({
               onChange={setStockRows}
               category={f.category}
               amount={Number(f.amount) || 0}
+              costs={costs}
+              updateCosts={updateCosts}
+              onUpdateCosts={setUpdateCosts}
             />
           )}
           {movement && f.type === "EXPENSE" && STOCK_CATEGORIES.includes(f.category) && (

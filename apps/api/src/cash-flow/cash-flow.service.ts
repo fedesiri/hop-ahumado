@@ -4,6 +4,8 @@ import { CashMovement, PaymentMethod, Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { buildPaginatedResponse, PaginatedResponse } from "../common/pagination";
 import { firebaseAdmin } from "../auth/firebase-admin";
+import { CostService } from "../cost/cost.service";
+import { IngredientProfileService } from "../ingredient-profile/ingredient-profile.service";
 import { InventoryService } from "../inventory/inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -39,7 +41,17 @@ export type CashMovementResponse = {
   needsReview: boolean;
   hasReceipt: boolean;
   /** Productos que sumaron stock al registrar este gasto (solo en la respuesta de la creación). */
-  stockAdded?: { productId: string; name: string; unit: string; quantity: number; stock: number }[];
+  stockAdded?: {
+    productId: string;
+    name: string;
+    unit: string;
+    quantity: number;
+    stock: number;
+    /** Costo por unidad antes/después de la compra, si se actualizó. */
+    cost?: { from: number | null; to: number } | null;
+    /** Por qué no se actualizó el costo (cuando correspondía). */
+    costNote?: string;
+  }[];
 };
 
 export type CashSnapshotResponse = {
@@ -122,6 +134,8 @@ export class CashFlowService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
+    private readonly costs: CostService,
+    private readonly ingredientProfiles: IngredientProfileService,
   ) {}
 
   getConfig() {
@@ -230,7 +244,55 @@ export class CashFlowService {
         }
       }
       return { ...toResponse(row), ...(stockAdded.length > 0 ? { stockAdded } : {}) };
+    }).then(async (result) => {
+      if (items.length === 0 || dto.updateCosts === false || !result.stockAdded) return result;
+      // El costo se actualiza fuera de la transacción: si falla, el gasto y el stock ya quedaron bien.
+      for (const entry of result.stockAdded) {
+        const item = items.find((i) => i.productId === entry.productId)!;
+        const paid = item.amount ?? (items.length === 1 ? dto.amount : undefined);
+        if (paid == null || paid <= 0) continue;
+        try {
+          const outcome = await this.updateUnitCost(entry.productId, paid, item.quantity);
+          if (outcome.kind === "updated") entry.cost = { from: outcome.from, to: outcome.to };
+          else entry.costNote = outcome.note;
+        } catch (e) {
+          entry.costNote = `No se pudo actualizar el costo: ${e instanceof Error ? e.message : "error"}`;
+        }
+      }
+      return result;
     });
+  }
+
+  /** Costo por unidad = importe / cantidad. Respeta cómo se mantiene el costo de cada producto. */
+  private async updateUnitCost(
+    productId: string,
+    paid: number,
+    quantity: number,
+  ): Promise<{ kind: "updated"; from: number | null; to: number } | { kind: "skipped"; note: string }> {
+    const unitCost = Math.round((paid / quantity) * 100) / 100;
+    if (!(unitCost > 0)) return { kind: "skipped", note: "El importe no permite calcular un costo" };
+
+    const recipe = await this.prisma.recipeCostProfile.findUnique({ where: { productId } });
+    if (recipe) {
+      return { kind: "skipped", note: "Es una receta: su costo se calcula solo desde sus ingredientes" };
+    }
+    const current = await this.prisma.cost.findFirst({
+      where: { productId, deactivatedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+    const from = current ? Number(current.value) : null;
+    if (from !== null && Math.abs(from - unitCost) < 0.005) return { kind: "skipped", note: "El costo ya era ese" };
+
+    const ingredient = await this.prisma.ingredientProfile.findUnique({ where: { productId } });
+    if (ingredient) {
+      // El costo sale de cantidad y precio de compra: se actualizan esos datos y el costo se recalcula.
+      await this.ingredientProfiles.upsert(productId, { purchaseQuantity: quantity, purchasePrice: paid });
+    } else if (current) {
+      await this.costs.replace(current.id, { value: unitCost });
+    } else {
+      await this.costs.create({ productId, value: unitCost });
+    }
+    return { kind: "updated", from, to: unitCost };
   }
 
   async update(id: string, dto: UpdateCashMovementDto): Promise<CashMovementResponse> {
