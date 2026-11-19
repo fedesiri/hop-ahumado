@@ -31,16 +31,23 @@ export class ProductionService {
       },
       include: {
         recipeCostProfile: true,
-        recipeItems: { include: { ingredient: { select: { id: true, name: true, unit: true, stock: true } } } },
+        recipeItems: { include: { ingredient: { select: { id: true, name: true, unit: true, stock: true, recipeCostProfile: { select: { recipeType: true } } } } } },
       },
       orderBy: { name: "asc" },
     });
     return products.map((p) => {
       const profile = p.recipeCostProfile;
       const isCooking = !!profile?.mainIngredientId && (profile.cookingLossPct ?? 0) > 0;
+      // Preparaciones (ej. relleno) que se arman a partir de una base: el insumo "motor" es esa base.
+      const driver = isCooking
+        ? null
+        : [...p.recipeItems]
+            .filter((r) => r.ingredient.recipeCostProfile?.recipeType === "PREPARACION_BASE")
+            .sort((a, b) => b.quantity - a.quantity)[0];
       return {
         id: p.id,
         name: p.name,
+        driverIngredientId: driver?.ingredientId ?? null,
         unit: p.unit,
         stock: p.stock,
         isCooking,

@@ -1223,6 +1223,8 @@ export interface ProductionTemplateItem {
 }
 
 export interface ProductionTemplate {
+  /** Insumo base a partir del cual se calcula la receta (ej. relleno → base de bondiola), si aplica. */
+  driverIngredientId?: string | null;
   id: string;
   name: string;
   unit: ProductUnit;

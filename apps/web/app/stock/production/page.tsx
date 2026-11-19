@@ -90,12 +90,17 @@ export default function ProductionPage() {
     reset();
   };
 
+  // Preparación que se arma a partir de una base (ej. relleno): se carga cuánta base hay y el resto se calcula.
+  const driver = template?.driverIngredientId ? template.items.find((i) => i.productId === template.driverIngredientId) ?? null : null;
+
   // Cantidad producida: en cocción sale de la cruda menos la merma (editable); si no, la que cargues.
   const outQty = useMemo(() => {
     if (!template) return 0;
     if (outInput !== null) return num(outInput);
-    return template.isCooking ? num(rawQty) * (1 - template.cookingLossPct) : 0;
-  }, [template, outInput, rawQty]);
+    if (template.isCooking) return num(rawQty) * (1 - template.cookingLossPct);
+    if (driver && driver.perUnit > 0) return num(rawQty) / driver.perUnit;
+    return 0;
+  }, [template, outInput, rawQty, driver]);
 
   const lines: (Line & { qty: number })[] = useMemo(() => {
     if (!template) return [];
@@ -105,10 +110,11 @@ export default function ProductionPage() {
       .map((l) => {
         let auto = l.perUnit * outQty;
         if (template.isCooking && l.productId === template.mainIngredientId) auto = num(rawQty);
+        if (driver && l.productId === driver.productId) auto = num(rawQty);
         const qty = overrides[l.productId] !== undefined ? num(overrides[l.productId]) : auto;
         return { ...l, qty };
       });
-  }, [template, extras, removed, overrides, outQty, rawQty]);
+  }, [template, extras, removed, overrides, outQty, rawQty, driver]);
 
   const realLoss = template?.isCooking && num(rawQty) > 0 && outQty > 0 ? 1 - outQty / num(rawQty) : null;
   const canSave = !!template && outQty > 0 && lines.some((l) => l.qty > 0) && !saving;
@@ -187,6 +193,40 @@ export default function ProductionPage() {
                   <div style={{ fontSize: 13, color: "var(--ha-text-2)", marginTop: 6 }}>
                     Guía: merma de {Math.round(template.cookingLossPct * 100)}%.
                     {realLoss !== null && <> Merma real de esta tanda: <b>{Math.round(realLoss * 100)}%</b>.</>}
+                    {outInput !== null && (
+                      <>
+                        {" "}
+                        <button className="ha-btn ha-btn--secondary" style={{ height: 28, padding: "0 10px" }} onClick={() => setOutInput(null)}>
+                          Volver al cálculo automático
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : driver ? (
+              <>
+                <div className="ha-field">
+                  <label className="ha-label">Kg de {driver.name} que vas a usar</label>
+                  <input
+                    className="ha-input"
+                    inputMode="decimal"
+                    placeholder="Ej: 3"
+                    value={rawQty}
+                    onChange={(e) => setRawQty(e.target.value)}
+                  />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">{template.name} que salen ({unitLabel}, real)</label>
+                  <input
+                    className="ha-input"
+                    inputMode="decimal"
+                    placeholder="Se calcula solo, podés corregirlo"
+                    value={outInput ?? (outQty > 0 ? fmt(outQty) : "")}
+                    onChange={(e) => setOutInput(e.target.value)}
+                  />
+                  <div style={{ fontSize: 13, color: "var(--ha-text-2)", marginTop: 6 }}>
+                    Los demás insumos se calculan a partir de la base.
                     {outInput !== null && (
                       <>
                         {" "}
