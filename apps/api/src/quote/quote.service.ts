@@ -123,7 +123,10 @@ export class QuoteService {
       this.prisma.quote.findMany({
         where,
         orderBy: { createdAt: "desc" },
-        include: { items: true, customer: { select: { id: true, name: true } } },
+        include: {
+          items: { include: { product: { select: { id: true, name: true, unit: true } } } },
+          customer: { select: { id: true, name: true } },
+        },
         skip,
         take: limit,
       }),
