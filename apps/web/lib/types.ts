@@ -669,6 +669,9 @@ export interface QuoteItem {
   channel: PriceType;
   quantity: number;
   unitPrice: number;
+  docLabel?: string | null;
+  docDetail?: string | null;
+  docOptions?: string[];
   product?: { id: string; name: string; unit: ProductUnit };
 }
 
@@ -677,6 +680,8 @@ export interface QuoteTotals {
   subtotalAgregados: number;
   totalAntesDescuento: number;
   descuentoAplicado: number;
+  /** Total calculado por el sistema (antes de un eventual total manual). */
+  calculatedTotal?: number;
   total: number;
   pricePerPerson: number | null;
 }
@@ -695,6 +700,13 @@ export interface Quote {
   extraStaff: number;
   extraOvertime: number;
   extraOther: number;
+  docType?: string;
+  menuName?: string | null;
+  /** Total manual que se muestra al cliente (llega como número o texto numérico). */
+  totalOverride?: number | string | null;
+  validityDays?: number;
+  depositPct?: number;
+  infoLines?: string | null;
   createdAt: string;
   updatedAt: string;
   customer?: { id: string; name: string } | null;
@@ -707,6 +719,9 @@ export interface QuoteItemRequest {
   channel: PriceType;
   quantity: number;
   unitPrice?: number;
+  docLabel?: string;
+  docDetail?: string;
+  docOptions?: string[];
 }
 
 export interface CreateQuoteRequest {
@@ -722,6 +737,12 @@ export interface CreateQuoteRequest {
   extraStaff?: number;
   extraOvertime?: number;
   extraOther?: number;
+  docType?: string;
+  menuName?: string;
+  totalOverride?: number;
+  validityDays?: number;
+  depositPct?: number;
+  infoLines?: string;
   items: QuoteItemRequest[];
 }
 

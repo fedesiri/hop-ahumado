@@ -307,6 +307,17 @@ model Quote {
   extraStaff     Decimal      @default(0)
   extraOvertime  Decimal      @default(0)
   extraOther     Decimal      @default(0)
+  /// Tipo de documento para el cliente (hoy "EVENTO"); define el formato del presupuesto descargable.
+  docType        String       @default("EVENTO")
+  /// Nombre del menú que se muestra en el documento (ej: "Menú Mixto").
+  menuName       String?
+  /// Si se completa, es el total que se le muestra al cliente (ej: redondeado) en vez del calculado.
+  totalOverride  Decimal?
+  validityDays   Int          @default(7)
+  /// Fracción de seña (0.5 = 50%).
+  depositPct     Float        @default(0.5)
+  /// Viñetas de "Información general", una por línea. Admite {personas}, {validez} y {sena}.
+  infoLines      String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   businessLine   BusinessLine @relation(fields: [businessLineId], references: [id])
@@ -321,6 +332,12 @@ model QuoteItem {
   channel   String
   quantity  Float
   unitPrice Decimal
+  /// Cómo se nombra en el documento (ej: "sándwiches"); si no, se usa el nombre del producto.
+  docLabel  String?
+  /// Texto que sigue al nombre en el documento (ej: "figacitas caseras de bondiola…").
+  docDetail String?
+  /// Sub-lista del documento (ej: sabores a elección).
+  docOptions String[] @default([])
   quote     Quote   @relation(fields: [quoteId], references: [id])
   product   Product @relation(fields: [productId], references: [id])
 }

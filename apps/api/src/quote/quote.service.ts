@@ -34,7 +34,15 @@ export class QuoteService {
         const product = await this.prisma.product.findUnique({ where: { id: item.productId } });
         if (!product) throw new BadRequestException(`Producto con id "${item.productId}" no encontrado`);
         const unitPrice = item.unitPrice ?? (await this.resolveUnitPrice(item.productId, item.channel));
-        return { productId: item.productId, channel: item.channel, quantity: item.quantity, unitPrice };
+        return {
+          productId: item.productId,
+          channel: item.channel,
+          quantity: item.quantity,
+          unitPrice,
+          docLabel: item.docLabel?.trim() || null,
+          docDetail: item.docDetail?.trim() || null,
+          docOptions: (item.docOptions ?? []).map((o) => o.trim()).filter(Boolean),
+        };
       }),
     );
   }
@@ -47,15 +55,17 @@ export class QuoteService {
     extraOvertime: number;
     extraOther: number;
     peopleCount: number | null;
+    totalOverride?: number | null;
   }, items: { quantity: number; unitPrice: number }[]) {
     const subtotalProductos = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
     const subtotalAgregados =
       quote.extraTransport + quote.extraPackaging + quote.extraStaff + quote.extraOvertime + quote.extraOther;
     const totalAntesDescuento = subtotalProductos + subtotalAgregados;
     const descuentoAplicado = totalAntesDescuento * quote.discountPct;
-    const total = totalAntesDescuento - descuentoAplicado;
+    const calculatedTotal = totalAntesDescuento - descuentoAplicado;
+    const total = quote.totalOverride && quote.totalOverride > 0 ? quote.totalOverride : calculatedTotal;
     const pricePerPerson = quote.peopleCount ? total / quote.peopleCount : null;
-    return { subtotalProductos, subtotalAgregados, totalAntesDescuento, descuentoAplicado, total, pricePerPerson };
+    return { subtotalProductos, subtotalAgregados, totalAntesDescuento, descuentoAplicado, calculatedTotal, total, pricePerPerson };
   }
 
   async create(dto: CreateQuoteDto) {
@@ -76,6 +86,12 @@ export class QuoteService {
           eventDate: dto.eventDate ? new Date(dto.eventDate) : undefined,
           saleType: dto.saleType,
           peopleCount: dto.peopleCount,
+          docType: dto.docType ?? "EVENTO",
+          menuName: dto.menuName?.trim() || undefined,
+          totalOverride: dto.totalOverride && dto.totalOverride > 0 ? new Decimal(dto.totalOverride) : undefined,
+          validityDays: dto.validityDays ?? 7,
+          depositPct: dto.depositPct ?? 0.5,
+          infoLines: dto.infoLines ?? undefined,
           discountPct: dto.discountPct ?? 0,
           extraTransport: new Decimal(dto.extraTransport ?? 0),
           extraPackaging: new Decimal(dto.extraPackaging ?? 0),
@@ -88,6 +104,9 @@ export class QuoteService {
               channel: i.channel,
               quantity: i.quantity,
               unitPrice: new Decimal(i.unitPrice),
+              docLabel: i.docLabel,
+              docDetail: i.docDetail,
+              docOptions: i.docOptions,
             })),
           },
         },
@@ -121,6 +140,7 @@ export class QuoteService {
           extraOvertime: Number(q.extraOvertime),
           extraOther: Number(q.extraOther),
           peopleCount: q.peopleCount,
+          totalOverride: q.totalOverride == null ? null : Number(q.totalOverride),
         },
         items,
       );
@@ -148,6 +168,7 @@ export class QuoteService {
         extraOvertime: Number(quote.extraOvertime),
         extraOther: Number(quote.extraOther),
         peopleCount: quote.peopleCount,
+        totalOverride: quote.totalOverride == null ? null : Number(quote.totalOverride),
       },
       items,
     );
@@ -173,6 +194,14 @@ export class QuoteService {
           ...(dto.eventDate !== undefined && { eventDate: dto.eventDate ? new Date(dto.eventDate) : null }),
           ...(dto.saleType !== undefined && { saleType: dto.saleType }),
           ...(dto.peopleCount !== undefined && { peopleCount: dto.peopleCount }),
+          ...(dto.docType !== undefined && { docType: dto.docType }),
+          ...(dto.menuName !== undefined && { menuName: dto.menuName.trim() || null }),
+          ...(dto.totalOverride !== undefined && {
+            totalOverride: dto.totalOverride > 0 ? new Decimal(dto.totalOverride) : null,
+          }),
+          ...(dto.validityDays !== undefined && { validityDays: dto.validityDays }),
+          ...(dto.depositPct !== undefined && { depositPct: dto.depositPct }),
+          ...(dto.infoLines !== undefined && { infoLines: dto.infoLines }),
           ...(dto.discountPct !== undefined && { discountPct: dto.discountPct }),
           ...(dto.extraTransport !== undefined && { extraTransport: new Decimal(dto.extraTransport) }),
           ...(dto.extraPackaging !== undefined && { extraPackaging: new Decimal(dto.extraPackaging) }),
@@ -193,6 +222,9 @@ export class QuoteService {
               channel: i.channel,
               quantity: i.quantity,
               unitPrice: new Decimal(i.unitPrice),
+              docLabel: i.docLabel,
+              docDetail: i.docDetail,
+              docOptions: i.docOptions,
             })),
           });
         }

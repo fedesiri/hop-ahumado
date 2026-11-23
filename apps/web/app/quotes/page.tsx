@@ -11,8 +11,10 @@ import { EmptyState } from "@/components/empty-state";
 import { Paginator } from "@/components/paginator";
 import { ScreenInfoPanel } from "@/components/screen-info-panel";
 import { Spinner } from "@/components/spinner";
-import { Plus, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { QuoteDocumentModal } from "@/components/quote-document-modal";
+import { defaultInfoText, DEFAULT_DOC_TYPE } from "@/lib/quote-document";
+import { FileText, Plus, Trash2, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
@@ -65,6 +67,13 @@ function QuotesContent() {
   const [fExtraOvertime, setFExtraOvertime] = useState("");
   const [fExtraOther, setFExtraOther] = useState("");
   const [items, setItems] = useState<DraftItem[]>([]);
+  const [fMenuName, setFMenuName] = useState("");
+  const [fTotalOverride, setFTotalOverride] = useState("");
+  const [fValidityDays, setFValidityDays] = useState("7");
+  const [fDepositPct, setFDepositPct] = useState("50");
+  const [fInfoLines, setFInfoLines] = useState(defaultInfoText(DEFAULT_DOC_TYPE));
+  const [editTextIndex, setEditTextIndex] = useState<number | null>(null);
+  const [docQuote, setDocQuote] = useState<Quote | null>(null);
 
   const [lineProductId, setLineProductId] = useState("");
   const [lineChannel, setLineChannel] = useState<PriceType>("catering");
@@ -104,6 +113,8 @@ function QuotesContent() {
     setFCustomerId(""); setFClientName(""); setFEventDate(""); setFSaleType(""); setFPeopleCount("");
     setFDiscountPct(""); setFExtraTransport(""); setFExtraPackaging(""); setFExtraStaff("");
     setFExtraOvertime(""); setFExtraOther(""); setItems([]);
+    setFMenuName(""); setFTotalOverride(""); setFValidityDays("7"); setFDepositPct("50");
+    setFInfoLines(defaultInfoText(DEFAULT_DOC_TYPE)); setEditTextIndex(null);
     setLineProductId(""); setLineChannel("catering"); setLineQty(""); setLineUnitPrice("");
   };
 
@@ -127,12 +138,21 @@ function QuotesContent() {
     setFExtraStaff(q.extraStaff ? String(q.extraStaff) : "");
     setFExtraOvertime(q.extraOvertime ? String(q.extraOvertime) : "");
     setFExtraOther(q.extraOther ? String(q.extraOther) : "");
+    setFMenuName(q.menuName ?? "");
+    setFTotalOverride(q.totalOverride ? String(Number(q.totalOverride)) : "");
+    setFValidityDays(String(q.validityDays ?? 7));
+    setFDepositPct(String(Math.round((q.depositPct ?? 0.5) * 100)));
+    setFInfoLines(q.infoLines && q.infoLines.trim() ? q.infoLines : defaultInfoText(q.docType));
+    setEditTextIndex(null);
     setItems(
       q.items.map((i) => ({
         productId: i.productId,
         channel: i.channel,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
+        docLabel: i.docLabel ?? undefined,
+        docDetail: i.docDetail ?? undefined,
+        docOptions: i.docOptions ?? [],
         productName: i.product?.name ?? "—",
       })),
     );
@@ -167,6 +187,11 @@ function QuotesContent() {
 
   const removeLine = (index: number) => {
     setItems((prev) => prev.filter((_, i) => i !== index));
+    setEditTextIndex(null);
+  };
+
+  const patchItem = (index: number, patch: Partial<DraftItem>) => {
+    setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
   };
 
   const subtotalProductos = items.reduce((sum, i) => sum + i.quantity * (i.unitPrice ?? 0), 0);
@@ -176,7 +201,9 @@ function QuotesContent() {
   const totalAntesDescuento = subtotalProductos + subtotalAgregados;
   const discountFraction = (Number(fDiscountPct) || 0) / 100;
   const descuentoAplicado = totalAntesDescuento * discountFraction;
-  const total = totalAntesDescuento - descuentoAplicado;
+  const calculatedTotal = totalAntesDescuento - descuentoAplicado;
+  const totalManual = Number(fTotalOverride) || 0;
+  const total = totalManual > 0 ? totalManual : calculatedTotal;
   const peopleCountNum = Number(fPeopleCount) || 0;
   const pricePerPerson = peopleCountNum > 0 ? total / peopleCountNum : null;
 
@@ -197,7 +224,20 @@ function QuotesContent() {
         extraStaff: fExtraStaff ? Number(fExtraStaff) : undefined,
         extraOvertime: fExtraOvertime ? Number(fExtraOvertime) : undefined,
         extraOther: fExtraOther ? Number(fExtraOther) : undefined,
-        items: items.map((i) => ({ productId: i.productId, channel: i.channel, quantity: i.quantity, unitPrice: i.unitPrice })),
+        menuName: fMenuName.trim(),
+        totalOverride: totalManual > 0 ? totalManual : 0,
+        validityDays: fValidityDays ? Number(fValidityDays) : undefined,
+        depositPct: fDepositPct !== "" ? Number(fDepositPct) / 100 : undefined,
+        infoLines: fInfoLines,
+        items: items.map((i) => ({
+          productId: i.productId,
+          channel: i.channel,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          docLabel: i.docLabel?.trim() || undefined,
+          docDetail: i.docDetail?.trim() || undefined,
+          docOptions: (i.docOptions ?? []).map((o) => o.trim()).filter(Boolean),
+        })),
       };
       if (editingId) {
         await apiClient.updateQuote(editingId, payload);
@@ -285,6 +325,9 @@ function QuotesContent() {
                     <td>{q.totals.pricePerPerson != null ? formatCurrency(q.totals.pricePerPerson) : "—"}</td>
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                        <button className="pc-btn pc-btn--ghost pc-btn--sm" onClick={() => setDocQuote(q)} title="PDF e imagen para mandarle al cliente">
+                          <FileText size={13} /> PDF / imagen
+                        </button>
                         <button className="pc-btn pc-btn--ghost pc-btn--sm" onClick={() => openEdit(q)}>Editar</button>
                         <button
                           onClick={() => setDeleteId(q.id)}
@@ -359,21 +402,61 @@ function QuotesContent() {
                         <th>Cantidad</th>
                         <th>Precio unit.</th>
                         <th>Subtotal</th>
+                        <th>En el presupuesto</th>
                         <th style={{ width: 40 }} />
                       </tr>
                     </thead>
                     <tbody>
                       {items.map((item, i) => (
-                        <tr key={i}>
-                          <td>{item.productName}</td>
-                          <td>{PRICE_TYPE_LABELS[item.channel]}</td>
-                          <td>{item.quantity}</td>
-                          <td>{formatCurrency(item.unitPrice ?? 0)}</td>
-                          <td>{formatCurrency(item.quantity * (item.unitPrice ?? 0))}</td>
-                          <td>
-                            <button className="rc-xbtn" onClick={() => removeLine(i)} aria-label="Quitar línea"><X size={14} /></button>
-                          </td>
-                        </tr>
+                        <Fragment key={i}>
+                          <tr>
+                            <td>{item.productName}</td>
+                            <td>{PRICE_TYPE_LABELS[item.channel]}</td>
+                            <td>{item.quantity}</td>
+                            <td>{formatCurrency(item.unitPrice ?? 0)}</td>
+                            <td>{formatCurrency(item.quantity * (item.unitPrice ?? 0))}</td>
+                            <td>
+                              <button className="pc-btn pc-btn--ghost pc-btn--sm" onClick={() => setEditTextIndex(editTextIndex === i ? null : i)}>
+                                {item.docLabel || item.docDetail || item.docOptions?.length ? "✎ Texto" : "＋ Texto"}
+                              </button>
+                            </td>
+                            <td>
+                              <button className="rc-xbtn" onClick={() => removeLine(i)} aria-label="Quitar línea"><X size={14} /></button>
+                            </td>
+                          </tr>
+                          {editTextIndex === i && (
+                            <tr>
+                              <td colSpan={7} style={{ background: "var(--ha-surface-2, rgba(0,0,0,0.03))" }}>
+                                <div style={{ display: "grid", gap: 8, padding: "6px 0" }}>
+                                  <div style={{ fontSize: 12, color: "var(--ha-text-3)" }}>
+                                    Así se lee en el presupuesto del cliente: <b>{item.quantity} {item.docLabel || item.productName}</b> {item.docDetail ?? ""}
+                                  </div>
+                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8 }}>
+                                    <input
+                                      className="ha-input"
+                                      placeholder='Nombre (ej: "sándwiches")'
+                                      value={item.docLabel ?? ""}
+                                      onChange={(e) => patchItem(i, { docLabel: e.target.value })}
+                                    />
+                                    <input
+                                      className="ha-input"
+                                      placeholder='Detalle (ej: "(figacitas caseras de bondiola)" o "a elección")'
+                                      value={item.docDetail ?? ""}
+                                      onChange={(e) => patchItem(i, { docDetail: e.target.value })}
+                                    />
+                                  </div>
+                                  <textarea
+                                    className="ha-input"
+                                    rows={3}
+                                    placeholder="Opciones, una por línea (ej: los sabores a elección). Opcional."
+                                    value={(item.docOptions ?? []).join("\n")}
+                                    onChange={(e) => patchItem(i, { docOptions: e.target.value.split("\n") })}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -434,13 +517,48 @@ function QuotesContent() {
                 </div>
               </div>
 
+              <div className="rc-card__title" style={{ marginBottom: 10 }}>Para el cliente (PDF / imagen)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div className="ha-field">
+                  <label className="ha-label">Nombre del menú</label>
+                  <input className="ha-input" placeholder="Ej: Menú Mixto" value={fMenuName} onChange={(e) => setFMenuName(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Total a mostrar (opcional)</label>
+                  <input
+                    type="number"
+                    className="ha-input"
+                    min={0}
+                    step={1000}
+                    placeholder={`Calculado: ${formatCurrency(calculatedTotal)}`}
+                    value={fTotalOverride}
+                    onChange={(e) => setFTotalOverride(e.target.value)}
+                  />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Validez (días)</label>
+                  <input type="number" className="ha-input" min={1} step={1} value={fValidityDays} onChange={(e) => setFValidityDays(e.target.value)} />
+                </div>
+                <div className="ha-field">
+                  <label className="ha-label">Seña (%)</label>
+                  <input type="number" className="ha-input" min={0} max={100} step={5} value={fDepositPct} onChange={(e) => setFDepositPct(e.target.value)} />
+                </div>
+              </div>
+              <div className="ha-field" style={{ marginBottom: 16 }}>
+                <label className="ha-label">Información general (una viñeta por línea)</label>
+                <textarea className="ha-input" rows={5} value={fInfoLines} onChange={(e) => setFInfoLines(e.target.value)} />
+                <span style={{ fontSize: 12, color: "var(--ha-text-3)" }}>
+                  Podés usar {"{personas}"}, {"{validez}"} y {"{sena}"}: se reemplazan solos con los datos del presupuesto.
+                </span>
+              </div>
+
               <div className="rc-card__title" style={{ marginBottom: 10 }}>Resumen económico</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
                 <div className="rc-resrow"><span className="rc-resrow__n">Subtotal productos</span><span className="rc-resrow__v">{formatCurrency(subtotalProductos)}</span></div>
                 <div className="rc-resrow"><span className="rc-resrow__n">Subtotal agregados</span><span className="rc-resrow__v">{formatCurrency(subtotalAgregados)}</span></div>
                 <div className="rc-resrow"><span className="rc-resrow__n">Total antes de descuento</span><span className="rc-resrow__v">{formatCurrency(totalAntesDescuento)}</span></div>
                 <div className="rc-resrow"><span className="rc-resrow__n">Descuento aplicado</span><span className="rc-resrow__v">{formatCurrency(descuentoAplicado)}</span></div>
-                <div className="rc-resrow"><span className="rc-resrow__n"><b>Total del presupuesto</b></span><span className="rc-resrow__v"><b>{formatCurrency(total)}</b></span></div>
+                <div className="rc-resrow"><span className="rc-resrow__n"><b>Total del presupuesto</b>{totalManual > 0 ? " (manual)" : ""}</span><span className="rc-resrow__v"><b>{formatCurrency(total)}</b></span></div>
                 <div className="rc-resrow"><span className="rc-resrow__n">Precio por persona</span><span className="rc-resrow__v">{pricePerPerson != null ? formatCurrency(pricePerPerson) : "—"}</span></div>
               </div>
             </div>
@@ -453,6 +571,8 @@ function QuotesContent() {
           </div>
         </div>
       )}
+
+      {docQuote && <QuoteDocumentModal quote={docQuote} onClose={() => setDocQuote(null)} />}
 
       {deleteId && (
         <ConfirmDialog

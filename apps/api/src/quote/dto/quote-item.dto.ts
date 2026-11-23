@@ -1,4 +1,4 @@
-import { IsIn, IsNumber, IsOptional, IsUUID, Min } from "class-validator";
+import { ArrayMaxSize, IsArray, IsIn, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from "class-validator";
 import { PRICE_LIST_TYPES, type PriceListType } from "../../common/price-list-type";
 
 export class QuoteItemDto {
@@ -17,4 +17,24 @@ export class QuoteItemDto {
   @IsNumber()
   @Min(0)
   unitPrice?: number;
+
+  /** Cómo se nombra en el documento al cliente (ej: "sándwiches"). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  docLabel?: string;
+
+  /** Texto que sigue al nombre en el documento. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  docDetail?: string;
+
+  /** Sub-lista del documento (ej: sabores a elección). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  docOptions?: string[];
 }
