@@ -343,6 +343,44 @@ function QuotesContent() {
             </table>
           </div>
 
+          <div className="ha-cardlist">
+            {quotes.map((q) => (
+              <div key={q.id} className="ha-ordcard">
+                <div className="ha-ordcard__top">
+                  <span className="ha-ordcard__name">{q.customer?.name ?? q.clientName ?? "—"}</span>
+                  <b>{formatCurrency(q.totals.total)}</b>
+                </div>
+                <div className="ha-ordcard__grid">
+                  <div>
+                    <div className="ha-kv__l">Fecha</div>
+                    <div className="ha-kv__v">{q.eventDate ? new Date(q.eventDate).toLocaleDateString("es-AR") : "—"}</div>
+                  </div>
+                  <div>
+                    <div className="ha-kv__l">Personas</div>
+                    <div className="ha-kv__v">{q.peopleCount ?? "—"}</div>
+                  </div>
+                  <div>
+                    <div className="ha-kv__l">Líneas</div>
+                    <div className="ha-kv__v">{q.items.length}</div>
+                  </div>
+                  <div>
+                    <div className="ha-kv__l">$/persona</div>
+                    <div className="ha-kv__v">{q.totals.pricePerPerson != null ? formatCurrency(q.totals.pricePerPerson) : "—"}</div>
+                  </div>
+                </div>
+                <div className="ha-ordcard__actions">
+                  <button className="ha-actbtn" style={{ flex: 2 }} onClick={() => setDocQuote(q)}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><FileText size={14} /> PDF / imagen</span>
+                  </button>
+                  <button className="ha-actbtn" onClick={() => openEdit(q)}>Editar</button>
+                  <button className="ha-actbtn" style={{ color: "var(--ha-red)" }} onClick={() => setDeleteId(q.id)} aria-label="Eliminar">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
           {meta && (
             <Paginator
               page={pagination.page}
