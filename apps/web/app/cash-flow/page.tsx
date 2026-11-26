@@ -145,12 +145,13 @@ function SummaryTab({ lineId, version }: { lineId: string; version: number }) {
             <Kpi label="Margen operativo" value={data.operatingResult} color={negative(data.operatingResult)} sub={data.operatingMarginPct === null ? undefined : `${data.operatingMarginPct.toFixed(1)}%`} />
             <Kpi label="Inversión (equipamiento)" value={data.investmentExpense} />
             <Kpi label="Resultado total" value={data.totalResult} color={negative(data.totalResult)} />
+            {data.financingExpense > 0 && <Kpi label="Devolución de inversión inicial" value={data.financingExpense} />}
             <Kpi label="Capital parado en stock (hoy)" value={data.inventoryValue} />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
             <CategoryTable title="Ingresos por categoría" rows={data.incomeByCategory} total={data.income} />
-            <CategoryTable title="Gastos por categoría" rows={data.expenseByCategory} total={data.operatingExpense + data.investmentExpense} />
+            <CategoryTable title="Gastos por categoría" rows={data.expenseByCategory} total={data.operatingExpense + data.investmentExpense + data.financingExpense} />
           </div>
 
           <div className="pc-card">

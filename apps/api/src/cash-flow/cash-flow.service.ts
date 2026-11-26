@@ -390,11 +390,13 @@ export class CashFlowService {
     let income = 0;
     let operatingExpense = 0;
     let investmentExpense = 0;
+    let financingExpense = 0;
     const byCategory = new Map<string, { type: string; classification: string; amount: number }>();
     for (const m of inPeriod) {
       const amount = Number(m.amount);
       if (m.type === "INCOME") income += amount;
       else if (m.classification === "INVESTMENT") investmentExpense += amount;
+      else if (m.classification === "FINANCING") financingExpense += amount;
       else operatingExpense += amount;
       const entry = byCategory.get(m.category) ?? {
         type: m.type,
@@ -425,11 +427,13 @@ export class CashFlowService {
       let mIncome = 0;
       let mOperating = 0;
       let mInvestment = 0;
+      let mFinancing = 0;
       for (const m of all) {
         if (m.date.getUTCFullYear() !== monthlyYear || m.date.getUTCMonth() !== i) continue;
         const amount = Number(m.amount);
         if (m.type === "INCOME") mIncome += amount;
         else if (m.classification === "INVESTMENT") mInvestment += amount;
+        else if (m.classification === "FINANCING") mFinancing += amount;
         else mOperating += amount;
       }
       return {
@@ -438,6 +442,7 @@ export class CashFlowService {
         income: mIncome,
         operatingExpense: mOperating,
         investmentExpense: mInvestment,
+        financingExpense: mFinancing,
         operatingResult: mIncome - mOperating,
         totalResult: mIncome - mOperating - mInvestment,
       };
@@ -503,6 +508,7 @@ export class CashFlowService {
       income,
       operatingExpense,
       investmentExpense,
+      financingExpense,
       operatingResult,
       operatingMarginPct: income > 0 ? (operatingResult / income) * 100 : null,
       totalResult: operatingResult - investmentExpense,

@@ -1,0 +1,1 @@
+ALTER TYPE "CashClassification" ADD VALUE IF NOT EXISTS 'FINANCING';

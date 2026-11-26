@@ -503,6 +503,8 @@ enum CashMovementType {
 enum CashClassification {
   OPERATING
   INVESTMENT
+  /// Devolución de capital a los socios: sale plata de la caja pero no es gasto ni inversión.
+  FINANCING
 }
 
 enum CashMovementStatus {

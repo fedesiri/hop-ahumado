@@ -23,6 +23,7 @@ export const CASH_FLOW_CATEGORIES: ReadonlyArray<{
   { name: "Impuestos", type: "EXPENSE", classification: "OPERATING" },
   { name: "Otros gastos", type: "EXPENSE", classification: "OPERATING" },
   { name: "Mantenimiento", type: "EXPENSE", classification: "OPERATING" },
+  { name: "Devolución de inversión inicial", type: "EXPENSE", classification: "FINANCING" },
 ];
 
 export const CASH_FLOW_PAYMENT_METHODS = [

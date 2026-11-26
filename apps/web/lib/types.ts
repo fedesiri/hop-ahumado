@@ -1108,7 +1108,7 @@ export interface LineContext {
 // ── Flujo de caja ──────────────────────────────────────────────────────────
 
 export type CashMovementType = "INCOME" | "EXPENSE";
-export type CashClassification = "OPERATING" | "INVESTMENT";
+export type CashClassification = "OPERATING" | "INVESTMENT" | "FINANCING";
 export type CashMovementStatus = "SETTLED" | "PENDING";
 
 export interface CashMovement {
@@ -1185,6 +1185,7 @@ export interface CashSummary {
   income: number;
   operatingExpense: number;
   investmentExpense: number;
+  financingExpense: number;
   operatingResult: number;
   operatingMarginPct: number | null;
   totalResult: number;
@@ -1196,6 +1197,7 @@ export interface CashSummary {
     income: number;
     operatingExpense: number;
     investmentExpense: number;
+    financingExpense: number;
     operatingResult: number;
     totalResult: number;
   }[];
